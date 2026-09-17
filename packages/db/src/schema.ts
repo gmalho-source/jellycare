@@ -355,3 +355,45 @@ export const uptimeSamples = pgTable(
   },
   (table) => [index('uptime_samples_site_idx').on(table.siteId, table.observedAt)],
 )
+
+/* -------------------------------------------------------------------------- */
+/* Autenticação                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Ligações de entrada de uso único.
+ *
+ * Sem palavras-passe: numa ferramenta que guarda acesso privilegiado a dezenas
+ * de sites de clientes, cada palavra-passe reutilizada é uma porta aberta.
+ * Guarda-se o hash do token, não o token — uma fuga da base de dados não pode
+ * dar a ninguém a capacidade de entrar.
+ */
+export const loginTokens = pgTable(
+  'login_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('login_tokens_user_idx').on(table.userId, table.expiresAt)],
+)
+
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('sessions_user_idx').on(table.userId, table.expiresAt)],
+)

@@ -36,7 +36,11 @@ let queue: Queue
 let siteResponds = true
 
 beforeEach(async () => {
-  await db.delete(schema.organizations)
+  // Apenas os dados deste ficheiro: um `delete` global apagaria por baixo dos
+  // pés dos testes de outros pacotes a correr em paralelo.
+  if (organizationId) {
+    await db.delete(schema.organizations).where(eq(schema.organizations.id, organizationId))
+  }
 
   const [org] = await db
     .insert(schema.organizations)
@@ -61,6 +65,9 @@ beforeEach(async () => {
 })
 
 afterAll(async () => {
+  if (organizationId) {
+    await db.delete(schema.organizations).where(eq(schema.organizations.id, organizationId))
+  }
   await queue?.obliterate({ force: true }).catch(() => {})
   await queue?.close()
   await close()

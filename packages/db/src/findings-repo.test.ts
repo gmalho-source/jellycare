@@ -18,17 +18,23 @@ const DATABASE_URL =
 const { db, close } = createDatabase({ url: DATABASE_URL, maxConnections: 4 })
 
 let siteId: string
+let organizationId: string
 
 afterAll(async () => {
+  // Limpa apenas o que este ficheiro criou. Um `delete` global tornaria os
+  // testes hostis uns aos outros quando corressem em paralelo contra a mesma
+  // base de dados.
+  if (organizationId) await db.delete(organizations).where(eq(organizations.id, organizationId))
   await close()
 })
 
 beforeEach(async () => {
-  await db.delete(organizations)
+  if (organizationId) await db.delete(organizations).where(eq(organizations.id, organizationId))
   const [org] = await db
     .insert(organizations)
     .values({ name: 'Cliente Teste', slug: `cliente-${Date.now()}-${Math.random()}` })
     .returning({ id: organizations.id })
+  organizationId = org!.id
   const [site] = await db
     .insert(sites)
     .values({
