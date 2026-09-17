@@ -25,15 +25,18 @@ cobrar por isso.
 Ao fim da Fase 1 a Jelly consegue pôr todos os clientes de manutenção na
 plataforma, independentemente da tecnologia.
 
-Entregue, com as seguintes notas de âmbito:
+Entregue por completo, incluindo os três pontos que ficaram em aberto na
+primeira passagem:
 
-- as amostras de disponibilidade são gravadas por região, mas a Fase 1 corre
-  uma única região; a confirmação multi-região exige uma segunda instância de
-  worker, que é configuração e não código
-- a descoberta automática de formulários está implementada e testada, mas ainda
-  não está ligada a uma rotina agendada: os formulários entram por configuração
-- a inbox canária tem o parser e a avaliação de entrega prontos; falta o
-  endpoint que recebe o webhook do fornecedor de email
+- **disponibilidade multi-região**: cada execução grava uma amostra com a sua
+  região e, quando uma região não alcança o site, confronta-a com as outras.
+  Ativa-se com uma segunda instância de worker e `JELLYCARE_REGION` diferente,
+  sem código novo — ver `docs/arquitetura.md`
+- **rotinas de formulários**: `form_discovery`, `form_test` e `form_delivery`
+  estão no agendador e escrevem no inventário e no histórico de submissões
+- **caixa de verificação**: `POST /api/inbound-email` recebe as mensagens do
+  fornecedor de inbox, valida a assinatura e fecha o circuito da notificação —
+  ver `docs/checks.md`
 
 ---
 

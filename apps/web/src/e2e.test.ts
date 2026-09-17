@@ -1,9 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createHmac, randomUUID } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
+import { createDatabase, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
+import { eq } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -17,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  * propriedade do domínio não estiver provada.
  */
 
+const INBOX_SECRET = 'segredo-de-teste-da-inbox'
 const DATABASE_URL = process.env.TEST_DATABASE_URL
 const BUILD_PRESENT = existsSync(join(process.cwd(), '.next', 'BUILD_ID'))
 
@@ -66,6 +70,7 @@ describeE2E('fluxo de entrada e painel', () => {
         ...process.env,
         DATABASE_URL: DATABASE_URL as string,
         JELLYCARE_APP_URL: baseUrl,
+        CANARY_INBOX_WEBHOOK_SECRET: INBOX_SECRET,
         // Sem chave de email, a ligação de entrada é escrita na consola — é
         // dali que este teste a lê.
         RESEND_API_KEY: '',
@@ -172,6 +177,129 @@ describeE2E('fluxo de entrada e painel', () => {
 
     await page.close()
   }, 90_000)
+
+  it('fecha o circuito da notificação do formulário', async () => {
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+
+    try {
+      // Uma submissão feita há dez minutos, ainda à espera do email.
+      const [form] = await db
+        .insert(schema.forms)
+        .values({
+          siteId,
+          label: 'Contacto',
+          pageUrl: 'https://exemplo.pt/contactos',
+          selector: '#contacto',
+        })
+        .returning({ id: schema.forms.id })
+
+      const token = randomUUID().replace(/-/g, '').slice(0, 16)
+      const submittedAt = new Date(Date.now() - 10 * 60_000)
+
+      await db.insert(schema.formRuns).values({
+        formId: form!.id,
+        siteId,
+        canaryToken: token,
+        canaryAddress: `check+${siteId}-${token}@check.jellycare.pt`,
+        startedAt: submittedAt,
+        submitted: true,
+      })
+
+      const payload = JSON.stringify({
+        to: `check+${siteId}-${token}@check.jellycare.pt`,
+        from: 'wordpress@cliente.pt',
+        subject: 'Novo contacto do site',
+        text: `Referência do teste: ${token}`,
+        headers: { 'Authentication-Results': 'mx; spf=pass; dkim=pass; dmarc=pass' },
+      })
+
+      const timestamp = String(Math.floor(Date.now() / 1000))
+      const signature = createHmac('sha256', INBOX_SECRET)
+        .update(`${timestamp}.${payload}`)
+        .digest('hex')
+
+      const headers = {
+        'content-type': 'application/json',
+        'x-jellycare-timestamp': timestamp,
+        'x-jellycare-signature': `sha256=${signature}`,
+      }
+
+      const response = await fetch(`${baseUrl}/api/inbound-email`, {
+        method: 'POST',
+        headers,
+        body: payload,
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ status: 'registado' })
+
+      const [run] = await db
+        .select()
+        .from(schema.formRuns)
+        .where(eq(schema.formRuns.canaryToken, token))
+
+      expect(run?.emailReceived).toBe(true)
+      expect(run?.spf).toBe('pass')
+      expect(run?.dmarc).toBe('pass')
+      // A latência é medida contra a submissão, não contra a receção do pedido.
+      expect(run?.deliveryLatencyMs).toBeGreaterThan(9 * 60_000)
+
+      // O fornecedor repete entregas quando não recebe 2xx a tempo; a segunda
+      // não pode sobrepor-se à primeira.
+      const repetida = await fetch(`${baseUrl}/api/inbound-email`, {
+        method: 'POST',
+        headers,
+        body: payload,
+      })
+      expect(await repetida.json()).toMatchObject({ status: 'ja_registado' })
+    } finally {
+      await close()
+    }
+  }, 90_000)
+
+  it('recusa uma entrega sem assinatura válida', async () => {
+    const payload = JSON.stringify({ to: 'check+x-y@check.jellycare.pt' })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+
+    const response = await fetch(`${baseUrl}/api/inbound-email`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-jellycare-timestamp': timestamp,
+        'x-jellycare-signature': 'sha256=0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      body: payload,
+    })
+
+    // Sem isto, qualquer pessoa podia declarar que as notificações de um site
+    // funcionam quando não funcionam.
+    expect(response.status).toBe(401)
+  }, 60_000)
+
+  it('aceita e ignora email humano dirigido à caixa de verificação', async () => {
+    const payload = JSON.stringify({
+      to: 'geral@check.jellycare.pt',
+      subject: 'Olá',
+      text: 'Queria pedir um orçamento.',
+    })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signature = createHmac('sha256', INBOX_SECRET)
+      .update(`${timestamp}.${payload}`)
+      .digest('hex')
+
+    const response = await fetch(`${baseUrl}/api/inbound-email`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-jellycare-timestamp': timestamp,
+        'x-jellycare-signature': signature,
+      },
+      body: payload,
+    })
+
+    // 202 e não erro: devolver erro faria o fornecedor insistir sem fim.
+    expect(response.status).toBe(202)
+  }, 60_000)
 
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()

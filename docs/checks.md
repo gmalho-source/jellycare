@@ -143,6 +143,34 @@ Com reCAPTCHA v3 e Turnstile a submissão normalmente passa.
    autenticação do email recebido. Um formulário que "funciona" mas entrega no
    spam é um funil de leads morto que ninguém repara durante meses.
 
+### Como a caixa de verificação está ligada
+
+O endpoint `POST /api/inbound-email` recebe as mensagens que chegam ao domínio
+canário. Configuração do lado do fornecedor de inbox: uma rota que reencaminhe
+tudo o que chega a `CANARY_EMAIL_DOMAIN` para esse endpoint.
+
+A assinatura é obrigatória — o endpoint é público por natureza e escreve no
+histórico que sustenta o relatório do cliente. Sem verificação, qualquer pessoa
+poderia declarar que as notificações de um site funcionam quando não funcionam.
+São aceites dois esquemas:
+
+- **Próprio**, para um Cloudflare Email Worker ou qualquer reencaminhador que
+  escrevamos: cabeçalhos `x-jellycare-timestamp` e `x-jellycare-signature`, com
+  HMAC-SHA256 de `<timestamp>.<corpo>` usando `CANARY_INBOX_WEBHOOK_SECRET`.
+- **Mailgun**, com os campos `timestamp`, `token` e `signature` do próprio
+  Mailgun.
+
+O carimbo temporal entra no cálculo e é validado contra o relógio com cinco
+minutos de tolerância: sem isso, uma entrega legítima capturada uma vez poderia
+ser reenviada indefinidamente para falsificar entregas futuras.
+
+Respostas: 401 a assinatura inválida, 400 a corpo ilegível, 202 a mensagens sem
+referência de teste — email humano dirigido à caixa é aceite e ignorado, porque
+devolver erro faria o fornecedor insistir sem fim — e 200 quando a entrega é
+associada à submissão. O registo é idempotente: os fornecedores repetem
+entregas quando não recebem 2xx a tempo, e a latência que vale é a da primeira
+chegada.
+
 ### Higiene operacional
 Frequência diária com hora fixa; submissões marcadas de forma inequívoca para
 o cliente poder filtrar no CRM; opção de endpoint de teste dedicado para
