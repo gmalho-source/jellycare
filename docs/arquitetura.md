@@ -84,8 +84,27 @@ partilhados (`packages/checks`, `packages/db`, `packages/report`).
   precisa de imagem com Chromium (Playwright) e é o mais caro — isolá-lo
   permite escalar só essa peça.
 - **Infra:** Hetzner + Coolify (custo) ou Fly.io (simplicidade e multi-região).
-  As probes de uptime devem correr de pelo menos duas regiões para eliminar
-  falsos positivos.
+
+### Correr uma segunda região
+
+A corroboração entre regiões está implementada e não exige código novo: basta
+uma segunda instância do worker, contra a mesma base de dados, com
+`JELLYCARE_REGION` diferente.
+
+Cada execução do check de disponibilidade grava uma amostra em
+`uptime_samples` com a sua região. Quando uma região não alcança o site, o
+worker consulta as amostras das outras regiões dos últimos dez minutos:
+
+- outra região também não alcança → mantém-se `site_down`, crítico
+- outra região alcança → o finding passa a `site_unreachable_from_region`,
+  severidade média, com a região em falha no discriminator
+- não há amostras recentes de mais nenhuma região → mantém-se `site_down`,
+  que é o comportamento correto para quem corre uma região só
+
+A segunda opção é a que evita o falso positivo mais caro destas plataformas:
+avisar o cliente de que o site caiu quando o que se partiu foi o caminho de
+rede entre a probe e o site. E não o faz calando o problema — uma geo-restrição
+ou uma borda de CDN em baixo continua a aparecer no painel.
 - **Email:** Resend ou Postmark para transacional e relatórios. Inbox canária
   em domínio separado (`check.jellycare.pt`) com Cloudflare Email Workers ou
   Mailgun Routes a entregar por webhook.

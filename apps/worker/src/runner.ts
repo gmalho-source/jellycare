@@ -1,7 +1,14 @@
-import { getCheck } from '@jellycare/checks'
-import { runCheck, type CheckContext, type FindingNotification, type Site } from '@jellycare/core'
+import { getCheck, uptimeCheck } from '@jellycare/checks'
+import {
+  runCheck,
+  type CheckContext,
+  type CheckOutcome,
+  type FindingNotification,
+  type Site,
+} from '@jellycare/core'
 import { recordCheckRun, schema, type Database } from '@jellycare/db'
-import { and, eq, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, ne, or } from 'drizzle-orm'
+import { applyRegionCorroboration, toUptimeSample } from './uptime-region.js'
 import type { Notifier } from './channels.js'
 import {
   deliverableTargets,
@@ -21,6 +28,13 @@ export interface RunnerDeps {
   region?: string
   now?: () => Date
 }
+
+/**
+ * Quanto tempo uma amostra de outra região continua a valer como segunda
+ * opinião. Mais curto do que isto e regiões com intervalos diferentes nunca se
+ * cruzam; mais longo e estaríamos a comparar com o passado.
+ */
+const REGION_CORROBORATION_WINDOW_MS = 10 * 60_000
 
 export type RunOutcome =
   | { status: 'completed'; runId: string; findings: number; notified: number }
@@ -108,18 +122,24 @@ export async function executeCheckJob(
   }
 
   const startedAt = new Date()
-  const outcome = await runCheck(
+  const region = deps.region ?? 'eu-west'
+  const rawOutcome = await runCheck(
     registered.definition,
     context,
     configRow.config as never,
   )
+
+  const outcome =
+    job.checkType === uptimeCheck.type
+      ? await settleUptime(deps, { outcome: rawOutcome, siteId: site.id, region, now })
+      : rawOutcome
 
   const { runId, notifications } = await recordCheckRun(deps.db, {
     siteId: site.id,
     checkType: job.checkType,
     outcome,
     confirmationsRequired: registered.definition.confirmationsRequired,
-    region: deps.region ?? 'eu-west',
+    region,
     startedAt,
     now,
   })
@@ -132,6 +152,74 @@ export async function executeCheckJob(
   })
 
   return { status: 'completed', runId, findings: outcome.findings.length, notified }
+}
+
+interface SettleUptimeInput {
+  outcome: CheckOutcome
+  siteId: string
+  region: string
+  now: Date
+}
+
+/**
+ * Grava a amostra de disponibilidade e confronta-a com as outras regiões.
+ *
+ * A amostra é escrita antes da corroboração de propósito: mesmo que a consulta
+ * às outras regiões falhe, a observação desta região fica registada e conta
+ * para o SLA.
+ */
+async function settleUptime(
+  deps: RunnerDeps,
+  input: SettleUptimeInput,
+): Promise<CheckOutcome> {
+  const { outcome, siteId, region, now } = input
+
+  const sample = toUptimeSample(outcome, { region, observedAt: now })
+  await deps.db.insert(schema.uptimeSamples).values({
+    siteId,
+    region: sample.region,
+    observedAt: sample.observedAt,
+    up: sample.up,
+    statusCode: sample.statusCode,
+    responseTimeMs: sample.responseTimeMs,
+    failureReason: sample.failureReason,
+  })
+
+  if (!outcome.findings.some((finding) => finding.code === 'site_down')) return outcome
+
+  const windowMs = REGION_CORROBORATION_WINDOW_MS
+  const others = await deps.db
+    .select({
+      region: schema.uptimeSamples.region,
+      up: schema.uptimeSamples.up,
+      observedAt: schema.uptimeSamples.observedAt,
+    })
+    .from(schema.uptimeSamples)
+    .where(
+      and(
+        eq(schema.uptimeSamples.siteId, siteId),
+        ne(schema.uptimeSamples.region, region),
+        gte(schema.uptimeSamples.observedAt, new Date(now.getTime() - windowMs)),
+      ),
+    )
+    .orderBy(desc(schema.uptimeSamples.observedAt))
+    .limit(50)
+
+  const corroboration = applyRegionCorroboration(outcome.findings, others, {
+    region,
+    windowMs,
+    now,
+  })
+
+  return {
+    ...outcome,
+    findings: corroboration.findings,
+    metrics: {
+      ...outcome.metrics,
+      regionsConsulted: new Set(others.map((sample) => sample.region)).size,
+      regionsReachable: corroboration.reachableFrom.length,
+    },
+  }
 }
 
 interface DispatchInput {

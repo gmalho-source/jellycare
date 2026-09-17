@@ -126,8 +126,33 @@ async function addTarget(minSeverity: 'critical' | 'high' | 'medium' = 'high') {
   return target!.id
 }
 
-function run(notifier = new RecordingNotifier(), checkType = 'uptime') {
-  return executeCheckJob({ db, notifier, region: 'eu-west' }, { siteId, checkType })
+function run(notifier = new RecordingNotifier(), checkType = 'uptime', region = 'eu-west') {
+  return executeCheckJob({ db, notifier, region }, { siteId, checkType })
+}
+
+async function samples() {
+  return db
+    .select()
+    .from(schema.uptimeSamples)
+    .where(eq(schema.uptimeSamples.siteId, siteId))
+    .orderBy(schema.uptimeSamples.observedAt)
+}
+
+async function openFindings() {
+  return db.select().from(schema.findings).where(eq(schema.findings.siteId, siteId))
+}
+
+/** Grava uma observação de outra região, como faria um segundo worker. */
+async function sampleFromRegion(region: string, up: boolean, agoMs = 60_000) {
+  await db.insert(schema.uptimeSamples).values({
+    siteId,
+    region,
+    observedAt: new Date(Date.now() - agoMs),
+    up,
+    statusCode: up ? 200 : null,
+    responseTimeMs: up ? 150 : null,
+    failureReason: up ? null : 'connection_refused',
+  })
 }
 
 describe('ciclo completo do worker', () => {
@@ -262,6 +287,95 @@ describe('ciclo completo do worker', () => {
     const findings = await db.select().from(schema.findings).where(eq(schema.findings.siteId, siteId))
     expect(findings[0]?.state).toBe('open')
     expect(notifier.sent).toHaveLength(0)
+  })
+})
+
+describe('disponibilidade multi-região', () => {
+  it('grava uma amostra por execução, com a região e o tempo de resposta', async () => {
+    await addCheck('uptime')
+    await run()
+
+    const rows = await samples()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ region: 'eu-west', up: true, statusCode: 200 })
+    expect(rows[0]?.responseTimeMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('grava a queda com a causa, para o cálculo de SLA', async () => {
+    await addCheck('uptime')
+    siteResponds = false
+    await run()
+
+    const rows = await samples()
+    expect(rows[0]?.up).toBe(false)
+    expect(rows[0]?.failureReason).toBeTruthy()
+  })
+
+  it('mantém o alerta crítico quando só existe uma região', async () => {
+    await addCheck('uptime')
+    await addTarget()
+    const notifier = new RecordingNotifier()
+
+    siteResponds = false
+    await run(notifier)
+    await run(notifier)
+
+    const findings = await openFindings()
+    expect(findings[0]?.code).toBe('site_down')
+    expect(findings[0]?.severity).toBe('critical')
+    expect(notifier.sent).toHaveLength(1)
+  })
+
+  it('mantém o crítico quando a outra região também não alcança o site', async () => {
+    await addCheck('uptime')
+    await sampleFromRegion('eu-central', false)
+
+    siteResponds = false
+    await run()
+    await run()
+
+    const findings = await openFindings()
+    expect(findings[0]?.code).toBe('site_down')
+  })
+
+  it('degrada para problema de região quando outra região alcança o site', async () => {
+    await addCheck('uptime')
+    await addTarget('medium')
+    await sampleFromRegion('eu-central', true)
+    const notifier = new RecordingNotifier()
+
+    siteResponds = false
+    await run(notifier)
+    await run(notifier)
+
+    const findings = await openFindings()
+    // O problema não é calado — continua registado — mas não se diz ao cliente
+    // que o site caiu quando ele está de pé para quase toda a gente.
+    expect(findings.map((f) => f.code)).toEqual(['site_unreachable_from_region'])
+    expect(findings[0]?.severity).toBe('medium')
+    expect(findings[0]?.discriminator).toBe('eu-west')
+    expect(notifier.sent).toHaveLength(0)
+  })
+
+  it('ignora amostras antigas de outra região', async () => {
+    await addCheck('uptime')
+    await sampleFromRegion('eu-central', true, 60 * 60_000)
+
+    siteResponds = false
+    await run()
+    await run()
+
+    const findings = await openFindings()
+    expect(findings[0]?.code).toBe('site_down')
+  })
+
+  it('amostras de duas regiões contam ambas para o histórico', async () => {
+    await addCheck('uptime')
+    await run(new RecordingNotifier(), 'uptime', 'eu-west')
+    await run(new RecordingNotifier(), 'uptime', 'us-east')
+
+    const rows = await samples()
+    expect(rows.map((row) => row.region).sort()).toEqual(['eu-west', 'us-east'])
   })
 })
 
