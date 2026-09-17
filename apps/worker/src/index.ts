@@ -1,8 +1,9 @@
 import { createDatabase } from '@jellycare/db'
 import { createBrowserPool } from './browser-pool.js'
-import { MultiChannelNotifier } from './channels.js'
+import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
+import { generatePendingReports } from './report-jobs.js'
 import { startScheduler } from './scheduler.js'
 
 function required(name: string): string {
@@ -68,6 +69,33 @@ async function main(): Promise<void> {
     onError: (error) => console.error('Falha no agendador:', error),
   })
 
+  // Os relatórios não passam pelo agendador de verificações: não são
+  // periódicos em minutos, são no dia N de cada mês. Esta passagem pergunta de
+  // hora a hora o que falta, e o índice único por site e período torna-a
+  // idempotente.
+  const reportDeps = {
+    db,
+    browser: browsers.get,
+    sendReport: createReportSender({
+      ...(process.env.RESEND_API_KEY ? { resendApiKey: process.env.RESEND_API_KEY } : {}),
+      ...(process.env.REPORT_FROM_EMAIL ? { fromEmail: process.env.REPORT_FROM_EMAIL } : {}),
+    }),
+  }
+
+  const sweepReports = async () => {
+    try {
+      const result = await generatePendingReports(reportDeps)
+      if (result.generated > 0) {
+        console.info(`Relatórios gerados: ${result.generated}, enviados: ${result.sent}.`)
+      }
+    } catch (error) {
+      console.error('Falha ao gerar relatórios:', error)
+    }
+  }
+
+  const reportTimer = setInterval(() => void sweepReports(), 60 * 60_000)
+  void sweepReports()
+
   console.info(`Worker Jellycare a correr na região ${region}.`)
 
   // Encerramento ordenado: um SIGTERM a meio de um deploy não pode deixar
@@ -75,6 +103,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     console.info(`${signal} recebido, a encerrar.`)
     scheduler.stop()
+    clearInterval(reportTimer)
     await worker.close()
     await browsers.close()
     await queue.close()

@@ -46,7 +46,7 @@ primeira passagem:
 
 Âmbito:
 - portal do cliente com acesso limitado aos seus sites
-- relatório mensal em PDF white-label, agendado e enviado automaticamente
+- **relatório mensal em PDF white-label, agendado e enviado — IMPLEMENTADO**
 - fingerprint de tecnologia e matching de CVEs com nível de confiança
 - deteção de conteúdo injetado e cloaking
 - Core Web Vitals com histórico
@@ -54,6 +54,12 @@ primeira passagem:
 - gestão de incidentes e cálculo de SLA
 
 Ao fim da Fase 2 o produto está completo para venda como serviço gerido.
+
+Estado: o relatório mensal está implementado de ponta a ponta — agregação com
+SLA, PDF white-label, geração idempotente no dia configurado, envio por email
+com o PDF anexado e acesso a partir do painel. Falta o resto do âmbito da fase:
+portal do cliente, CVEs, cloaking, Core Web Vitals, WhatsApp e gestão de
+incidentes.
 
 ---
 

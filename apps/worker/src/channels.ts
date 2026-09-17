@@ -136,3 +136,49 @@ export class RecordingNotifier implements Notifier {
     return { targetId: target.id, succeeded: true }
   }
 }
+
+export interface ReportEmail {
+  to: string[]
+  subject: string
+  text: string
+  attachment: { filename: string; content: Buffer }
+}
+
+/**
+ * Envio do relatório mensal com o PDF anexado.
+ *
+ * Separado do notificador de alertas porque tem outra forma: um destinatário
+ * que recebe um relatório não está a ser interrompido, está a receber um
+ * entregável.
+ */
+export function createReportSender(config: ChannelConfig = {}) {
+  const fetchImpl = config.fetch ?? globalThis.fetch
+  const timeoutMs = config.timeoutMs ?? 30_000
+
+  return async (message: ReportEmail): Promise<void> => {
+    if (!config.resendApiKey) {
+      throw new Error('Envio do relatório não configurado: falta RESEND_API_KEY')
+    }
+
+    const response = await post(
+      'https://api.resend.com/emails',
+      {
+        from: config.fromEmail ?? 'Jellycare <relatorios@jellycare.pt>',
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+        attachments: [
+          {
+            filename: message.attachment.filename,
+            content: message.attachment.content.toString('base64'),
+          },
+        ],
+      },
+      { fetchImpl, timeoutMs, headers: { authorization: `Bearer ${config.resendApiKey}` } },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Resend respondeu ${response.status}: ${await response.text()}`)
+    }
+  }
+}

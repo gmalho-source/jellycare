@@ -38,6 +38,9 @@ importers:
       '@jellycare/forms':
         specifier: workspace:*
         version: link:../../packages/forms
+      '@jellycare/reports':
+        specifier: workspace:*
+        version: link:../../packages/reports
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/react@19.3.0)(postgres@3.4.9)(react@19.3.0)
@@ -93,6 +96,9 @@ importers:
       '@jellycare/forms':
         specifier: workspace:*
         version: link:../../packages/forms
+      '@jellycare/reports':
+        specifier: workspace:*
+        version: link:../../packages/reports
       bullmq:
         specifier: ^5.34.5
         version: 5.81.5

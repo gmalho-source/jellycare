@@ -346,6 +346,59 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(response.status).toBe(202)
   }, 60_000)
 
+  it('entrega o PDF do relatório a quem pertence à organização', async () => {
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+
+    let reportId: string
+    try {
+      const [report] = await db
+        .insert(schema.reports)
+        .values({
+          siteId,
+          periodYear: 2026,
+          periodMonth: 5,
+          pdf: Buffer.from('%PDF-1.7 conteudo de teste'),
+          fileName: 'jellycare-teste-2026-05.pdf',
+          highlights: {
+            summary: ['O site esteve sempre disponível.'],
+            uptimePercent: 100,
+            slaMet: true,
+            incidents: 0,
+            findingsResolved: 0,
+            findingsOpen: 0,
+          },
+        })
+        .returning({ id: schema.reports.id })
+      reportId = report!.id
+    } finally {
+      await close()
+    }
+
+    const page = await browser.newPage()
+    await page.goto(`${baseUrl}/login`)
+    await page.fill('#email', email)
+    await page.click('button[type=submit]')
+    await page.waitForSelector('text=Se este email tiver conta')
+    await page.goto(loginLink())
+    await page.waitForURL(`${baseUrl}/`)
+
+    await page.goto(`${baseUrl}/sites/${siteId}`)
+    expect(await page.isVisible('text=Maio de 2026')).toBe(true)
+
+    const response = await page.request.get(`${baseUrl}/api/reports/${reportId}`)
+    expect(response.status()).toBe(200)
+    expect(response.headers()['content-type']).toBe('application/pdf')
+    expect((await response.body()).subarray(0, 5).toString()).toBe('%PDF-')
+
+    // Sem sessão, o mesmo relatório não é servido.
+    const anonima = await browser.newPage()
+    const semSessao = await anonima.request.get(`${baseUrl}/api/reports/${reportId}`)
+    expect(semSessao.status()).toBe(401)
+
+    await anonima.close()
+    await page.close()
+  }, 90_000)
+
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()
     await anonima.goto(`${baseUrl}/`)

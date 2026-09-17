@@ -122,6 +122,17 @@ export async function listSites(organizationIds: string[]): Promise<SiteSummary[
   })
 }
 
+export interface SiteReport {
+  id: string
+  periodYear: number
+  periodMonth: number
+  fileName: string
+  generatedAt: Date
+  sentAt: Date | null
+  sentTo: string[]
+  highlights: typeof schema.reports.$inferSelect['highlights']
+}
+
 export interface SiteDetail {
   site: typeof schema.sites.$inferSelect
   verified: boolean
@@ -129,6 +140,7 @@ export interface SiteDetail {
   runs: (typeof schema.checkRuns.$inferSelect)[]
   checks: (typeof schema.checkConfigs.$inferSelect)[]
   forms: (typeof schema.forms.$inferSelect)[]
+  reports: SiteReport[]
 }
 
 export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> {
@@ -138,7 +150,7 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
   const site = sites[0]
   if (!site) return null
 
-  const [findings, runs, checks, forms, verifications] = await Promise.all([
+  const [findings, runs, checks, forms, verifications, reports] = await Promise.all([
     db
       .select()
       .from(schema.findings)
@@ -167,6 +179,23 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
         ),
       )
       .limit(1),
+    // O PDF fica de fora da consulta de propósito: são centenas de kilobytes
+    // que a página não precisa de carregar para listar os relatórios.
+    db
+      .select({
+        id: schema.reports.id,
+        periodYear: schema.reports.periodYear,
+        periodMonth: schema.reports.periodMonth,
+        fileName: schema.reports.fileName,
+        generatedAt: schema.reports.generatedAt,
+        sentAt: schema.reports.sentAt,
+        sentTo: schema.reports.sentTo,
+        highlights: schema.reports.highlights,
+      })
+      .from(schema.reports)
+      .where(eq(schema.reports.siteId, siteId))
+      .orderBy(desc(schema.reports.periodYear), desc(schema.reports.periodMonth))
+      .limit(12),
   ])
 
   // Mais grave primeiro: quem abre a página de um site quer ver o que arde,
@@ -176,7 +205,7 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
     return bySeverity !== 0 ? bySeverity : b.lastSeenAt.getTime() - a.lastSeenAt.getTime()
   })
 
-  return { site, verified: verifications.length > 0, findings, runs, checks, forms }
+  return { site, verified: verifications.length > 0, findings, runs, checks, forms, reports }
 }
 
 export async function getPendingVerification(siteId: string) {

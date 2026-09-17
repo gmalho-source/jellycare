@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -11,6 +12,19 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+
+/**
+ * Bytes em bruto.
+ *
+ * O PDF de um relatório ronda os 100 kB; uma carteira de cinquenta sites gera
+ * cerca de 60 MB por ano. Guardá-lo na base de dados evita uma dependência de
+ * armazenamento de objetos numa fase em que ela só acrescentaria peças a
+ * manter. Quando o volume o justificar, troca-se este campo por uma chave de
+ * S3 sem tocar no resto.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+})
 
 /* -------------------------------------------------------------------------- */
 /* Enums                                                                      */
@@ -54,6 +68,14 @@ export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  /**
+   * Dia do mês em que o relatório do mês anterior é enviado. Nunca o dia 1: o
+   * relatório sai depois de os dados assentarem.
+   */
+  reportSendDay: integer('report_send_day').notNull().default(3),
+  /** Marca a apresentar no relatório. Vazio usa a da Jellycare. */
+  brandName: text('brand_name'),
+  brandUrl: text('brand_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -112,6 +134,10 @@ export const sites = pgTable(
       .$type<{ start: string; end: string }[]>()
       .notNull()
       .default([]),
+    /** Disponibilidade contratada, em percentagem. */
+    slaTarget: real('sla_target').notNull().default(99.9),
+    /** Quem recebe o relatório mensal deste site. */
+    reportRecipients: jsonb('report_recipients').$type<string[]>().notNull().default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],
@@ -396,4 +422,45 @@ export const sessions = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sessions_user_idx').on(table.userId, table.expiresAt)],
+)
+
+
+/* -------------------------------------------------------------------------- */
+/* Relatórios                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    periodYear: integer('period_year').notNull(),
+    /** 1 a 12, no fuso do cliente. */
+    periodMonth: integer('period_month').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+    pdf: bytea('pdf').notNull(),
+    fileName: text('file_name').notNull(),
+    /** Números-chave, para os mostrar no painel sem reabrir o PDF. */
+    highlights: jsonb('highlights')
+      .$type<{
+        summary: string[]
+        uptimePercent: number | null
+        slaMet: boolean | null
+        incidents: number
+        findingsResolved: number
+        findingsOpen: number
+      }>()
+      .notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    sentTo: jsonb('sent_to').$type<string[]>().notNull().default([]),
+    sendError: text('send_error'),
+  },
+  (table) => [
+    // Um relatório por site e por mês. É o que torna a geração idempotente:
+    // o job pode correr de hora a hora sem duplicar nada.
+    uniqueIndex('reports_site_period_idx').on(table.siteId, table.periodYear, table.periodMonth),
+    index('reports_site_idx').on(table.siteId, table.generatedAt),
+  ],
 )
