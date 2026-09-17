@@ -1,12 +1,13 @@
 'use server'
 
-import { CHECK_REGISTRY, buildChallenge, verifyOwnership } from '@jellycare/checks'
+import { buildChallenge, verifyOwnership } from '@jellycare/checks'
 import { revokeSession, schema } from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { ALL_CHECKS } from '@/lib/checks'
 import { getDb } from '@/lib/db'
 import { SESSION_COOKIE, assertMembership, canManage, requireUser } from '@/lib/session'
 
@@ -105,14 +106,15 @@ export async function createSite(
   // Todos os checks ficam configurados desde já; o runner é que recusa os que
   // exigem verificação enquanto ela não estiver feita.
   await db.insert(schema.checkConfigs).values(
-    Object.values(CHECK_REGISTRY).map((check) => ({
+    ALL_CHECKS.map((check) => ({
       siteId,
-      checkType: check.definition.type,
-      intervalMinutes: check.definition.defaultIntervalMinutes,
+      checkType: check.type,
+      intervalMinutes: check.defaultIntervalMinutes,
       enabled: true,
-      config: input.expectedContent && check.definition.type === 'uptime'
-        ? { expectedContent: input.expectedContent }
-        : {},
+      config:
+        input.expectedContent && check.type === 'uptime'
+          ? { expectedContent: input.expectedContent }
+          : {},
     })),
   )
 

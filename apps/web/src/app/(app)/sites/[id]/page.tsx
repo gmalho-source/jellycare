@@ -1,4 +1,4 @@
-import { CHECK_REGISTRY, buildChallenge } from '@jellycare/checks'
+import { buildChallenge } from '@jellycare/checks'
 import { notFound } from 'next/navigation'
 import {
   Card,
@@ -8,6 +8,7 @@ import {
   formatDateTime,
   formatRelative,
 } from '@/components/ui'
+import { checkMeta } from '@/lib/checks'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
@@ -139,7 +140,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           <CardHeader title="Verificações" />
           <ul className="divide-y divide-ink-100">
             {detail.checks.map((check) => {
-              const registered = CHECK_REGISTRY[check.checkType]
+              const registered = checkMeta(check.checkType)
               const blocked = !detail.verified && registered?.access === 'verified'
               return (
                 <li
@@ -201,7 +202,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
               {detail.runs.map((run) => (
                 <tr key={run.id}>
                   <td className="px-5 py-2.5 text-ink-900">
-                    {CHECK_REGISTRY[run.checkType]?.label ?? run.checkType}
+                    {checkMeta(run.checkType)?.label ?? run.checkType}
                   </td>
                   <td className="px-5 py-2.5">
                     <span

@@ -35,6 +35,9 @@ importers:
       '@jellycare/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@jellycare/forms':
+        specifier: workspace:*
+        version: link:../../packages/forms
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/react@19.3.0)(postgres@3.4.9)(react@19.3.0)
@@ -99,6 +102,9 @@ importers:
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
+      playwright:
+        specifier: ^1.49.1
+        version: 1.63.0
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -171,6 +177,9 @@ importers:
 
   packages/forms:
     dependencies:
+      '@jellycare/checks':
+        specifier: workspace:*
+        version: link:../checks
       '@jellycare/core':
         specifier: workspace:*
         version: link:../core

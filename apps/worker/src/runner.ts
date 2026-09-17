@@ -7,7 +7,15 @@ import {
   type Site,
 } from '@jellycare/core'
 import { recordCheckRun, schema, type Database } from '@jellycare/db'
+import {
+  FORM_CHECKS,
+  FORM_DELIVERY_CHECK,
+  FORM_DISCOVERY_CHECK,
+  FORM_TEST_CHECK,
+} from '@jellycare/forms'
+import type { Browser } from 'playwright'
 import { and, desc, eq, gte, isNull, ne, or } from 'drizzle-orm'
+import { runFormDelivery, runFormDiscovery, runFormTest } from './form-jobs.js'
 import { applyRegionCorroboration, toUptimeSample } from './uptime-region.js'
 import type { Notifier } from './channels.js'
 import {
@@ -27,6 +35,38 @@ export interface RunnerDeps {
   fetch?: typeof globalThis.fetch
   region?: string
   now?: () => Date
+  /** Só é chamado pelas rotinas que submetem formulários. */
+  browser?: () => Promise<Browser>
+  canaryDomain?: string
+}
+
+/** O que o runner precisa de saber sobre uma verificação, venha ela de onde vier. */
+interface CheckMeta {
+  label: string
+  access: 'public' | 'verified'
+  confirmationsRequired: number
+}
+
+function metaFor(checkType: string): CheckMeta | null {
+  const registered = getCheck(checkType)
+  if (registered) {
+    return {
+      label: registered.label,
+      access: registered.access,
+      confirmationsRequired: registered.definition.confirmationsRequired,
+    }
+  }
+
+  const form = FORM_CHECKS[checkType]
+  if (form) {
+    return {
+      label: form.label,
+      access: form.access,
+      confirmationsRequired: form.confirmationsRequired,
+    }
+  }
+
+  return null
 }
 
 /**
@@ -53,8 +93,8 @@ export async function executeCheckJob(
   job: CheckJobData,
 ): Promise<RunOutcome> {
   const now = deps.now?.() ?? new Date()
-  const registered = getCheck(job.checkType)
-  if (!registered) return { status: 'skipped', reason: `Check desconhecido: ${job.checkType}` }
+  const meta = metaFor(job.checkType)
+  if (!meta) return { status: 'skipped', reason: `Check desconhecido: ${job.checkType}` }
 
   const siteRows = await deps.db
     .select()
@@ -70,7 +110,7 @@ export async function executeCheckJob(
 
   // A regra que mantém a plataforma do lado certo da lei: sem prova de
   // propriedade do domínio, só corre o que qualquer visitante faria.
-  if (registered.access === 'verified') {
+  if (meta.access === 'verified') {
     const verified = await deps.db
       .select({ id: schema.siteVerifications.id })
       .from(schema.siteVerifications)
@@ -86,7 +126,7 @@ export async function executeCheckJob(
       return {
         status: 'skipped',
         reason:
-          `"${registered.label}" exige propriedade do domínio comprovada. ` +
+          `"${meta.label}" exige propriedade do domínio comprovada. ` +
           'Conclua a verificação por DNS TXT ou ficheiro para o ativar.',
       }
     }
@@ -123,11 +163,7 @@ export async function executeCheckJob(
 
   const startedAt = new Date()
   const region = deps.region ?? 'eu-west'
-  const rawOutcome = await runCheck(
-    registered.definition,
-    context,
-    configRow.config as never,
-  )
+  const rawOutcome = await execute(deps, job.checkType, site, context, configRow.config, now)
 
   const outcome =
     job.checkType === uptimeCheck.type
@@ -138,7 +174,7 @@ export async function executeCheckJob(
     siteId: site.id,
     checkType: job.checkType,
     outcome,
-    confirmationsRequired: registered.definition.confirmationsRequired,
+    confirmationsRequired: meta.confirmationsRequired,
     region,
     startedAt,
     now,
@@ -152,6 +188,57 @@ export async function executeCheckJob(
   })
 
   return { status: 'completed', runId, findings: outcome.findings.length, notified }
+}
+
+/**
+ * Corre a verificação, seja ela agentless ou uma rotina de formulários.
+ *
+ * As rotinas de formulários são envolvidas no mesmo tratamento de erros das
+ * outras: uma que rebente marca o run como falhado, e um run falhado nunca
+ * resolve findings.
+ */
+async function execute(
+  deps: RunnerDeps,
+  checkType: string,
+  site: Site,
+  context: CheckContext,
+  config: Record<string, unknown>,
+  now: Date,
+): Promise<CheckOutcome> {
+  const registered = getCheck(checkType)
+  if (registered) return runCheck(registered.definition, context, config as never)
+
+  const formDeps = {
+    db: deps.db,
+    now,
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...(deps.browser ? { browser: deps.browser } : {}),
+  }
+
+  const startedAt = Date.now()
+  try {
+    switch (checkType) {
+      case FORM_DISCOVERY_CHECK:
+        return await runFormDiscovery(formDeps, site, config)
+      case FORM_TEST_CHECK:
+        return await runFormTest(formDeps, site, {
+          ...config,
+          ...(deps.canaryDomain ? { canaryDomain: deps.canaryDomain } : {}),
+        })
+      case FORM_DELIVERY_CHECK:
+        return await runFormDelivery(formDeps, site, config)
+      default:
+        throw new Error(`Rotina de formulários desconhecida: ${checkType}`)
+    }
+  } catch (error) {
+    return {
+      status: 'failed',
+      findings: [],
+      metrics: {},
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startedAt,
+    }
+  }
 }
 
 interface SettleUptimeInput {

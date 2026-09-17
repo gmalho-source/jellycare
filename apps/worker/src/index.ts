@@ -1,4 +1,5 @@
 import { createDatabase } from '@jellycare/db'
+import { createBrowserPool } from './browser-pool.js'
 import { MultiChannelNotifier } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
@@ -31,12 +32,24 @@ async function main(): Promise<void> {
   })
 
   const queue = createCheckQueue(connection)
+  const browsers = createBrowserPool()
 
   const worker = createCheckWorker({
     connection,
     concurrency: Number(process.env.JELLYCARE_CONCURRENCY ?? 5),
     process: async (data) => {
-      const outcome = await executeCheckJob({ db, notifier, region }, data)
+      const outcome = await executeCheckJob(
+        {
+          db,
+          notifier,
+          region,
+          browser: browsers.get,
+          ...(process.env.CANARY_EMAIL_DOMAIN
+            ? { canaryDomain: process.env.CANARY_EMAIL_DOMAIN }
+            : {}),
+        },
+        data,
+      )
       if (outcome.status === 'skipped') {
         console.info(`[${data.checkType}] ${data.siteId}: ignorado — ${outcome.reason}`)
       }
@@ -63,6 +76,7 @@ async function main(): Promise<void> {
     console.info(`${signal} recebido, a encerrar.`)
     scheduler.stop()
     await worker.close()
+    await browsers.close()
     await queue.close()
     await close()
     process.exit(0)
