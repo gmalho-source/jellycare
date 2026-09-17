@@ -59,6 +59,45 @@ describeE2E('fluxo de entrada e painel', () => {
     })
     siteId = seeded.siteId
 
+    // Histórico mínimo no site do teste. Sem isto, a lista de sites nunca
+    // exercita as agregações de última execução e de disponibilidade — e foi
+    // exatamente aí que uma agregação mal tipada deitou a página abaixo em
+    // qualquer site que já tivesse corrido alguma vez.
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.insert(schema.checkRuns).values({
+          siteId,
+          checkType: 'uptime',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 4 * 60_000),
+          durationMs: 210,
+          metrics: { up: 1, statusCode: 200, responseTimeMs: 210 },
+        })
+        await db.insert(schema.uptimeSamples).values([
+          {
+            siteId,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 4 * 60_000),
+            up: true,
+            statusCode: 200,
+            responseTimeMs: 210,
+          },
+          {
+            siteId,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 9 * 60_000),
+            up: false,
+            statusCode: 503,
+            failureReason: 'HTTP 503',
+          },
+        ])
+      } finally {
+        await close()
+      }
+    }
+
     const port = await freePort()
     // `localhost` em ambos os lados: o cookie de sessão é por host, e servir em
     // 127.0.0.1 enquanto se navega para localhost fá-lo-ia desaparecer.
@@ -130,6 +169,12 @@ describeE2E('fluxo de entrada e painel', () => {
 
     await expect.poll(() => page.textContent('h1')).toBe('Sites')
     expect(await page.isVisible('text=Site de teste')).toBe(true)
+
+    // A linha do site mostra o histórico agregado: disponibilidade das últimas
+    // 24 horas e quando correu a última verificação.
+    const linha = page.locator('tr', { hasText: 'Site de teste' })
+    await expect.poll(() => linha.textContent()).toContain('50,00%')
+    expect(await linha.textContent()).toMatch(/minuto|hora|segundo/)
 
     await page.close()
   }, 90_000)

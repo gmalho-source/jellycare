@@ -62,8 +62,24 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <p className="px-5 py-8 text-center text-sm text-ink-400">{children}</p>
 }
 
+export type DateLike = Date | string | number | null | undefined
+
+/**
+ * Aceita o que a base de dados devolver.
+ *
+ * Nem todas as colunas chegam como `Date` — uma agregação em SQL cru devolve
+ * texto — e um formatador de apresentação não deve deitar a página abaixo por
+ * causa disso.
+ */
+function toDate(value: DateLike): Date | null {
+  if (value === null || value === undefined) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 /** Datas sempre em português europeu e no fuso de Lisboa. */
-export function formatDateTime(date: Date | null | undefined): string {
+export function formatDateTime(value: DateLike): string {
+  const date = toDate(value)
   if (!date) return '—'
   return new Intl.DateTimeFormat('pt-PT', {
     dateStyle: 'short',
@@ -72,7 +88,8 @@ export function formatDateTime(date: Date | null | undefined): string {
   }).format(date)
 }
 
-export function formatRelative(date: Date | null | undefined): string {
+export function formatRelative(value: DateLike): string {
+  const date = toDate(value)
   if (!date) return 'nunca'
   const seconds = Math.round((Date.now() - date.getTime()) / 1000)
   const formatter = new Intl.RelativeTimeFormat('pt-PT', { numeric: 'auto' })

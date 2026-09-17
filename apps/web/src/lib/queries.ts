@@ -1,6 +1,6 @@
 import { maxSeverity, severityRank, type Severity } from '@jellycare/core'
 import { schema } from '@jellycare/db'
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm'
 import { getDb } from './db'
 
 export interface SiteSummary {
@@ -79,7 +79,10 @@ export async function listSites(organizationIds: string[]): Promise<SiteSummary[
     db
       .select({
         siteId: schema.checkRuns.siteId,
-        lastRunAt: sql<Date>`max(${schema.checkRuns.startedAt})`,
+        // `max()` do Drizzle e não um `sql` cru: o template cru devolve a data
+        // como string e o tipo declarado seria uma mentira ao TypeScript, que
+        // só rebenta em produção quando o site já tem execuções.
+        lastRunAt: max(schema.checkRuns.startedAt),
       })
       .from(schema.checkRuns)
       .where(inArray(schema.checkRuns.siteId, siteIds))
