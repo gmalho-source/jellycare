@@ -1,9 +1,21 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "TEST_DATABASE_URL",
+    "TEST_REDIS_URL",
+    "JELLYCARE_CHROMIUM_PATH",
+    "JELLYCARE_REGION",
+    "RESEND_API_KEY",
+    "ALERT_FROM_EMAIL",
+    "GOOGLE_SAFE_BROWSING_API_KEY",
+    "JELLYCARE_APP_URL"
+  ],
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
     "typecheck": { "dependsOn": ["^build"] },
-    "test": { "dependsOn": ["^build"] },
+    "test": { "dependsOn": ["^build"], "cache": false },
     "lint": {},
     "dev": { "cache": false, "persistent": true }
   }

@@ -5,7 +5,7 @@ tarde. Cada fase fecha com um produto que se pode faturar.
 
 ---
 
-## Fase 1 — Monitor agentless (4–6 semanas)
+## Fase 1 — Monitor agentless — IMPLEMENTADA
 
 **Objetivo:** cobrir qualquer site da carteira, sem instalar nada, e já poder
 cobrar por isso.
@@ -24,6 +24,16 @@ cobrar por isso.
 
 Ao fim da Fase 1 a Jelly consegue pôr todos os clientes de manutenção na
 plataforma, independentemente da tecnologia.
+
+Entregue, com as seguintes notas de âmbito:
+
+- as amostras de disponibilidade são gravadas por região, mas a Fase 1 corre
+  uma única região; a confirmação multi-região exige uma segunda instância de
+  worker, que é configuração e não código
+- a descoberta automática de formulários está implementada e testada, mas ainda
+  não está ligada a uma rotina agendada: os formulários entram por configuração
+- a inbox canária tem o parser e a avaliação de entrega prontos; falta o
+  endpoint que recebe o webhook do fornecedor de email
 
 ---
 

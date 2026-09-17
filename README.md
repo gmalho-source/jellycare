@@ -37,4 +37,34 @@ verificar de fora (funciona em qualquer site) e o que exige acesso interno
 
 ## Estado
 
-Fase de desenho. Sem código ainda — ver roadmap para o âmbito da Fase 1.
+**Fase 1 implementada.** Monitorização agentless completa, teste de formulários
+com email canário, worker com agendamento e alertas, e dashboard interno.
+
+## Como correr
+
+```bash
+pnpm install
+./scripts/dev-services.sh                 # Postgres e Redis locais (ou docker compose up -d)
+cp .env.example .env                      # e preencha DATABASE_URL e REDIS_URL
+
+pnpm --filter @jellycare/db db:migrate
+DATABASE_URL=… SEED_EMAIL=você@jelly.pt pnpm --filter @jellycare/db exec tsx src/seed.ts
+
+pnpm dev                                  # dashboard em localhost:3000
+pnpm --filter @jellycare/worker dev       # agendador e execução de verificações
+```
+
+Testes: `pnpm test`. Os testes de integração precisam de Postgres e Redis
+(`TEST_DATABASE_URL`, `TEST_REDIS_URL`); os de browser usam Chromium via
+Playwright.
+
+## Estrutura
+
+```
+apps/web        dashboard e portal (Next.js 15, App Router)
+apps/worker     agendador, execução de verificações e alertas (BullMQ)
+packages/core   domínio partilhado: severidades, findings, contrato dos checks
+packages/db     schema Drizzle, migrações e repositórios
+packages/checks verificações agentless
+packages/forms  descoberta, submissão canária e validação de entrega de email
+```
