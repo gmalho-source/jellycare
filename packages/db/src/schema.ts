@@ -104,8 +104,14 @@ export const sites = pgTable(
     platform: text('platform'),
     /** Texto que tem de aparecer na homepage; um site hackeado responde 200. */
     expectedContent: text('expected_content'),
-    /** Janelas de manutenção em cron, durante as quais não se alerta. */
-    maintenanceWindows: jsonb('maintenance_windows').$type<string[]>().notNull().default([]),
+    /**
+     * Intervalos ISO durante os quais não se alerta. Deploys planeados não
+     * devem acordar ninguém — mas os findings continuam a ser registados.
+     */
+    maintenanceWindows: jsonb('maintenance_windows')
+      .$type<{ start: string; end: string }[]>()
+      .notNull()
+      .default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],
