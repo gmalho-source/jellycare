@@ -19,7 +19,7 @@
   "dependencies": {
     "@jellycare/core": "workspace:*",
     "@jellycare/forms": "workspace:*",
-    "playwright": "^1.49.1"
+    "playwright": "1.63.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
