@@ -442,16 +442,54 @@ export async function runFormDelivery(
     evaluated++
 
     if (!latest.emailReceived) {
+      // Nunca chegou nada deste formulário à caixa de verificação, em nenhuma
+      // submissão. Quase sempre não é uma avaria: a maioria dos formulários
+      // notifica o dono do site e não envia resposta automática a quem
+      // submeteu, e o endereço canário é o de quem submeteu. Sem resposta
+      // automática nem reencaminhamento configurado, não há nada para observar
+      // — e não observar não é o mesmo que não existir.
+      //
+      // Chamar avaria a isto faria disparar o alerta mais alarmante do produto
+      // em quase todos os clientes no primeiro dia, que é a forma mais rápida
+      // de ensinar alguém a ignorar os nossos alertas.
+      const everDelivered = runs.some((run) => run.formId === form.id && run.emailReceived)
+
+      if (!everDelivered) {
+        findings.push({
+          code: 'form_delivery_unverified',
+          discriminator: form.id,
+          severity: 'low',
+          title: `A entrega de "${form.label}" ainda não pode ser verificada`,
+          detail:
+            'A submissão foi aceite, mas nunca chegou nenhuma mensagem à caixa de verificação. ' +
+            'Isto costuma significar apenas que o formulário não envia resposta automática a ' +
+            'quem o preenche — e é a ele que o endereço de verificação pertence. Para passarmos ' +
+            'a confirmar também a entrega, basta o formulário enviar cópia para o endereço de ' +
+            'verificação do site, ou reencaminhar-lhe as notificações. Enquanto isso não ' +
+            'existir, garantimos que o formulário aceita submissões, não que o email chega.',
+          evidence: {
+            formId: form.id,
+            canaryAddress: latest.canaryAddress,
+            submittedAt: latest.startedAt.toISOString(),
+          },
+        })
+        continue
+      }
+
+      // Já entregou antes e agora não entrega: isto sim é uma avaria, e é a
+      // pior de todas, porque o cliente continua a ver o formulário a aceitar
+      // pedidos.
       missing++
       findings.push({
         code: 'form_email_not_delivered',
         discriminator: form.id,
         severity: 'high',
-        title: `O formulário "${form.label}" não gerou notificação por email`,
+        title: `O formulário "${form.label}" deixou de gerar notificação por email`,
         detail:
-          'A submissão foi aceite pelo site mas não chegou nenhuma mensagem à caixa de ' +
-          `verificação em ${Math.round(graceMs / 60_000)} minutos. É o cenário em que o ` +
-          'cliente pensa que não tem pedidos quando na verdade não os está a receber.',
+          'Este formulário já entregou notificações à caixa de verificação, e desta vez a ' +
+          `submissão foi aceite mas não chegou nada em ${Math.round(graceMs / 60_000)} minutos. ` +
+          'É o cenário em que o cliente pensa que não tem pedidos quando na verdade não os ' +
+          'está a receber.',
         evidence: {
           formId: form.id,
           canaryAddress: latest.canaryAddress,

@@ -325,7 +325,30 @@ describe('runFormDelivery', () => {
     expect(outcome.findings).toEqual([])
   }, 60_000)
 
-  it('reporta a notificação que nunca chegou', async () => {
+  it('não chama avaria a uma entrega que nunca foi observável', async () => {
+    // A maioria dos formulários notifica o dono do site e não responde a quem
+    // submeteu — e o endereço canário é o de quem submeteu. Chamar avaria a
+    // isto fazia disparar o alerta mais alarmante do produto em quase todos os
+    // clientes no primeiro dia.
+    await submissionAt(new Date(Date.now() - 30 * 60_000))
+
+    const outcome = await runFormDelivery(deps(), site, { graceMinutes: 15 })
+
+    const finding = outcome.findings.find((f) => f.code === 'form_delivery_unverified')
+    expect(finding?.severity).toBe('low')
+    expect(outcome.findings.some((f) => f.code === 'form_email_not_delivered')).toBe(false)
+    // Não conta como entrega em falta: não houve entrega a faltar, houve
+    // ausência de forma de a verificar.
+    expect(outcome.metrics.missingDeliveries).toBe(0)
+  }, 60_000)
+
+  it('reporta como avaria a entrega que existia e deixou de existir', async () => {
+    // Este é o incidente verdadeiro: o formulário já entregou antes, portanto
+    // sabemos que a entrega é observável, e desta vez não chegou nada.
+    await submissionAt(new Date(Date.now() - 90 * 60_000), {
+      emailReceived: true,
+      emailReceivedAt: new Date(Date.now() - 89 * 60_000),
+    })
     await submissionAt(new Date(Date.now() - 30 * 60_000))
 
     const outcome = await runFormDelivery(deps(), site, { graceMinutes: 15 })

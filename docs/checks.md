@@ -143,6 +143,26 @@ Com reCAPTCHA v3 e Turnstile a submissão normalmente passa.
    autenticação do email recebido. Um formulário que "funciona" mas entrega no
    spam é um funil de leads morto que ninguém repara durante meses.
 
+Os níveis 2 e 3 não são observáveis em todos os formulários, e isso não é uma
+falha do formulário.
+
+O endereço canário é o de **quem submete**. Só recebe alguma coisa se o
+formulário enviar resposta automática a quem o preencheu — e a maioria não
+envia: notifica o dono do site e mais nada. Nesses casos a Jellycare garante o
+nível 1 e diz que os outros dois não são verificáveis, em vez de os dar por
+falhados. Reportar "não gerou notificação" num formulário saudável faria
+disparar o alerta mais alarmante do produto em quase todos os clientes no
+primeiro dia, que é a forma mais rápida de ensinar alguém a ignorar alertas.
+
+Para passar a verificar a entrega há dois caminhos, ambos do lado do cliente:
+o formulário enviar cópia para o endereço de verificação do site, ou as
+notificações serem reencaminhadas para lá.
+
+A distinção fica no código: `form_delivery_unverified`, severidade baixa,
+enquanto nunca chegou nada; `form_email_not_delivered`, severidade alta, quando
+o formulário **já entregou antes** e desta vez não entregou. O segundo é um
+incidente verdadeiro; o primeiro é um passo de configuração por fazer.
+
 ### Como a caixa de verificação está ligada
 
 O endpoint `POST /api/inbound-email` recebe as mensagens que chegam ao domínio
