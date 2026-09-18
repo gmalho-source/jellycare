@@ -254,3 +254,52 @@ describe('discoverForms — captcha e seletores', () => {
     expect(forms.filter(isTestable)).toHaveLength(1)
   })
 })
+
+describe('formulários controlados por JavaScript', () => {
+  // A forma real encontrada em produção: React, campos sem `name`, sem `id` e
+  // sem labels, formulário sem `action`. A descoberta descartava todos os
+  // campos e o formulário ficava invisível.
+  const REACT_FORM = `<!doctype html><html><body>
+    <form class="page_form__xoJzE">
+      <input class="page_input__Fj8Eu" type="text" placeholder="O seu nome">
+      <input class="page_input__Fj8Eu" type="email" placeholder="Email">
+      <textarea class="page_textarea__Bzglk" rows="7" placeholder="Mensagem"></textarea>
+      <select class="page_select___e2L8"><option value="">Assunto</option><option value="geral">Geral</option></select>
+      <button type="submit">Enviar</button>
+    </form>
+  </body></html>`
+
+  it('descobre o formulário apesar de nenhum campo ter nome', () => {
+    const [form] = discoverForms(REACT_FORM, 'https://cliente.pt/contacto')
+
+    expect(form).toBeDefined()
+    expect(form?.fields).toHaveLength(4)
+    expect(form?.fields.every((field) => field.name === '')).toBe(true)
+  })
+
+  it('classifica-o como formulário de contacto', () => {
+    const [form] = discoverForms(REACT_FORM, 'https://cliente.pt/contacto')
+
+    expect(form?.kind).toBe('contact')
+    expect(form?.excludedReason).toBeUndefined()
+  })
+
+  it('numera os campos pela posição, para os voltar a encontrar', () => {
+    const [form] = discoverForms(REACT_FORM, 'https://cliente.pt/contacto')
+
+    expect(form?.fields.map((field) => field.ordinal)).toEqual([0, 1, 2, 3])
+  })
+
+  it('lê o aria-label e o autocomplete quando existem', () => {
+    const html = `<form>
+      <input type="text" aria-label="Nome completo" autocomplete="name">
+      <input type="email" autocomplete="email">
+    </form>`
+
+    const [form] = discoverForms(html, 'https://cliente.pt/contacto')
+
+    expect(form?.fields[0]?.ariaLabel).toBe('Nome completo')
+    expect(form?.fields[0]?.autocomplete).toBe('name')
+    expect(form?.fields[1]?.autocomplete).toBe('email')
+  })
+})

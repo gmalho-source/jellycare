@@ -99,12 +99,25 @@ export function inferFieldRole(field: DiscoveredField): FieldRole {
   if (field.type === 'tel') return 'phone'
   if (field.type === 'textarea') return 'message'
   if (field.type === 'checkbox' || field.type === 'radio') {
-    const text = `${field.name} ${field.id ?? ''} ${field.label ?? ''}`
+    const text = `${field.name} ${field.id ?? ''} ${field.label ?? ''} ${field.ariaLabel ?? ''}`
     return ROLE_PATTERNS.find(([role]) => role === 'consent')?.[1].test(text) ? 'consent' : 'choice'
   }
   if (field.type === 'select') return 'choice'
 
-  const text = [field.name, field.id, field.placeholder, field.label].filter(Boolean).join(' ')
+  // O `autocomplete` vem primeiro porque é declarado pelo autor para dizer o
+  // papel do campo — `given-name`, `tel`, `organization` — e por isso é mais
+  // fiável do que adivinhar pelo nome. Num formulário sem `name` é o único
+  // sinal explícito que resta.
+  const text = [
+    field.autocomplete,
+    field.name,
+    field.id,
+    field.placeholder,
+    field.label,
+    field.ariaLabel,
+  ]
+    .filter(Boolean)
+    .join(' ')
   for (const [role, pattern] of ROLE_PATTERNS) {
     if (pattern.test(text)) return role
   }

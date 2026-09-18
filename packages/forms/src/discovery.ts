@@ -18,12 +18,31 @@ export type FormKind =
   | 'unknown'
 
 export interface DiscoveredField {
+  /**
+   * O atributo `name`, ou vazio quando não existe.
+   *
+   * Num formulário controlado por JavaScript — React, Vue, Svelte — o estado
+   * vive no código e o `name` deixa de ter função, por isso é comum não
+   * existir em campo nenhum. Um campo sem nome continua a ser um campo.
+   */
   name: string
   /** Tipo do input, ou `textarea` / `select`. */
   type: string
+  /**
+   * Posição entre os `input`, `textarea` e `select` do formulário.
+   *
+   * É o que permite voltar a encontrar um campo que não tem `name` nem `id`.
+   * Conta todos os controlos, incluindo botões, para que a contagem coincida
+   * com a que o browser faz ao localizar o campo na página.
+   */
+  ordinal: number
   id?: string
   placeholder?: string
   label?: string
+  /** `aria-label`: em formulários sem labels visíveis é o que resta. */
+  ariaLabel?: string
+  /** `autocomplete`: diz o papel do campo melhor do que qualquer heurística. */
+  autocomplete?: string
   required: boolean
   /** Valores disponíveis, para `select`. */
   options?: string[]
@@ -55,7 +74,15 @@ const MESSAGE_HINT = /(message|mensagem|comment|comentario|comentário|duvida|d�
 const EMAIL_HINT = /(e-?mail|correio)/i
 
 function haystack(field: DiscoveredField): string {
-  return [field.name, field.id, field.placeholder, field.label, field.type]
+  return [
+    field.name,
+    field.id,
+    field.placeholder,
+    field.label,
+    field.ariaLabel,
+    field.autocomplete,
+    field.type,
+  ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
@@ -193,14 +220,16 @@ export function discoverForms(html: string, pageUrl: string): DiscoveredForm[] {
 
     const fields: DiscoveredField[] = []
 
-    $form.find('input, textarea, select').each((_, input) => {
+    // O ordinal conta todos os controlos, incluindo os botões que a seguir são
+    // ignorados: é a mesma contagem que o browser faz ao procurar o campo, e
+    // desalinhá-la faria escrever no campo errado.
+    $form.find('input, textarea, select').each((ordinal, input) => {
       const $input = $(input)
       const tag = (input as { tagName?: string }).tagName?.toLowerCase() ?? 'input'
       const type = tag === 'input' ? ($input.attr('type') ?? 'text').toLowerCase() : tag
       const fieldName = $input.attr('name') ?? $input.attr('id') ?? ''
 
       if (type === 'submit' || type === 'button' || type === 'image' || type === 'reset') return
-      if (!fieldName && type !== 'hidden') return
 
       const fieldId = $input.attr('id')
       const label = fieldId
@@ -210,8 +239,13 @@ export function discoverForms(html: string, pageUrl: string): DiscoveredForm[] {
       const field: DiscoveredField = {
         name: fieldName,
         type,
+        ordinal,
         required: $input.attr('required') !== undefined || $input.attr('aria-required') === 'true',
       }
+      const ariaLabel = $input.attr('aria-label')
+      if (ariaLabel) field.ariaLabel = ariaLabel
+      const autocomplete = $input.attr('autocomplete')
+      if (autocomplete && autocomplete !== 'off') field.autocomplete = autocomplete
       if (fieldId) field.id = fieldId
       const placeholder = $input.attr('placeholder')
       if (placeholder) field.placeholder = placeholder

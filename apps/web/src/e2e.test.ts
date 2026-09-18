@@ -216,9 +216,12 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await page.isVisible('text=Falta provar a propriedade do domínio')).toBe(true)
     expect(await page.isVisible('text=jellycare-site-verification=')).toBe(true)
 
-    // Seis dos sete checks exigem verificação; só a disponibilidade corre.
+    // Só a disponibilidade corre sem prova de propriedade; tudo o resto fica à
+    // espera. Conta-se o que corre e não o que está bloqueado: o número de
+    // verificações cresce com o produto, o número de exceções à regra não.
     const bloqueados = await page.locator('text=Aguarda verificação do domínio').count()
-    expect(bloqueados).toBe(6)
+    const total = await page.locator('[data-check-row]').count()
+    expect(bloqueados).toBe(total - 1)
 
     await page.close()
   }, 90_000)

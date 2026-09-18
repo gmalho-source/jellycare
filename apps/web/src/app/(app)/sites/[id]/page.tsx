@@ -150,6 +150,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
               return (
                 <li
                   key={check.id}
+                  data-check-row={check.checkType}
                   className="flex items-center justify-between px-5 py-3 text-sm"
                 >
                   <div>

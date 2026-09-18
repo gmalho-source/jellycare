@@ -138,7 +138,14 @@ export async function submitForm(options: SubmitOptions): Promise<SubmitResult> 
     for (const fill of plan.fills) {
       const target = fill.field.id
         ? formLocator.locator(`#${CSS_ESCAPE(fill.field.id)}`)
-        : formLocator.locator(`[name="${fill.field.name}"]`)
+        : fill.field.name
+          ? formLocator.locator(`[name="${fill.field.name}"]`)
+          : // Sem `name` nem `id` resta a posição. É menos estável — mudar a
+            // ordem dos campos muda o alvo — mas é a única forma de chegar a
+            // um formulário controlado por JavaScript, que é como se escrevem
+            // hoje. A descoberta corre antes de cada teste, por isso a
+            // posição vem sempre da página atual e não de um registo antigo.
+            formLocator.locator('input, textarea, select').nth(fill.field.ordinal)
       const element = target.first()
 
       if ((await element.count()) === 0) continue

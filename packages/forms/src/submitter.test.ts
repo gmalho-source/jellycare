@@ -85,6 +85,42 @@ const FORMS: Record<string, string> = {
     </form>
   </body></html>`,
 
+  // A forma real de um formulário React: sem `name`, sem `id`, sem `action` e
+  // sem labels associadas. O estado vive no JavaScript e a submissão é feita
+  // por `fetch`. Foi um destes que a descoberta não via.
+  '/react': `<!doctype html><html><body>
+    <form class="page_form__xoJzE">
+      <input class="in" type="text" placeholder="O seu nome">
+      <input class="in" type="email" placeholder="Email" required>
+      <input class="in" type="tel" placeholder="Telefone">
+      <textarea class="ta" rows="7" placeholder="Mensagem" required></textarea>
+      <label><input type="checkbox" required> Aceito a política de privacidade</label>
+      <button type="submit">Enviar</button>
+    </form>
+    <div id="ok" style="display:none">Obrigado! A sua mensagem foi enviada.</div>
+    <script>
+      const form = document.querySelector('form')
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        const campos = form.querySelectorAll('input, textarea, select')
+        const corpo = new URLSearchParams({
+          nome: campos[0].value,
+          email: campos[1].value,
+          telefone: campos[2].value,
+          mensagem: campos[3].value,
+          rgpd: campos[4].checked ? 'sim' : 'nao',
+        })
+        await fetch('/enviar', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: corpo.toString(),
+        })
+        form.style.display = 'none'
+        document.getElementById('ok').style.display = 'block'
+      })
+    </script>
+  </body></html>`,
+
   '/login': `<!doctype html><html><body>
     <form id="entrar" method="post" action="/autenticar">
       <input name="email" type="email">
@@ -227,6 +263,25 @@ describe('submitForm', () => {
 
     expect(result.submitted).toBe(true)
     expect(result.signal).toBe('indicator')
+  }, 60_000)
+
+  it('preenche um formulário sem name, id ou label', async () => {
+    // O caso que a descoberta deixava passar: um formulário controlado por
+    // JavaScript, onde os campos só se distinguem pela posição e pelo tipo.
+    received.length = 0
+    const result = await submit('/react')
+
+    expect(result.submitted).toBe(true)
+    expect(result.validationErrors).toEqual([])
+
+    const submission = received[0]
+    expect(submission?.email).toBe('check+site1-abc12345@check.jellycare.pt')
+    expect(submission?.nome).toBe('Jellycare Monitor')
+    expect(submission?.telefone).toBe('+351200000000')
+    expect(submission?.mensagem).toContain('abc12345')
+    // Sem marcar a checkbox obrigatória a validação HTML5 bloqueava tudo, e
+    // sem `name` nem sequer havia como lhe chegar.
+    expect(submission?.rgpd).toBe('sim')
   }, 60_000)
 
   it('recusa-se a submeter um formulário de login', async () => {
