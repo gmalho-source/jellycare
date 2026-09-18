@@ -90,8 +90,19 @@ registos dela no subdomínio e o apex fica livre para o Resend.
 
 ### 2. Neon
 
-Projeto novo, região **AWS eu-central-1 (Frankfurt)**. Guardar as duas strings
-de ligação que o Neon dá:
+Projeto novo, região **AWS eu-central-1 (Frankfurt)**.
+
+> **Só o Postgres database.** O ecrã de criação oferece mais quatro serviços e
+> nenhum serve aqui. O *Object storage* não é preciso porque os PDF dos
+> relatórios vivem na base de dados, em `bytea`: são dezenas de KB, ficam no
+> mesmo backup e na mesma transação que o registo do relatório, e um bucket à
+> parte só acrescentava credenciais e um segundo sítio para se perderem. As
+> *Functions* não têm uso: o worker é um processo permanente no Fly, não uma
+> função. O *AI gateway* não tem uso nenhum — nada no produto chama modelos. E
+> o *Neon Auth* competiria com a autenticação que já existe, por ligação de uso
+> único contra as tabelas `login_tokens` e `sessions`.
+
+Guardar as duas strings de ligação que o Neon dá:
 
 - a **pooled** (`-pooler` no host) para o dashboard
 - a **direta** para o worker e para as migrações
