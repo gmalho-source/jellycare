@@ -77,12 +77,29 @@ describe('assertRedisReachable', () => {
     await expect(assertRedisReachable(redisConnection(url), 5_000)).resolves.toBeUndefined()
   })
 
+  it('aponta o TLS em falta quando o host é do Upstash', async () => {
+    // O caso real: o esquema ficou redis:// porque a linha que o Upstash mostra
+    // põe o TLS numa flag à parte. Sem esta pista, o erro dizia só
+    // "Connection is closed" e mandava conferir o formato inteiro.
+    const semTls = redisConnection('redis://default:seg@social-sole-1.upstash.io:6379')
+
+    await expect(assertRedisReachable(semTls, 2_000)).rejects.toThrow(/rediss:\/\//)
+  }, 15_000)
+
+  it('não deixa a password entrar na pista do erro', async () => {
+    const semTls = redisConnection('redis://default:PASSWORD-SECRETA@social-sole-1.upstash.io:6379')
+
+    await expect(assertRedisReachable(semTls, 2_000)).rejects.toThrow(
+      expect.not.stringContaining('PASSWORD-SECRETA') as unknown as string,
+    )
+  }, 15_000)
+
   it('rebenta depressa quando não há ninguém a atender, e diz o que verificar', async () => {
     // O caso real: um REDIS_URL sem credenciais nem TLS. Antes disto o worker
     // anunciava-se e ficava calado para sempre; agora morre e o Fly reinicia,
     // com o motivo no log.
     const morto = redisConnection('redis://127.0.0.1:1')
 
-    await expect(assertRedisReachable(morto, 2_000)).rejects.toThrow(/REDIS_URL/)
+    await expect(assertRedisReachable(morto, 2_000)).rejects.toThrow(/Não foi possível ligar/)
   }, 15_000)
 })

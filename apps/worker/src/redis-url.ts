@@ -78,12 +78,38 @@ export async function assertRedisReachable(
     await probe.ping()
   } catch (error) {
     const motivo = error instanceof Error ? error.message : String(error)
-    throw new Error(
-      `Não foi possível ligar ao Redis: ${motivo}. Confirme o REDIS_URL — ` +
-        'o Upstash exige o formato rediss://default:<password>@<host>:6379, ' +
-        'com TLS e credenciais.',
-    )
+    throw new Error(`Não foi possível ligar ao Redis: ${motivo}.${diagnostico(connection)}`)
   } finally {
     probe.disconnect()
   }
+}
+
+/**
+ * Pista sobre a forma da ligação, para o erro dizer o que está errado em vez
+ * de mandar conferir tudo.
+ *
+ * Nunca inclui a password nem o URL: só o que se observa da configuração.
+ */
+function diagnostico(connection: ConnectionOptions): string {
+  const options = connection as Record<string, unknown>
+  const host = typeof options.host === 'string' ? options.host : ''
+
+  if (!('tls' in options)) {
+    const upstash = host.endsWith('.upstash.io')
+    return (
+      ' A ligação foi tentada sem TLS, porque o REDIS_URL usa `redis://` e não' +
+      ' `rediss://`.' +
+      (upstash
+        ? ' O Upstash fecha ligações sem TLS — é quase de certeza isto. Repare' +
+          ' que a linha `redis-cli --tls -u redis://...` que ele mostra põe o' +
+          ' TLS numa flag à parte; num URL isso escreve-se `rediss://`.'
+        : ' Se o servidor exigir TLS, é isto.')
+    )
+  }
+
+  if (!options.password) {
+    return ' A ligação foi tentada sem password: o REDIS_URL não traz credenciais.'
+  }
+
+  return ' Confirme o REDIS_URL e se o servidor está acessível a partir desta região.'
 }
