@@ -38,6 +38,12 @@ export interface RunnerDeps {
   /** Só é chamado pelas rotinas que submetem formulários. */
   browser?: () => Promise<Browser>
   canaryDomain?: string
+  /**
+   * Chave da Safe Browsing da Google. É da plataforma, não do cliente, por
+   * isso entra aqui e não na config de cada site — guardá-la por site seria
+   * duplicar a mesma credencial por cada linha da tabela.
+   */
+  safeBrowsingApiKey?: string
 }
 
 /** O que o runner precisa de saber sobre uma verificação, venha ela de onde vier. */
@@ -206,7 +212,13 @@ async function execute(
   now: Date,
 ): Promise<CheckOutcome> {
   const registered = getCheck(checkType)
-  if (registered) return runCheck(registered.definition, context, config as never)
+  if (registered) {
+    const withPlatformConfig =
+      checkType === 'reputation' && deps.safeBrowsingApiKey
+        ? { ...config, safeBrowsingApiKey: deps.safeBrowsingApiKey }
+        : config
+    return runCheck(registered.definition, context, withPlatformConfig as never)
+  }
 
   const formDeps = {
     db: deps.db,

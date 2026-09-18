@@ -39,6 +39,9 @@ async function main(): Promise<void> {
           ...(process.env.CANARY_EMAIL_DOMAIN
             ? { canaryDomain: process.env.CANARY_EMAIL_DOMAIN }
             : {}),
+          ...(process.env.GOOGLE_SAFE_BROWSING_API_KEY
+            ? { safeBrowsingApiKey: process.env.GOOGLE_SAFE_BROWSING_API_KEY }
+            : {}),
         },
         data,
       )

@@ -270,8 +270,13 @@ baixo — ver `docs/arquitetura.md`.
 
 ### 9. Opcional: Google Safe Browsing
 
-Projeto no Google Cloud, ativar a Safe Browsing API, criar uma chave. Sem ela o
+Projeto no Google Cloud, ativar a Safe Browsing API, criar uma chave, e
+defini-la como `GOOGLE_SAFE_BROWSING_API_KEY` nos segredos do worker. Sem ela o
 check de reputação corre à mesma, só com o URLhaus, e a cobertura fica menor.
+
+A chave é da plataforma e não do cliente: entra uma vez no ambiente do worker e
+serve todos os sites. Não se guarda na configuração de cada check, que seria
+duplicar a mesma credencial por cada linha da tabela.
 
 ---
 

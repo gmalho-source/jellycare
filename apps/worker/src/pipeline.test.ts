@@ -461,6 +461,63 @@ describe('agendador', () => {
   })
 })
 
+describe('configuração da plataforma', () => {
+  it('passa a chave do Safe Browsing ao check de reputação', async () => {
+    // A chave é da Jellycare, não do cliente. Se não chegar ao check, o check
+    // corre à mesma — só com o URLhaus — e a perda de cobertura passa
+    // despercebida, que é a pior forma de uma credencial estar mal ligada.
+    await addCheck('reputation', 1440, null)
+    await verifySite()
+
+    const pedidos: string[] = []
+    const fetchStub = (async (input: RequestInfo | URL) => {
+      pedidos.push(typeof input === 'string' ? input : String(input))
+      return new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof globalThis.fetch
+
+    await executeCheckJob(
+      {
+        db,
+        notifier: new RecordingNotifier(),
+        fetch: fetchStub,
+        safeBrowsingApiKey: 'chave-da-plataforma',
+      },
+      { siteId, checkType: 'reputation' },
+    )
+
+    expect(
+      pedidos.some(
+        (url) =>
+          url.includes('safebrowsing.googleapis.com') && url.includes('chave-da-plataforma'),
+      ),
+    ).toBe(true)
+  })
+
+  it('não inventa uma chave quando ela não está definida', async () => {
+    await addCheck('reputation', 1440, null)
+    await verifySite()
+
+    const pedidos: string[] = []
+    const fetchStub = (async (input: RequestInfo | URL) => {
+      pedidos.push(typeof input === 'string' ? input : String(input))
+      return new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof globalThis.fetch
+
+    await executeCheckJob(
+      { db, notifier: new RecordingNotifier(), fetch: fetchStub },
+      { siteId, checkType: 'reputation' },
+    )
+
+    expect(pedidos.some((url) => url.includes('safebrowsing.googleapis.com'))).toBe(false)
+  })
+})
+
 describe('checkJobId', () => {
   it('é estável dentro do mesmo minuto e muda depois', () => {
     const data = { siteId: 's', checkType: 'uptime' }
