@@ -109,6 +109,29 @@ não consegue corrigir.
 
 ---
 
+## Cobertura reduzida
+
+Um check pode ter sucesso com menos cobertura do que devia: uma fonte de
+reputação que não respondeu, um orçamento de rastreio esgotado antes do fim do
+site. Isso não é um problema do cliente — não lhe diz respeito e não o pode
+resolver — mas também não pode desaparecer, senão a plataforma degrada-se em
+silêncio e continua a dizer que está tudo bem.
+
+A execução guarda esses avisos em `check_runs.warnings`, separados do `error`
+de propósito: um run com avisos teve **sucesso**, e confundi-los faria a
+reconciliação tratá-lo como falhado e deixar de resolver problemas que já não
+existem.
+
+Os avisos aparecem no painel interno, na linha da execução, e no log do
+worker. Nunca no portal do cliente nem no relatório mensal — há um teste de
+ponta a ponta que o garante nos dois sentidos: visível à equipa, invisível ao
+cliente.
+
+Foi assim que se fechou um buraco real: com o URLhaus a responder e a Safe
+Browsing a devolver 400, o check dizia `ok` e metade da cobertura desaparecia
+sem ninguém dar por isso — exatamente o padrão que esta plataforma existe para
+combater.
+
 ## 4. Formulários e entrega de email
 
 A verificação mais valiosa e a que o mercado não faz bem.

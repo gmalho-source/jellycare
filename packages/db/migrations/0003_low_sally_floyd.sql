@@ -1,0 +1,1 @@
+ALTER TABLE "check_runs" ADD COLUMN "warnings" jsonb DEFAULT '[]'::jsonb NOT NULL;

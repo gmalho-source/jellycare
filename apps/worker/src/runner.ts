@@ -85,7 +85,14 @@ function metaFor(checkType: string): CheckMeta | null {
 const REGION_CORROBORATION_WINDOW_MS = 10 * 60_000
 
 export type RunOutcome =
-  | { status: 'completed'; runId: string; findings: number; notified: number }
+  | {
+      status: 'completed'
+      runId: string
+      findings: number
+      notified: number
+      /** Cobertura reduzida nesta execução. Ver `CheckOutcome.warnings`. */
+      warnings: string[]
+    }
   | { status: 'skipped'; reason: string }
 
 /**
@@ -195,7 +202,13 @@ export async function executeCheckJob(
     now,
   })
 
-  return { status: 'completed', runId, findings: outcome.findings.length, notified }
+  return {
+    status: 'completed',
+    runId,
+    findings: outcome.findings.length,
+    notified,
+    warnings: outcome.warnings ?? [],
+  }
 }
 
 /**

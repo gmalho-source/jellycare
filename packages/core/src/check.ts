@@ -33,6 +33,18 @@ export interface CheckOutcome {
   metrics: Record<string, number>
   /** Preenchido quando `status` é `failed`. */
   error?: string
+  /**
+   * Correu, mas não em força.
+   *
+   * Um check pode ter sucesso com menos cobertura do que devia: uma fonte de
+   * reputação que não respondeu, um orçamento de rastreio esgotado antes do
+   * fim do site. Isso não é um problema do cliente — não lhe diz respeito e
+   * não lhe pertence — mas também não pode desaparecer, senão a plataforma
+   * degrada-se em silêncio e continua a dizer que está tudo bem.
+   *
+   * Fica registado na execução, para quem opera a plataforma.
+   */
+  warnings?: string[]
   durationMs: number
 }
 
@@ -52,6 +64,8 @@ export interface CheckDefinition<TConfig = Record<string, never>> {
 export interface CheckResult {
   findings: ObservedFinding[]
   metrics?: Record<string, number>
+  /** Ver `CheckOutcome.warnings`. */
+  warnings?: string[]
 }
 
 /**
@@ -71,6 +85,7 @@ export async function runCheck<TConfig>(
       status: 'ok',
       findings: result.findings,
       metrics: result.metrics ?? {},
+      ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
       durationMs: Date.now() - startedAt,
     }
   } catch (error) {

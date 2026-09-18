@@ -71,6 +71,7 @@ export async function recordCheckRun(
         startedAt,
         durationMs: outcome.durationMs,
         error: outcome.error ?? null,
+        warnings: outcome.warnings ?? [],
         metrics: outcome.metrics,
       })
       .returning({ id: checkRuns.id })

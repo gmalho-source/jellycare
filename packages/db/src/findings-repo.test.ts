@@ -1,5 +1,5 @@
 import type { CheckOutcome, ObservedFinding } from '@jellycare/core'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createDatabase } from './client.js'
 import { recordCheckRun } from './findings-repo.js'
@@ -197,5 +197,48 @@ describe('recordCheckRun', () => {
     expect(rows[0]?.severity).toBe('critical')
     expect(escalated.notifications[0]?.kind).toBe('escalated')
     expect(escalated.notifications[0]?.previousSeverity).toBe('medium')
+  })
+})
+
+describe('avisos de cobertura reduzida', () => {
+  it('guarda os avisos na execução sem os transformar em problemas', async () => {
+    // Uma fonte de reputação em baixo não é um problema do site do cliente:
+    // fica registada na execução, para quem opera a plataforma, e não entra
+    // na lista de problemas que o cliente vê.
+    const result = await recordCheckRun(db, {
+      siteId,
+      checkType: 'reputation',
+      outcome: {
+        status: 'ok',
+        findings: [],
+        metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
+        warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
+        durationMs: 12,
+      },
+      confirmationsRequired: 1,
+      startedAt: new Date(),
+    })
+
+    const [run] = await db.select().from(checkRuns).where(eq(checkRuns.id, result.runId))
+
+    expect(run?.status).toBe('ok')
+    expect(run?.warnings).toHaveLength(1)
+    expect(run?.warnings[0]).toContain('safe_browsing')
+    expect(run?.error).toBeNull()
+
+    const problemas = await db
+      .select()
+      .from(findings)
+      .where(and(eq(findings.siteId, siteId), eq(findings.checkType, 'reputation')))
+    expect(problemas).toHaveLength(0)
+  })
+
+  it('uma execução sem avisos guarda uma lista vazia e não nulo', async () => {
+    // A coluna é `not null` com omissão `[]`: quem a lê nunca tem de defender
+    // -se de um nulo.
+    const result = await run([])
+    const [linha] = await db.select().from(checkRuns).where(eq(checkRuns.id, result.runId))
+
+    expect(linha?.warnings).toEqual([])
   })
 })

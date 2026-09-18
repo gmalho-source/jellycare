@@ -138,6 +138,38 @@ describe('reputationCheck', () => {
     expect(pedidos.some((p) => p.authKey === 'chave-urlhaus')).toBe(true)
   })
 
+  it('avisa quando uma fonte falha e a outra responde', async () => {
+    // O caso que estava a passar em silêncio: o check diz `ok`, metade da
+    // cobertura desapareceu, e ninguém fica a saber. Não é um problema do
+    // site do cliente — não vira finding — mas é um defeito da plataforma
+    // que alguém tem de corrigir.
+    const outcome = await run({ ...CLEAN, [SAFE_BROWSING]: { status: 400 } })
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.findings).toEqual([])
+    expect(outcome.warnings?.length).toBe(1)
+    expect(outcome.warnings?.[0]).toContain('safe_browsing')
+    expect(outcome.metrics.providersFailed).toBe(1)
+  })
+
+  it('não inventa avisos quando corre tudo bem', async () => {
+    const outcome = await run(CLEAN)
+
+    expect(outcome.warnings ?? []).toEqual([])
+    expect(outcome.metrics.providersFailed).toBe(0)
+  })
+
+  it('o aviso diz o que a fonte respondeu', async () => {
+    // Sem isto o aviso era "uma fonte falhou" e obrigava a ir ao painel da
+    // Google adivinhar qual e porquê.
+    const outcome = await run({
+      ...CLEAN,
+      [SAFE_BROWSING]: { status: 400, body: '{"error":{"message":"API key not valid"}}' },
+    })
+
+    expect(outcome.warnings?.[0]).toContain('API key not valid')
+  })
+
   it('sobrevive à falha de um provider desde que outro responda', async () => {
     const outcome = await run(
       { ...CLEAN, [SAFE_BROWSING]: { status: 503 } },

@@ -263,15 +263,26 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
                   <td className="px-5 py-2.5">
                     <span
                       className={
-                        run.status === 'ok'
-                          ? 'sev-ok rounded-full px-2 py-0.5 text-xs'
-                          : 'sev-high rounded-full px-2 py-0.5 text-xs'
+                        run.status !== 'ok'
+                          ? 'sev-high rounded-full px-2 py-0.5 text-xs'
+                          : run.warnings.length > 0
+                            ? 'sev-medium rounded-full px-2 py-0.5 text-xs'
+                            : 'sev-ok rounded-full px-2 py-0.5 text-xs'
                       }
                     >
-                      {run.status === 'ok' ? 'Concluída' : 'Falhou'}
+                      {run.status !== 'ok'
+                        ? 'Falhou'
+                        : run.warnings.length > 0
+                          ? 'Cobertura reduzida'
+                          : 'Concluída'}
                     </span>
                   </td>
-                  <td className="px-5 py-2.5 text-xs text-ink-400">{run.error ?? ''}</td>
+                  {/* Os avisos só aparecem aqui: dizem respeito à plataforma e
+                      não ao site, por isso nunca chegam ao portal do cliente
+                      nem ao relatório mensal. */}
+                  <td className="px-5 py-2.5 text-xs text-ink-400">
+                    {run.error ?? run.warnings.join(' · ')}
+                  </td>
                   <td className="px-5 py-2.5 text-right tabular-nums text-xs text-ink-400">
                     {run.durationMs} ms
                   </td>

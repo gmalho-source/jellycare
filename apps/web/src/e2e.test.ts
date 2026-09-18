@@ -77,6 +77,18 @@ describeE2E('fluxo de entrada e painel', () => {
           durationMs: 210,
           metrics: { up: 1, statusCode: 200, responseTimeMs: 210 },
         })
+        // Uma execução com cobertura reduzida: tem de aparecer no painel
+        // interno e nunca no portal do cliente.
+        await db.insert(schema.checkRuns).values({
+          siteId,
+          checkType: 'reputation',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 3 * 60_000),
+          durationMs: 340,
+          warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
+          metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
+        })
         await db.insert(schema.uptimeSamples).values([
           {
             siteId,
@@ -300,6 +312,27 @@ describeE2E('fluxo de entrada e painel', () => {
     const cliente = await entrarComo(convidado)
     await cliente.waitForURL(`${baseUrl}/portal`)
     expect(await cliente.isVisible('text=Site de teste')).toBe(true)
+    await cliente.close()
+  }, 120_000)
+
+  it('mostra a cobertura reduzida à equipa e esconde-a do cliente', async () => {
+    // Uma fonte de reputação mal configurada é um defeito da plataforma, não
+    // um problema do site. Tem de chegar a quem a pode corrigir e não pode
+    // aparecer ao cliente, que não tem nada a ver com isso nem o pode
+    // resolver.
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteId}`)
+    await equipa.waitForSelector('h1')
+    expect(await equipa.isVisible('text=Cobertura reduzida')).toBe(true)
+    expect(await equipa.isVisible('text=safe_browsing')).toBe(true)
+    await equipa.close()
+
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    await cliente.goto(`${baseUrl}/portal/sites/${siteId}`)
+    await cliente.waitForSelector('h1')
+    expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
+    expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
     await cliente.close()
   }, 120_000)
 

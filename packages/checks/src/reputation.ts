@@ -217,13 +217,27 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
     // porque a API esteve em baixo.
     if (succeeded === 0) throw new NoReputationDataError(failures)
 
+    // Uma fonte que falha enquanto outra responde não pode desaparecer. O
+    // check tem sucesso — e tem de ter, senão uma chave mal configurada
+    // deitava fora uma blacklistagem verdadeira que a outra fonte encontrou —
+    // mas metade da cobertura foi-se, e isso é um defeito da plataforma que
+    // alguém tem de corrigir. Não é um problema do site do cliente, por isso
+    // não vira finding: fica no aviso da execução.
     return {
       findings,
       metrics: {
         providersQueried: providers.length,
         providersSucceeded: succeeded,
+        providersFailed: failures.length,
         listings: findings.length,
       },
+      ...(failures.length > 0
+        ? {
+            warnings: failures.map(
+              (failure) => `Fonte de reputação indisponível — ${failure}`,
+            ),
+          }
+        : {}),
     }
   },
 }

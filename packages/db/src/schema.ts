@@ -212,6 +212,14 @@ export const checkRuns = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     durationMs: integer('duration_ms').notNull(),
     error: text('error'),
+    /**
+     * Correu, mas com menos cobertura do que devia. Ver `CheckOutcome`.
+     *
+     * Separado do `error` de propósito: um run com avisos teve sucesso, e
+     * confundir os dois faria a reconciliação tratá-lo como falhado e deixar
+     * de resolver problemas que já não existem.
+     */
+    warnings: jsonb('warnings').$type<string[]>().notNull().default([]),
     metrics: jsonb('metrics').$type<Record<string, number>>().notNull().default({}),
   },
   (table) => [index('check_runs_site_type_idx').on(table.siteId, table.checkType, table.startedAt)],

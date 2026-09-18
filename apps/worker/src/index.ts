@@ -52,6 +52,12 @@ async function main(): Promise<void> {
       if (outcome.status === 'skipped') {
         console.info(`[${data.checkType}] ${data.siteId}: ignorado — ${outcome.reason}`)
       }
+      // Um check que corre com menos cobertura do que devia tem de aparecer a
+      // quem opera a plataforma. Não é problema do cliente e não vira finding,
+      // mas calar-se seria deixar a plataforma degradar-se em silêncio.
+      for (const warning of outcome.status === 'completed' ? (outcome.warnings ?? []) : []) {
+        console.warn(`[${data.checkType}] ${data.siteId}: ${warning}`)
+      }
       return outcome
     },
   })
