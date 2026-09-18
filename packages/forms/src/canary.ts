@@ -93,6 +93,18 @@ const ROLE_PATTERNS: [FieldRole, RegExp][] = [
   ['name', /(name|nome)/i],
 ]
 
+/**
+ * Adesão a comunicações de marketing.
+ *
+ * Nunca é marcada automaticamente. Consentir o tratamento de um pedido é
+ * inerente a submetê-lo; subscrever novidades é uma decisão à parte, e
+ * inscrever a caixa canária na lista do cliente não é nosso direito. A
+ * verificação vem antes da de consentimento porque "aceito receber
+ * comunicações comerciais" casa com as duas.
+ */
+const MARKETING_OPT_IN =
+  /(newsletter|novidades|marketing|promo|ofertas|subscrever|subscribe|comunica(ç|c)(õ|o)es comerciais)/i
+
 /** Deduz o papel de um campo a partir do nome, id, placeholder e label. */
 export function inferFieldRole(field: DiscoveredField): FieldRole {
   if (field.type === 'email') return 'email'
@@ -100,6 +112,7 @@ export function inferFieldRole(field: DiscoveredField): FieldRole {
   if (field.type === 'textarea') return 'message'
   if (field.type === 'checkbox' || field.type === 'radio') {
     const text = `${field.name} ${field.id ?? ''} ${field.label ?? ''} ${field.ariaLabel ?? ''}`
+    if (MARKETING_OPT_IN.test(text)) return 'choice'
     return ROLE_PATTERNS.find(([role]) => role === 'consent')?.[1].test(text) ? 'consent' : 'choice'
   }
   if (field.type === 'select') return 'choice'
@@ -182,9 +195,14 @@ export function buildFillPlan(form: DiscoveredForm, canary: CanaryIdentity): Fil
         fills.push({ field, role, value: canary.message, action: 'fill' })
         break
       case 'consent':
-        // Marcar o consentimento é o que um visitante real faria; sem isto a
-        // submissão é rejeitada e reportaríamos um falso positivo.
-        if (field.required) fills.push({ field, role, value: null, action: 'check' })
+        // Marcado sempre, obrigatório ou não. Consentir o tratamento do pedido
+        // é inerente a submetê-lo — é o que qualquer visitante faz — e num
+        // formulário validado por JavaScript a obrigatoriedade não aparece no
+        // HTML. Deixá-lo por marcar rejeitava a submissão e reportava um
+        // formulário avariado que está de perfeita saúde.
+        //
+        // A adesão a marketing é tratada como escolha e nunca chega aqui.
+        fills.push({ field, role, value: null, action: 'check' })
         break
       case 'choice': {
         if (!field.required) break

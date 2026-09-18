@@ -73,6 +73,20 @@ const SEARCH_FIELD = /^(s|q|search|query|pesquisa|busca|keyword)$/i
 const MESSAGE_HINT = /(message|mensagem|comment|comentario|comentário|duvida|dúvida|descricao|descrição|pedido|assunto-detalhe)/i
 const EMAIL_HINT = /(e-?mail|correio)/i
 
+/**
+ * O asterisco na label, que é como um formulário diz "obrigatório" a quem o vê.
+ *
+ * Num formulário validado por JavaScript nada tem o atributo `required`: a
+ * regra vive no código e o HTML não a declara. Sobra a convenção visual, que é
+ * universal e honesta — o autor pô-la lá precisamente para dizer isto.
+ *
+ * Só conta perto do início: em textos de ajuda longos um asterisco costuma ser
+ * uma nota de rodapé e não uma marca de obrigatoriedade.
+ */
+function marksRequired(label: string | undefined): boolean {
+  return label !== undefined && label.slice(0, 80).includes('*')
+}
+
 function haystack(field: DiscoveredField): string {
   return [
     field.name,
@@ -240,7 +254,10 @@ export function discoverForms(html: string, pageUrl: string): DiscoveredForm[] {
         name: fieldName,
         type,
         ordinal,
-        required: $input.attr('required') !== undefined || $input.attr('aria-required') === 'true',
+        required:
+          $input.attr('required') !== undefined ||
+          $input.attr('aria-required') === 'true' ||
+          marksRequired(label),
       }
       const ariaLabel = $input.attr('aria-label')
       if (ariaLabel) field.ariaLabel = ariaLabel

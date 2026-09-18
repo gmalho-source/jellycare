@@ -178,3 +178,73 @@ describe('buildFillPlan', () => {
     expect(plan.unresolvedRequired).toEqual([])
   })
 })
+
+describe('formulários validados por JavaScript', () => {
+  const canary = buildCanaryIdentity({
+    siteId: 'site1',
+    domain: 'check.jellycare.pt',
+    tokenGenerator: () => 'abc12345',
+  })
+
+  function planFor(html: string) {
+    const [form] = discoverForms(html, 'https://cliente.pt/contacto')
+    return { form: form!, plan: buildFillPlan(form!, canary) }
+  }
+
+  it('lê o asterisco da label como marca de obrigatoriedade', () => {
+    // Num formulário validado por JavaScript nada tem o atributo `required`:
+    // a regra vive no código. O asterisco é o que o autor pôs para o dizer.
+    const { form } = planFor(`<form>
+      <label>O seu nome *<input type="text"></label>
+      <label>Empresa<input type="text"></label>
+    </form>`)
+
+    expect(form.fields[0]?.required).toBe(true)
+    expect(form.fields[1]?.required).toBe(false)
+  })
+
+  it('ignora um asterisco perdido no meio de um texto de ajuda', () => {
+    const { form } = planFor(`<form>
+      <label>Telefone<input type="text"> Usamos isto apenas para responder mais depressa, nunca para outra coisa, e podemos apagá-lo a pedido *sujeito a confirmação</label>
+    </form>`)
+
+    expect(form.fields[0]?.required).toBe(false)
+  })
+
+  it('marca o consentimento mesmo sem ele estar declarado obrigatório', () => {
+    // Consentir o tratamento do pedido é inerente a submetê-lo. Deixar por
+    // marcar fazia a submissão ser rejeitada e reportávamos como avariado um
+    // formulário de perfeita saúde.
+    const { plan } = planFor(`<form>
+      <label>Email *<input type="email"></label>
+      <label><input type="checkbox"> Autorizo o tratamento destes dados nos termos da política de privacidade.</label>
+    </form>`)
+
+    const consentimento = plan.fills.find((fill) => fill.role === 'consent')
+    expect(consentimento).toBeDefined()
+    expect(consentimento?.action).toBe('check')
+  })
+
+  it('nunca subscreve a caixa canária em comunicações de marketing', () => {
+    // Inscrever a caixa na lista do cliente não é direito nosso, e "aceito
+    // receber" casa com o padrão de consentimento — daí a exclusão explícita.
+    const { plan } = planFor(`<form>
+      <label>Email *<input type="email"></label>
+      <label><input type="checkbox"> Aceito receber a newsletter com novidades e ofertas.</label>
+    </form>`)
+
+    expect(plan.fills.some((fill) => fill.role === 'consent')).toBe(false)
+    expect(plan.fills.some((fill) => fill.action === 'check')).toBe(false)
+  })
+
+  it('deixa por resolver uma adesão a marketing que seja obrigatória', () => {
+    // Não a marcamos por iniciativa própria: fica para configuração manual,
+    // com uma pessoa a decidir.
+    const { plan } = planFor(`<form>
+      <label><input type="checkbox" required> Aceito receber comunicações comerciais *</label>
+    </form>`)
+
+    expect(plan.unresolvedRequired).toHaveLength(1)
+    expect(plan.fills.some((fill) => fill.action === 'check')).toBe(false)
+  })
+})
