@@ -46,14 +46,35 @@ servidor para manter e a segunda região deixa de ser um comando.
 
 ## O que criar, por ordem
 
-### 1. Domínios (Cloudflare)
+### 1. Cloudflare: a zona de DNS
 
-- `jellycare.pt` — dashboard
-- `check.jellycare.pt` — caixa de verificação dos formulários
+Não é um projeto nem nada ligado ao GitHub. São três coisas distintas, e só a
+terceira tem código.
 
-O segundo é um subdomínio mas tem de ter reputação de email própria: é dele que
-dependem os testes de entrega, e não convém misturá-la com a do domínio que
-envia os alertas.
+**a) A zona.** No painel da Cloudflare, *Add a site* → `jellycare.pt`. Isto
+torna a Cloudflare o DNS do domínio; a seguir mudam-se os nameservers no
+registrar para os que ela indicar. É um passo de DNS, não um deploy.
+
+Se `jellycare.pt` ainda não estiver registado, é preciso comprá-lo primeiro —
+em qualquer registrar, ou na própria Cloudflare.
+
+**b) O subdomínio de receção**, no passo 5.
+
+**c) Um Worker**, também no passo 5 — o único código que vive na Cloudflare.
+
+#### Porquê um subdomínio separado para a caixa de verificação
+
+Não é por reputação: a caixa canária só *recebe* email, e reputação de envio
+não se aplica a quem recebe. A razão é de registos DNS.
+
+O `jellycare.pt` vai ter SPF e DKIM do Resend, para enviar os alertas e os
+relatórios. A receção exige registos MX a apontar para a Cloudflare e um SPF
+próprio dela. Um domínio só pode ter **um** registo SPF: dois no mesmo nome
+invalidam a política inteira — é exatamente o problema que a nossa própria
+plataforma deteta e reporta como `spf_duplicated`.
+
+Pôr a receção em `check.jellycare.pt` resolve isso: a Cloudflare escreve os
+registos dela no subdomínio e o apex fica livre para o Resend.
 
 ### 2. Neon
 
@@ -80,11 +101,21 @@ Convém que os dois remetentes existam e sejam distintos:
 `alertas@jellycare.pt` e `relatorios@jellycare.pt`. Um relatório mensal não
 interrompe ninguém e não deve partilhar reputação com o canal de incidentes.
 
-### 5. Cloudflare Email Routing
+### 5. Cloudflare Email Routing e o Worker
 
-Ativar o Email Routing em `check.jellycare.pt` com uma regra de captura total
-(*catch-all*) que entrega a um Worker. O Worker assina o corpo e faz POST para
-o endpoint da plataforma:
+**Adicionar o subdomínio.** Na zona `jellycare.pt`: *Email* → *Email Routing* →
+*Settings* → *Add subdomain* → `check`. A Cloudflare escreve os registos MX,
+SPF, DKIM e DMARC no subdomínio, sem tocar nos do apex.
+
+**Criar o Worker.** Localmente, `npm create cloudflare@latest` e depois
+`wrangler deploy`. Pode ligar-se a um repositório do GitHub, mas não vale a
+pena: são trinta linhas que não mudam.
+
+**Ligar os dois.** Em *Email Routing* → *Routing rules*, uma regra de captura
+total (*catch-all*) no subdomínio, com ação *Send to a Worker* e o Worker
+acabado de criar.
+
+O Worker assina o corpo e faz POST para o endpoint da plataforma:
 
 ```js
 // Worker do Cloudflare. Segredo: CANARY_INBOX_WEBHOOK_SECRET.
