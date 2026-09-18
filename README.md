@@ -58,6 +58,14 @@ Testes: `pnpm test`. Os testes de integração precisam de Postgres e Redis
 (`TEST_DATABASE_URL`, `TEST_REDIS_URL`); os de browser usam Chromium via
 Playwright.
 
+> **Falha intermitente por resolver.** A suite do `@jellycare/worker` falha um
+> teste ocasionalmente quando corre junto com as outras — cerca de três vezes
+> em vinte corridas completas. Nunca reproduz isolada e nunca foi possível
+> apanhar qual. Os ficheiros dentro dos pacotes pesados já correm em sequência
+> e a concorrência entre pacotes está limitada a dois, o que reduziu a
+> frequência sem a eliminar. A suspeita é contenção de memória com vários
+> Chromium; confirmar antes de ligar isto a um CI que bloqueie merges.
+
 ## Estrutura
 
 ```

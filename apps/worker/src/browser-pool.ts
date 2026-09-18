@@ -1,4 +1,4 @@
-import { launchBrowser, type BrowserOptions } from '@jellycare/forms'
+import { launchBrowser, type BrowserOptions } from '@jellycare/forms/browser'
 import type { Browser } from 'playwright'
 
 export interface BrowserPool {

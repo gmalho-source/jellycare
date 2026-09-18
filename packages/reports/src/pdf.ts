@@ -1,4 +1,4 @@
-import { launchBrowser, type BrowserOptions } from '@jellycare/forms'
+import { launchBrowser, type BrowserOptions } from '@jellycare/forms/browser'
 import type { Browser } from 'playwright'
 import type { ReportData } from './build.js'
 import { renderReportHtml } from './render.js'
