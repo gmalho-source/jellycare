@@ -55,6 +55,18 @@ terceira tem código.
 torna a Cloudflare o DNS do domínio; a seguir mudam-se os nameservers no
 registrar para os que ela indicar. É um passo de DNS, não um deploy.
 
+> **Escolher o plano Free.** O ecrã de onboarding mostra o Pro em destaque e o
+> Free no fim da lista, fácil de passar ao lado. Nada do que a Jellycare usa
+> precisa de Pro: o alojamento de DNS, o SSL e o Email Routing estão todos no
+> plano gratuito. O Pro acrescenta WAF gerido e otimização de imagens, que aqui
+> não servem para nada.
+>
+> O único gasto defensável na Cloudflare é o **Workers Paid**, cerca de 5 €/mês,
+> que dá mais CPU e memória aos Workers. O nosso handler de email faz um HMAC e
+> um pedido — cabe folgadamente no plano gratuito. Só vale a pena se algum dia
+> começar a falhar por limite de CPU, e mesmo aí a resposta é esse plano e não
+> o Pro, que é de zona e não tem relação nenhuma com os limites dos Workers.
+
 Se `jellycare.pt` ainda não estiver registado, é preciso comprá-lo primeiro —
 em qualquer registrar, ou na própria Cloudflare.
 
