@@ -4,7 +4,7 @@ import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
 import { generatePendingReports } from './report-jobs.js'
-import { redisConnection } from './redis-url.js'
+import { assertRedisReachable, redisConnection } from './redis-url.js'
 import { startScheduler } from './scheduler.js'
 
 function required(name: string): string {
@@ -16,6 +16,7 @@ function required(name: string): string {
 async function main(): Promise<void> {
   const { db, close } = createDatabase({ url: required('DATABASE_URL') })
   const connection = redisConnection(required('REDIS_URL'))
+  await assertRedisReachable(connection)
   const region = process.env.JELLYCARE_REGION ?? 'eu-west'
 
   const notifier = new MultiChannelNotifier({

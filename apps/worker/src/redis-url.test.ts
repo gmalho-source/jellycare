@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redisConnection } from './redis-url.js'
+import { assertRedisReachable, redisConnection } from './redis-url.js'
 
 describe('redisConnection', () => {
   it('liga o TLS quando o esquema é rediss', () => {
@@ -44,4 +44,21 @@ describe('redisConnection', () => {
 
     expect(connection.password).toBe('a/b@c')
   })
+})
+
+describe('assertRedisReachable', () => {
+  it('passa contra um Redis que responde', async () => {
+    const url = process.env.TEST_REDIS_URL ?? 'redis://localhost:56379'
+
+    await expect(assertRedisReachable(redisConnection(url), 5_000)).resolves.toBeUndefined()
+  })
+
+  it('rebenta depressa quando não há ninguém a atender, e diz o que verificar', async () => {
+    // O caso real: um REDIS_URL sem credenciais nem TLS. Antes disto o worker
+    // anunciava-se e ficava calado para sempre; agora morre e o Fly reinicia,
+    // com o motivo no log.
+    const morto = redisConnection('redis://127.0.0.1:1')
+
+    await expect(assertRedisReachable(morto, 2_000)).rejects.toThrow(/REDIS_URL/)
+  }, 15_000)
 })

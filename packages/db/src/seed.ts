@@ -27,6 +27,12 @@ const CHECK_DEFAULTS: { checkType: string; intervalMinutes: number }[] = [
   { checkType: 'exposed_files', intervalMinutes: 60 * 24 },
   { checkType: 'reputation', intervalMinutes: 60 * 24 },
   { checkType: 'broken_links', intervalMinutes: 60 * 24 * 7 },
+  // As rotinas de formulários são a razão de ser do produto. Sem elas na
+  // semente, um site criado por aqui nascia sem a funcionalidade central e
+  // ninguém dava pela falta: o painel mostrava verificações a correr.
+  { checkType: 'form_discovery', intervalMinutes: 60 * 24 * 7 },
+  { checkType: 'form_test', intervalMinutes: 60 * 24 },
+  { checkType: 'form_delivery', intervalMinutes: 60 },
 ]
 
 export interface SeedOptions {

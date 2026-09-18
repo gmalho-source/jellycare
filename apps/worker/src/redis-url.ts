@@ -30,3 +30,48 @@ export function redisConnection(url: string): ConnectionOptions {
 
   return connection
 }
+
+/**
+ * Confirma que o Redis responde, antes de o worker dizer que está a correr.
+ *
+ * Sem isto a falha é silenciosa e é a pior de todas: o ioredis reconecta para
+ * sempre, o `queue.add` do agendador fica pendurado à espera de uma ligação
+ * que nunca vem, e o worker anuncia-se no arranque e nunca mais escreve nada.
+ * Máquina viva, zero trabalho feito, zero erros. Numa plataforma que existe
+ * para dar por falhas alheias, é inaceitável não dar pelas próprias.
+ *
+ * Rebentar é a resposta certa: o Fly reinicia a máquina e o erro fica no log.
+ */
+export async function assertRedisReachable(
+  connection: ConnectionOptions,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const { Redis } = await import('ioredis')
+  const probe = new Redis({
+    ...(connection as Record<string, unknown>),
+    lazyConnect: true,
+    connectTimeout: timeoutMs,
+    maxRetriesPerRequest: 1,
+    // Sem isto, uma ligação recusada volta a ser tentada indefinidamente e a
+    // sonda nunca devolve — exatamente o problema que ela existe para evitar.
+    retryStrategy: () => null,
+  })
+
+  // O erro chega por `connect()`; sem este ouvinte o ioredis ainda o emite
+  // como evento não tratado e suja o log com a mesma informação duas vezes.
+  probe.on('error', () => {})
+
+  try {
+    await probe.connect()
+    await probe.ping()
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Não foi possível ligar ao Redis: ${motivo}. Confirme o REDIS_URL — ` +
+        'o Upstash exige o formato rediss://default:<password>@<host>:6379, ' +
+        'com TLS e credenciais.',
+    )
+  } finally {
+    probe.disconnect()
+  }
+}
