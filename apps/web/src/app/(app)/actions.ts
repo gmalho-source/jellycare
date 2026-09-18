@@ -347,3 +347,56 @@ async function sendAccessEmail(to: string, role: string): Promise<void> {
     console.error(`[jellycare] falha ao avisar ${to} do acesso: ${response.status}`)
   }
 }
+
+const resendAccessSchema = z.object({
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+})
+
+/**
+ * Repete o aviso de acesso a quem já o tem.
+ *
+ * O aviso original só sai quando o acesso é criado. Sem esta ação, uma
+ * mensagem apagada ou apanhada pelo spam obrigava a retirar o acesso e a
+ * voltar a dá-lo só para o email sair outra vez.
+ *
+ * O email e o papel vêm da base de dados e não do formulário: quem carrega no
+ * botão está a dizer "avisa esta pessoa outra vez", não a escolher para onde
+ * a mensagem vai.
+ */
+export async function resendAccessAction(
+  _previous: AccessState,
+  formData: FormData,
+): Promise<AccessState> {
+  const user = await requireUser()
+
+  const parsed = resendAccessSchema.safeParse({
+    organizationId: formData.get('organizationId'),
+    userId: formData.get('userId'),
+  })
+  if (!parsed.success) return { error: 'Dados inválidos.' }
+
+  assertMembership(user, parsed.data.organizationId)
+  if (!canManage(user, parsed.data.organizationId)) {
+    return { error: 'Não tem permissão para gerir acessos nesta organização.' }
+  }
+
+  const rows = await getDb()
+    .select({ email: schema.users.email, role: schema.memberships.role })
+    .from(schema.memberships)
+    .innerJoin(schema.users, eq(schema.users.id, schema.memberships.userId))
+    .where(
+      and(
+        eq(schema.memberships.organizationId, parsed.data.organizationId),
+        eq(schema.memberships.userId, parsed.data.userId),
+      ),
+    )
+    .limit(1)
+
+  const member = rows[0]
+  if (!member) return { error: 'Essa pessoa já não tem acesso a esta organização.' }
+
+  await sendAccessEmail(member.email, member.role)
+
+  return { message: `Aviso reenviado para ${member.email}.` }
+}

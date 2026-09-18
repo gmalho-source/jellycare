@@ -3,7 +3,12 @@
 import { useActionState } from 'react'
 import type { OrganizationMember } from '@jellycare/db'
 import { Card, CardHeader, EmptyState, formatDateTime } from '@/components/ui'
-import { grantAccessAction, revokeAccessAction, type AccessState } from '../../actions'
+import {
+  grantAccessAction,
+  resendAccessAction,
+  revokeAccessAction,
+  type AccessState,
+} from '../../actions'
 
 const ROLE_LABEL: Record<string, string> = {
   owner: 'Dono',
@@ -31,6 +36,12 @@ export function AccessPanel({
   canManage: boolean
 }) {
   const [state, action, pending] = useActionState<AccessState, FormData>(grantAccessAction, {})
+  // Um estado só para todas as linhas: o `useActionState` devolve uma ação que
+  // qualquer formulário pode usar, e a mensagem diz de quem se trata.
+  const [resendState, resendAction, resending] = useActionState<AccessState, FormData>(
+    resendAccessAction,
+    {},
+  )
 
   return (
     <Card>
@@ -53,22 +64,48 @@ export function AccessPanel({
                 </p>
               </div>
 
-              {canManage && member.userId !== currentUserId && member.role !== 'owner' ? (
-                <form action={revokeAccessAction}>
-                  <input type="hidden" name="organizationId" value={organizationId} />
-                  <input type="hidden" name="userId" value={member.userId} />
-                  <button
-                    type="submit"
-                    className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-900"
-                  >
-                    Retirar acesso
-                  </button>
-                </form>
+              {canManage ? (
+                <div className="flex items-center gap-1">
+                  <form action={resendAction}>
+                    <input type="hidden" name="organizationId" value={organizationId} />
+                    <input type="hidden" name="userId" value={member.userId} />
+                    <button
+                      type="submit"
+                      disabled={resending}
+                      className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-900 disabled:opacity-50"
+                    >
+                      Reenviar convite
+                    </button>
+                  </form>
+
+                  {member.userId !== currentUserId && member.role !== 'owner' ? (
+                    <form action={revokeAccessAction}>
+                      <input type="hidden" name="organizationId" value={organizationId} />
+                      <input type="hidden" name="userId" value={member.userId} />
+                      <button
+                        type="submit"
+                        className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+                      >
+                        Retirar acesso
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
               ) : null}
             </li>
           ))}
         </ul>
       )}
+
+      {resendState.message || resendState.error ? (
+        <p
+          className={`border-t border-ink-200 px-5 py-3 text-sm ${
+            resendState.error ? 'text-red-600' : 'text-ink-600'
+          }`}
+        >
+          {resendState.error ?? resendState.message}
+        </p>
+      ) : null}
 
       {canManage ? (
         <form action={action} className="border-t border-ink-200 px-5 py-4">

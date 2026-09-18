@@ -315,6 +315,23 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 120_000)
 
+  it('reenvia o convite a quem já tem acesso', async () => {
+    // Sem isto, uma mensagem apagada ou apanhada pelo spam obrigava a retirar
+    // o acesso e a voltar a dá-lo só para o email sair outra vez.
+    const painel = await entrarComo(email)
+    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.waitForSelector(`text=${emailCliente}`)
+
+    const linha = painel.locator('li', { hasText: emailCliente })
+    await linha.getByRole('button', { name: 'Reenviar convite' }).click()
+
+    await painel.waitForSelector(`text=Aviso reenviado para ${emailCliente}`)
+    // O acesso não é tocado: reenviar é só repetir a mensagem.
+    expect(await painel.isVisible(`text=${emailCliente}`)).toBe(true)
+
+    await painel.close()
+  }, 120_000)
+
   it('mostra a cobertura reduzida à equipa e esconde-a do cliente', async () => {
     // Uma fonte de reputação mal configurada é um defeito da plataforma, não
     // um problema do site. Tem de chegar a quem a pode corrigir e não pode
