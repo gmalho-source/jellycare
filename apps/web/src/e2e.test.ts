@@ -48,6 +48,8 @@ describeE2E('fluxo de entrada e painel', () => {
   let siteId: string
 
   const email = `e2e-${Date.now()}@jelly.pt`
+  const emailCliente = `cliente-${Date.now()}@exemplo.pt`
+  let siteDeOutroCliente: string
 
   beforeAll(async () => {
     const seeded = await seed({
@@ -93,6 +95,51 @@ describeE2E('fluxo de entrada e painel', () => {
             failureReason: 'HTTP 503',
           },
         ])
+      } finally {
+        await close()
+      }
+    }
+
+    // Um utilizador com papel `client` na mesma organização, e um site de
+    // outra organização a que ele não pertence. O segundo existe para provar o
+    // isolamento: é a propriedade que, se falhar, mostra a um cliente os dados
+    // de outro.
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        const [site] = await db
+          .select({ organizationId: schema.sites.organizationId })
+          .from(schema.sites)
+          .where(eq(schema.sites.id, siteId))
+          .limit(1)
+
+        const [utilizador] = await db
+          .insert(schema.users)
+          .values({ email: emailCliente })
+          .returning({ id: schema.users.id })
+
+        await db.insert(schema.memberships).values({
+          organizationId: site!.organizationId,
+          userId: utilizador!.id,
+          role: 'client',
+        })
+
+        const [outraOrg] = await db
+          .insert(schema.organizations)
+          .values({ name: `Outro ${Date.now()}`, slug: `outro-${Date.now()}` })
+          .returning({ id: schema.organizations.id })
+
+        const [outroSite] = await db
+          .insert(schema.sites)
+          .values({
+            organizationId: outraOrg!.id,
+            label: 'Site de outro cliente',
+            url: `https://outro-${Date.now()}.exemplo.pt`,
+            hostname: 'outro.exemplo.pt',
+            state: 'active',
+          })
+          .returning({ id: schema.sites.id })
+        siteDeOutroCliente = outroSite!.id
       } finally {
         await close()
       }
@@ -197,6 +244,41 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(page.url()).toContain('/login')
 
     await primeira.close()
+    await page.close()
+  }, 90_000)
+
+  async function entrarComo(correio: string) {
+    const page = await browser.newPage()
+    await page.goto(`${baseUrl}/login`)
+    await page.fill('#email', correio)
+    await page.click('button[type=submit]')
+    await page.waitForSelector('text=Se este email tiver conta')
+    await page.goto(loginLink())
+    return page
+  }
+
+  it('leva o cliente para o portal e não para o painel interno', async () => {
+    // O painel interno mostra configuração, tokens de verificação e o botão de
+    // adicionar sites. Um cliente não tem nada que fazer lá.
+    const page = await entrarComo(emailCliente)
+
+    await page.waitForURL(`${baseUrl}/portal`)
+    expect(await page.isVisible('text=Site de teste')).toBe(true)
+    expect(await page.isVisible('text=Adicionar site')).toBe(false)
+
+    await page.close()
+  }, 90_000)
+
+  it('não deixa o cliente ver o site de outro cliente', async () => {
+    // A propriedade que, se falhar, mostra a um cliente os dados de outro.
+    const page = await entrarComo(emailCliente)
+    await page.waitForURL(`${baseUrl}/portal`)
+
+    await page.goto(`${baseUrl}/portal/sites/${siteDeOutroCliente}`)
+
+    expect(page.url()).not.toContain(siteDeOutroCliente)
+    expect(await page.isVisible('text=Site de outro cliente')).toBe(false)
+
     await page.close()
   }, 90_000)
 

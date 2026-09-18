@@ -57,6 +57,20 @@ export function assertMembership(user: AuthenticatedUser, organizationId: string
   if (!member) redirect('/')
 }
 
+/**
+ * O utilizador é um cliente e mais nada.
+ *
+ * Não basta ter um papel `client` algures: quem pertence à Jelly e é cliente
+ * de si próprio continua a ser equipa. Só quando todas as pertenças são de
+ * cliente é que a pessoa não tem nada que fazer no painel interno.
+ */
+export function isClientOnly(user: AuthenticatedUser): boolean {
+  return (
+    user.memberships.length > 0 &&
+    user.memberships.every((membership) => membership.role === 'client')
+  )
+}
+
 /** Só a equipa da Jelly configura sites; o papel `client` é de leitura. */
 export function canManage(user: AuthenticatedUser, organizationId: string): boolean {
   return user.memberships.some(

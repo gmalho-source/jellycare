@@ -218,3 +218,43 @@ export async function getPendingVerification(siteId: string) {
     .limit(1)
   return rows[0] ?? null
 }
+
+export interface UptimeWindow {
+  /** Percentagem de amostras em cima. `null` quando não há amostras. */
+  percentage: number | null
+  samples: number
+  /** Amostras em baixo, que é o que o cliente quer contar. */
+  down: number
+}
+
+/**
+ * Disponibilidade de um site numa janela de dias.
+ *
+ * Devolve também a contagem de amostras: uma percentagem construída sobre
+ * meia dúzia de observações não significa o mesmo que uma construída sobre
+ * milhares, e quem a lê tem direito a saber a diferença.
+ */
+export async function getUptime(siteId: string, days: number): Promise<UptimeWindow> {
+  const rows = await getDb()
+    .select({
+      up: sql<number>`sum(case when ${schema.uptimeSamples.up} then 1 else 0 end)::int`,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(schema.uptimeSamples)
+    .where(
+      and(
+        eq(schema.uptimeSamples.siteId, siteId),
+        gte(schema.uptimeSamples.observedAt, new Date(Date.now() - days * 24 * 3600_000)),
+      ),
+    )
+
+  const row = rows[0]
+  const total = row?.total ?? 0
+  const up = row?.up ?? 0
+
+  return {
+    percentage: total > 0 ? (up / total) * 100 : null,
+    samples: total,
+    down: total - up,
+  }
+}

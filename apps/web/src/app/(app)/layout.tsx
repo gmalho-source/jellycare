@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { requireUser } from '@/lib/session'
+import { redirect } from 'next/navigation'
+import { isClientOnly, requireUser } from '@/lib/session'
 import { signOut } from './actions'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser()
+  // O painel interno mostra configuração, tokens de verificação e o inventário
+  // de todos os sites da organização. Um cliente não tem nada que fazer aqui.
+  if (isClientOnly(user)) redirect('/portal')
 
   return (
     <div className="min-h-screen">

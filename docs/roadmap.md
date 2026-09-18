@@ -45,7 +45,7 @@ primeira passagem:
 **Objetivo:** transformar dados em entregável comercial.
 
 Âmbito:
-- portal do cliente com acesso limitado aos seus sites
+- **portal do cliente com acesso limitado aos seus sites — IMPLEMENTADO**
 - **relatório mensal em PDF white-label, agendado e enviado — IMPLEMENTADO**
 - fingerprint de tecnologia e matching de CVEs com nível de confiança
 - deteção de conteúdo injetado e cloaking
@@ -57,9 +57,23 @@ Ao fim da Fase 2 o produto está completo para venda como serviço gerido.
 
 Estado: o relatório mensal está implementado de ponta a ponta — agregação com
 SLA, PDF white-label, geração idempotente no dia configurado, envio por email
-com o PDF anexado e acesso a partir do painel. Falta o resto do âmbito da fase:
-portal do cliente, CVEs, cloaking, Core Web Vitals, WhatsApp e gestão de
-incidentes.
+com o PDF anexado e acesso a partir do painel.
+
+O portal do cliente vive em `/portal`, na mesma aplicação e com a mesma
+autenticação por ligação de uso único. Quem só tem papel `client` aterra lá e
+é impedido de entrar no painel interno; a equipa da Jelly pode entrar nos dois,
+de propósito, porque ver o que o cliente vê antes de uma reunião vale mais do
+que qualquer descrição. Mostra o estado de cada site, a disponibilidade a 30
+dias com a contagem de observações em que assenta, os problemas em aberto na
+linguagem com que já são escritos, o que está a ser vigiado, e os relatórios
+mensais para descarregar. Não mostra configuração, tokens de verificação nem
+seletores, e não tem uma única escrita.
+
+A propriedade que o sustenta está coberta por um teste de ponta a ponta: um
+cliente que abra pelo URL o site de outra organização é mandado embora.
+
+Falta o resto do âmbito da fase: CVEs, cloaking, Core Web Vitals, WhatsApp e
+gestão de incidentes.
 
 ---
 
