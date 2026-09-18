@@ -4,22 +4,13 @@ import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
 import { generatePendingReports } from './report-jobs.js'
+import { redisConnection } from './redis-url.js'
 import { startScheduler } from './scheduler.js'
 
 function required(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Variável de ambiente em falta: ${name}`)
   return value
-}
-
-function redisConnection(url: string): { host: string; port: number; password?: string } {
-  const parsed = new URL(url)
-  const connection: { host: string; port: number; password?: string } = {
-    host: parsed.hostname,
-    port: Number(parsed.port || 6379),
-  }
-  if (parsed.password) connection.password = parsed.password
-  return connection
 }
 
 async function main(): Promise<void> {
