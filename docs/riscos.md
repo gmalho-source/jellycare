@@ -64,8 +64,16 @@ Mitigação:
 
 - submissões de formulários de teste não contêm dados pessoais reais, mas
   screenshots e HTML capturado podem conter dados de terceiros
-- definir política de retenção: dados brutos de runs 90 dias, agregados 24
-  meses, screenshots 30 dias
+- política de retenção **implementada** em `packages/db/src/retention.ts`,
+  aplicada pelo worker uma vez por dia: execuções, amostras de
+  disponibilidade, submissões de formulário e registos de notificação aos 90
+  dias; relatórios e problemas já resolvidos aos 24 meses; sessões e tokens no
+  instante em que caducam. Um problema em aberto nunca é apagado por idade,
+  por mais antigo que seja — continua a ser verdade.
+
+  Screenshots: a política prevê 30 dias e não há nada a apagar, porque as
+  capturas do submissor não são guardadas em lado nenhum. Há um teste que
+  falha no dia em que alguém as começar a guardar sem acrescentar a limpeza.
 - DPA com cada cliente, a identificar a Jelly como subcontratante
 - servidores e fornecedores na UE sempre que possível
 

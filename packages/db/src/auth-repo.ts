@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { and, eq, gt, isNull, lt, or } from 'drizzle-orm'
+import { and, eq, gt } from 'drizzle-orm'
 import type { Database } from './client.js'
 import { loginTokens, memberships, sessions, users } from './schema.js'
 
@@ -168,13 +168,6 @@ export async function revokeSession(db: Database, sessionToken: string): Promise
   await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(sessionToken)))
 }
 
-/** Limpa sessões expiradas e tokens gastos. Corre no worker, periodicamente. */
-export async function pruneExpiredAuth(db: Database, now: Date = new Date()): Promise<void> {
-  await db.delete(sessions).where(lt(sessions.expiresAt, now))
-  await db
-    .delete(loginTokens)
-    .where(or(lt(loginTokens.expiresAt, now), and(isNull(loginTokens.consumedAt), lt(loginTokens.expiresAt, now))))
-}
 
 /* -------------------------------------------------------------------------- */
 /* Acessos                                                                    */

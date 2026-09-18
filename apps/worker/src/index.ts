@@ -1,4 +1,4 @@
-import { createDatabase } from '@jellycare/db'
+import { applyRetention, createDatabase, DEFAULT_RETENTION } from '@jellycare/db'
 import { createBrowserPool } from './browser-pool.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
@@ -94,6 +94,26 @@ async function main(): Promise<void> {
   const reportTimer = setInterval(() => void sweepReports(), 60 * 60_000)
   void sweepReports()
 
+  // Retenção. Diária e não horária: apaga por data de corte, por isso correr
+  // mais vezes só multiplica varrimentos que não encontram nada. A política
+  // está em `docs/riscos.md` e é condição para ligar clientes reais.
+  const sweepRetention = async () => {
+    try {
+      const deleted = await applyRetention(db, DEFAULT_RETENTION)
+      const total = Object.values(deleted).reduce((sum: number, n) => sum + Number(n), 0)
+      // Só se escreve quando houve o que apagar: uma linha por dia a dizer
+      // "apaguei zero" treina quem lê os logs a não os ler.
+      if (total > 0) {
+        console.info(`Retenção aplicada: ${JSON.stringify(deleted)}`)
+      }
+    } catch (error) {
+      console.error('Falha ao aplicar a retenção:', error)
+    }
+  }
+
+  const retentionTimer = setInterval(() => void sweepRetention(), 24 * 60 * 60_000)
+  void sweepRetention()
+
   console.info(`Worker Jellycare a correr na região ${region}.`)
 
   // Encerramento ordenado: um SIGTERM a meio de um deploy não pode deixar
@@ -102,6 +122,7 @@ async function main(): Promise<void> {
     console.info(`${signal} recebido, a encerrar.`)
     scheduler.stop()
     clearInterval(reportTimer)
+    clearInterval(retentionTimer)
     await worker.close()
     await browsers.close()
     await queue.close()
