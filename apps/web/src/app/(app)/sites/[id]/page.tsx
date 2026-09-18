@@ -8,10 +8,13 @@ import {
   formatDateTime,
   formatRelative,
 } from '@/components/ui'
+import { listMembers } from '@jellycare/db'
+import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
+import { AccessPanel } from './access-panel'
 import { VerificationPanel } from './verification-panel'
 
 export const dynamic = 'force-dynamic'
@@ -40,6 +43,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
 
   assertMembership(user, detail.site.organizationId)
   const manageable = canManage(user, detail.site.organizationId)
+  const members = await listMembers(getDb(), detail.site.organizationId)
 
   const verification = detail.verified ? null : await getPendingVerification(id)
   const challenge =
@@ -280,6 +284,13 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           </table>
         )}
       </Card>
+
+      <AccessPanel
+        organizationId={detail.site.organizationId}
+        members={members}
+        currentUserId={user.id}
+        canManage={manageable}
+      />
     </div>
   )
 }

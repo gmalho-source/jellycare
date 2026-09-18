@@ -282,6 +282,27 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.close()
   }, 90_000)
 
+  it('dá acesso a um cliente a partir do painel e ele entra no portal', async () => {
+    // O ciclo completo do convite: a equipa dá acesso pela interface, a pessoa
+    // pede a sua própria ligação de entrada, e aterra no portal. Sem isto, dar
+    // acesso a um cliente exigia mexer na base de dados.
+    const convidado = `convidado-${Date.now()}@exemplo.pt`
+
+    const painel = await entrarComo(email)
+    await painel.waitForURL(`${baseUrl}/`)
+    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.fill('#access-email', convidado)
+    await painel.selectOption('#access-role', 'client')
+    await painel.click('button:has-text("Dar acesso")')
+    await painel.waitForSelector(`text=${convidado}`)
+    await painel.close()
+
+    const cliente = await entrarComo(convidado)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    expect(await cliente.isVisible('text=Site de teste')).toBe(true)
+    await cliente.close()
+  }, 120_000)
+
   it('mostra as verificações de segurança bloqueadas até o domínio estar provado', async () => {
     const page = await browser.newPage()
 

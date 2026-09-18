@@ -1,15 +1,22 @@
 'use server'
 
 import { buildChallenge, verifyOwnership } from '@jellycare/checks'
-import { revokeSession, schema } from '@jellycare/db'
+import { grantAccess, revokeAccess, revokeSession, schema } from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { appOrigin } from '@/lib/app-url'
 import { ALL_CHECKS } from '@/lib/checks'
 import { getDb } from '@/lib/db'
-import { SESSION_COOKIE, assertMembership, canManage, requireUser } from '@/lib/session'
+import {
+  SESSION_COOKIE,
+  assertMembership,
+  canGrantRole,
+  canManage,
+  requireUser,
+} from '@/lib/session'
 
 export async function signOut(): Promise<void> {
   const store = await cookies()
@@ -220,4 +227,123 @@ export async function updateFindingState(formData: FormData): Promise<void> {
     .where(eq(schema.findings.id, parsed.data.findingId))
 
   revalidatePath(`/sites/${finding.siteId}`)
+}
+
+const grantAccessSchema = z.object({
+  organizationId: z.string().uuid(),
+  email: z.string().trim().toLowerCase().email('Indique um endereço de email válido.'),
+  role: z.enum(['admin', 'member', 'client']),
+})
+
+export interface AccessState {
+  message?: string
+  error?: string
+}
+
+/**
+ * Dá a alguém acesso à organização e avisa-o por email.
+ *
+ * O email não leva ligação de entrada: essa é válida quinze minutos e só pode
+ * ser usada uma vez, o que faz dela uma péssima coisa para pôr num convite que
+ * pode ser aberto no dia seguinte. A mensagem diz que o acesso existe e manda
+ * a pessoa pedir a sua própria ligação.
+ */
+export async function grantAccessAction(
+  _previous: AccessState,
+  formData: FormData,
+): Promise<AccessState> {
+  const user = await requireUser()
+
+  const parsed = grantAccessSchema.safeParse({
+    organizationId: formData.get('organizationId'),
+    email: formData.get('email'),
+    role: formData.get('role'),
+  })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' }
+  }
+
+  assertMembership(user, parsed.data.organizationId)
+  if (!canManage(user, parsed.data.organizationId)) {
+    return { error: 'Não tem permissão para gerir acessos nesta organização.' }
+  }
+  if (!canGrantRole(user, parsed.data.organizationId, parsed.data.role)) {
+    return { error: 'Não pode conceder um papel com mais permissões do que o seu.' }
+  }
+
+  const granted = await grantAccess(getDb(), parsed.data)
+
+  if (granted.created) {
+    await sendAccessEmail(parsed.data.email, parsed.data.role)
+  }
+
+  revalidatePath('/sites')
+  return {
+    message: granted.created
+      ? `${parsed.data.email} passou a ter acesso e foi avisado por email.`
+      : `${parsed.data.email} já tinha acesso; o papel foi atualizado.`,
+  }
+}
+
+const revokeAccessSchema = z.object({
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+})
+
+export async function revokeAccessAction(formData: FormData): Promise<void> {
+  const user = await requireUser()
+
+  const parsed = revokeAccessSchema.safeParse({
+    organizationId: formData.get('organizationId'),
+    userId: formData.get('userId'),
+  })
+  if (!parsed.success) return
+
+  assertMembership(user, parsed.data.organizationId)
+  if (!canManage(user, parsed.data.organizationId)) return
+  // Tirar o acesso a si próprio deixaria a organização sem quem a gere, e a
+  // recuperação passaria pela base de dados.
+  if (parsed.data.userId === user.id) return
+
+  await revokeAccess(getDb(), parsed.data.organizationId, parsed.data.userId)
+  revalidatePath('/sites')
+}
+
+const ROLE_DESCRIPTION: Record<string, string> = {
+  admin: 'gestão completa da conta',
+  member: 'acesso de equipa ao painel',
+  client: 'acesso ao portal, só de leitura',
+}
+
+async function sendAccessEmail(to: string, role: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY
+  const destino = role === 'client' ? `${appOrigin()}/portal` : appOrigin()
+
+  const texto =
+    'A Jelly deu-lhe acesso à Jellycare, onde acompanhamos a saúde dos sites que mantemos ' +
+    `(${ROLE_DESCRIPTION[role] ?? 'acesso'}).\n\n` +
+    `Para entrar, vá a ${appOrigin()}/login e indique este endereço de email. Receberá uma ` +
+    'ligação de entrada válida durante quinze minutos. Não há palavra-passe para memorizar ' +
+    'nem para perder.\n\n' +
+    `Depois de entrar, encontra tudo em ${destino}.`
+
+  if (!apiKey) {
+    console.info(`[jellycare] aviso de acesso para ${to}: ${destino}`)
+    return
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      from: process.env.ALERT_FROM_EMAIL ?? 'Jellycare <alertas@jellycare.pt>',
+      to: [to],
+      subject: 'Tem acesso à Jellycare',
+      text: texto,
+    }),
+  })
+
+  if (!response.ok) {
+    console.error(`[jellycare] falha ao avisar ${to} do acesso: ${response.status}`)
+  }
 }

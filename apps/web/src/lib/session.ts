@@ -71,6 +71,32 @@ export function isClientOnly(user: AuthenticatedUser): boolean {
   )
 }
 
+/** O papel do utilizador nesta organização, ou `null` se não pertencer. */
+export function roleIn(user: AuthenticatedUser, organizationId: string): string | null {
+  return (
+    user.memberships.find((membership) => membership.organizationId === organizationId)?.role ??
+    null
+  )
+}
+
+/**
+ * Pode conceder este papel a outra pessoa?
+ *
+ * Quem gere não pode criar alguém com mais poder do que tem. Sem esta regra,
+ * um membro de equipa concedia o papel de administrador a um endereço seu e
+ * promovia-se pela porta do lado.
+ */
+export function canGrantRole(
+  user: AuthenticatedUser,
+  organizationId: string,
+  role: string,
+): boolean {
+  const own = roleIn(user, organizationId)
+  if (own === 'owner' || own === 'admin') return role !== 'owner'
+  if (own === 'member') return role === 'member' || role === 'client'
+  return false
+}
+
 /** Só a equipa da Jelly configura sites; o papel `client` é de leitura. */
 export function canManage(user: AuthenticatedUser, organizationId: string): boolean {
   return user.memberships.some(

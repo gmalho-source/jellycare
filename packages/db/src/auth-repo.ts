@@ -175,3 +175,109 @@ export async function pruneExpiredAuth(db: Database, now: Date = new Date()): Pr
     .delete(loginTokens)
     .where(or(lt(loginTokens.expiresAt, now), and(isNull(loginTokens.consumedAt), lt(loginTokens.expiresAt, now))))
 }
+
+/* -------------------------------------------------------------------------- */
+/* Acessos                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type GrantableRole = 'admin' | 'member' | 'client'
+
+export interface OrganizationMember {
+  userId: string
+  email: string
+  name: string | null
+  role: string
+  since: Date
+}
+
+export async function listMembers(
+  db: Database,
+  organizationId: string,
+): Promise<OrganizationMember[]> {
+  const rows = await db
+    .select({
+      userId: users.id,
+      email: users.email,
+      name: users.name,
+      role: memberships.role,
+      since: memberships.createdAt,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(eq(memberships.organizationId, organizationId))
+    .orderBy(users.email)
+
+  return rows
+}
+
+export interface GrantedAccess {
+  userId: string
+  /**
+   * Falso quando a pessoa já tinha acesso.
+   *
+   * Quem chama usa isto para decidir se avisa por email: repetir o aviso a
+   * cada vez que alguém carrega no botão transforma um convite em spam.
+   */
+  created: boolean
+}
+
+/**
+ * Dá acesso a uma organização, criando o utilizador se ele ainda não existir.
+ *
+ * Não emite nenhuma credencial. A plataforma entra-se por ligação de uso único
+ * válida quinze minutos, e mandá-la num convite seria pô-la a morrer antes de
+ * a pessoa abrir o email — ou, pior, deixá-la viva numa caixa de correio e em
+ * cada reencaminhamento. O acesso passa a existir; a chave a pessoa pede-a a
+ * si própria.
+ */
+export async function grantAccess(
+  db: Database,
+  options: { organizationId: string; email: string; role: GrantableRole },
+): Promise<GrantedAccess> {
+  const email = options.email.toLowerCase().trim()
+
+  return db.transaction(async (tx) => {
+    const found = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+
+    const userId =
+      found[0]?.id ??
+      (await tx.insert(users).values({ email }).returning({ id: users.id }))[0]!.id
+
+    const existing = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.organizationId, options.organizationId), eq(memberships.userId, userId)))
+      .limit(1)
+
+    if (existing[0]) {
+      // O papel é atualizado: promover ou despromover alguém é a mesma ação.
+      await tx.update(memberships).set({ role: options.role }).where(eq(memberships.id, existing[0].id))
+      return { userId, created: false }
+    }
+
+    await tx
+      .insert(memberships)
+      .values({ organizationId: options.organizationId, userId, role: options.role })
+
+    return { userId, created: true }
+  })
+}
+
+/**
+ * Retira o acesso de alguém a uma organização.
+ *
+ * O utilizador não é apagado: pode pertencer a outras organizações, e apagá-lo
+ * levaria com ele as sessões e o histórico. Sem pertenças, não vê nada.
+ */
+export async function revokeAccess(
+  db: Database,
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  await db
+    .delete(memberships)
+    .where(and(eq(memberships.organizationId, organizationId), eq(memberships.userId, userId)))
+
+  // As sessões abertas dessa pessoa deixam de dar acesso a esta organização
+  // na leitura seguinte, porque as pertenças são resolvidas a cada pedido.
+}
