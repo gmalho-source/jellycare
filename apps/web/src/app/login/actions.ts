@@ -3,6 +3,7 @@
 import { createLoginToken } from '@jellycare/db'
 import { headers } from 'next/headers'
 import { z } from 'zod'
+import { appOrigin } from '@/lib/app-url'
 import { getDb } from '@/lib/db'
 
 export type LoginState = { message?: string; error?: string }
@@ -30,8 +31,7 @@ export async function requestLoginLink(
   const created = await createLoginToken(getDb(), parsed.data)
   if (!created) return resposta
 
-  const baseUrl = process.env.JELLYCARE_APP_URL ?? `https://${(await headers()).get('host')}`
-  const link = `${baseUrl}/auth/callback?token=${encodeURIComponent(created.token)}`
+  const link = `${appOrigin(await headers())}/auth/callback?token=${encodeURIComponent(created.token)}`
 
   await sendLoginEmail(parsed.data, link)
   return resposta
