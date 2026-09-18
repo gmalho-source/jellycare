@@ -384,17 +384,32 @@ describe('agendador', () => {
     await queue.obliterate({ force: true })
   })
 
+  /**
+   * Jobs em fila para o site deste teste.
+   *
+   * O `tick` é o agendador global: varre os check configs de toda a base de
+   * dados, como tem de ser em produção. A base de testes é partilhada com os
+   * outros pacotes, que correm ao mesmo tempo, por isso contar a fila inteira
+   * conta também o trabalho deles — era esta a origem da falha intermitente,
+   * que só aparecia quando outro pacote tinha um check por correr no mesmo
+   * instante. Contar só os deste site mede o que o teste quer medir.
+   */
+  async function queuedForSite() {
+    const jobs = await queue.getJobs(['wait', 'delayed', 'active', 'paused', 'prioritized'])
+    return jobs.filter((job) => job.data.siteId === siteId)
+  }
+
   it('enfileira o que está vencido e adia o próximo run', async () => {
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
 
     const result = await tick({ db, queue, spreadMs: 0 })
 
-    const jobs = await queue.getJobs(['wait', 'delayed', 'active', 'paused', 'prioritized', 'failed'])
-    const inventario = JSON.stringify(
-      await Promise.all(jobs.map(async (j) => ({ id: j.id, estado: await j.getState(), data: j.data }))),
-    )
-    expect(result.enqueued, inventario).toBe(1)
-    expect(await queue.getWaitingCount(), inventario).toBe(1)
+    // Limite inferior e não igualdade: o número total é global e depende do
+    // que os outros pacotes tiverem em curso.
+    expect(result.enqueued).toBeGreaterThanOrEqual(1)
+
+    const queued = await queuedForSite()
+    expect(queued.map((job) => job.id)).toHaveLength(1)
 
     const configs = await db
       .select()
@@ -406,8 +421,8 @@ describe('agendador', () => {
   it('não enfileira o que ainda não venceu', async () => {
     await addCheck('uptime', 5, new Date(Date.now() + 600_000))
 
-    const result = await tick({ db, queue, spreadMs: 0 })
-    expect(result.enqueued).toBe(0)
+    await tick({ db, queue, spreadMs: 0 })
+    expect(await queuedForSite()).toHaveLength(0)
   })
 
   it('não duplica trabalho quando o agendador corre duas vezes', async () => {
@@ -422,15 +437,15 @@ describe('agendador', () => {
       .where(eq(schema.checkConfigs.siteId, siteId))
     await tick({ db, queue, spreadMs: 0, now: () => now })
 
-    expect(await queue.getWaitingCount()).toBe(1)
+    expect(await queuedForSite()).toHaveLength(1)
   })
 
   it('ignora sites que não estão ativos', async () => {
     await addCheck('uptime', 5, null)
     await db.update(schema.sites).set({ state: 'archived' }).where(eq(schema.sites.id, siteId))
 
-    const result = await tick({ db, queue, spreadMs: 0 })
-    expect(result.enqueued).toBe(0)
+    await tick({ db, queue, spreadMs: 0 })
+    expect(await queuedForSite()).toHaveLength(0)
   })
 
   it('espalha o lote no tempo em vez de o despejar de uma vez', async () => {
@@ -440,8 +455,9 @@ describe('agendador', () => {
 
     await tick({ db, queue, spreadMs: 60_000 })
 
-    const delayed = await queue.getDelayedCount()
-    expect(delayed).toBeGreaterThan(0)
+    const jobs = await queuedForSite()
+    const delayed = await Promise.all(jobs.map((job) => job.getState()))
+    expect(delayed.filter((state) => state === 'delayed').length).toBeGreaterThan(0)
   })
 })
 
