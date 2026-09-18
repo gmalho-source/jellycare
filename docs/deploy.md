@@ -238,6 +238,13 @@ fly deploy -c fly/web.toml
 fly certs add jellycare.pt -a jellycare-web
 ```
 
+O `fly certs add` devolve um par de registos A e AAAA. Na Cloudflare eles ficam
+com a nuvem **cinzenta**, não laranja: com o proxy ligado, a Cloudflare
+intercepta o pedido de validação e o certificado do Fly nunca é emitido. Passar
+pelo proxy também não traz nada — o Fly já termina o TLS e já é anycast — e
+troca o IP do visitante pelo dela, o que numa plataforma de monitorização é
+perder precisamente a informação que interessa.
+
 O worker vai primeiro de propósito: é ele que corre as migrações no arranque.
 O dashboard pode ter várias instâncias, e duas a migrar ao mesmo tempo é
 problema à espera de acontecer.
@@ -248,13 +255,20 @@ A plataforma é por convite — não há registo público. Criar a organização
 primeiro utilizador:
 
 ```bash
-fly ssh console -a jellycare-worker -C \
-  "node /app/migrations-pkg/dist/seed.js"
-# com DATABASE_URL e SEED_EMAIL no ambiente
+fly machine exec <id-da-máquina> -a jellycare-worker \
+  "sh -c 'SEED_EMAIL=alguem@jelly.pt node /app/migrations-pkg/dist/seed.js'"
 ```
 
-Ou, mais simples, correr a semente a partir da máquina de quem faz o deploy,
-com a string de ligação do Neon.
+A `DATABASE_URL` já está no ambiente da máquina, por ser segredo da app. O id
+da máquina vem do `fly status -a jellycare-worker`.
+
+`fly machine exec` e não `fly ssh console`: o console abre um túnel WireGuard,
+que é UDP e não passa por um proxy HTTPS. O `exec` vai pela API e funciona de
+qualquer lado.
+
+O site criado fica em estado `onboarding`, não `active`. O agendador só olha
+para sites ativos, por isso nada é verificado até alguém aprovar o site no
+dashboard — a semente não põe tráfego contra ninguém sem se dar por isso.
 
 ### 8. Segunda região de monitorização
 
