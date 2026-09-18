@@ -1,6 +1,6 @@
 # Dashboard. Deploy: fly deploy -c fly/web.toml
 app = "jellycare-web"
-primary_region = "mad"
+primary_region = "fra"
 
 [build]
   dockerfile = "../apps/web/Dockerfile"

@@ -1,17 +1,17 @@
 # Worker. Deploy: fly deploy -c fly/worker.toml
 #
 # Segunda região de monitorização:
-#   fly scale count 2 --region mad,ams -c fly/worker.toml
+#   fly scale count 2 --region fra,mad -c fly/worker.toml
 # e definir JELLYCARE_REGION por máquina. A corroboração entre regiões já está
 # implementada — ver docs/arquitetura.md.
 app = "jellycare-worker"
-primary_region = "mad"
+primary_region = "fra"
 
 [build]
   dockerfile = "../apps/worker/Dockerfile"
 
 [env]
-  JELLYCARE_REGION = "eu-west"
+  JELLYCARE_REGION = "eu-central"
   JELLYCARE_CONCURRENCY = "5"
 
 # Sem [http_service]: o worker não serve pedidos. Nunca pode adormecer — tem um

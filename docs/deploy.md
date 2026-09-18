@@ -195,6 +195,17 @@ fly apps create jellycare-web
 fly apps create jellycare-worker
 ```
 
+Ambas em **`fra`** (Frankfurt), que é o que está nos `fly.toml`. A tentação é
+pôr o dashboard em Madrid, mais perto de quem o abre em Portugal, mas essa
+latência paga-se uma vez por pedido enquanto a latência até à base de dados se
+paga a cada query — e uma página do dashboard faz várias. O worker vive ainda
+mais agarrado ao Postgres e ao Redis. A app vai onde estão os dados; Madrid
+fica para a segunda região de monitorização, no passo 8, onde a distância é a
+vantagem e não o custo.
+
+Os comandos de deploy correm a partir da raiz do repositório: o contexto de
+build é o diretório atual, e o monorepo inteiro tem de lá estar.
+
 Segredos do dashboard:
 
 ```bash
@@ -250,7 +261,7 @@ com a string de ligação do Neon.
 Depois de o resto estar de pé:
 
 ```bash
-fly scale count 2 --region mad,ams -c fly/worker.toml
+fly scale count 2 --region fra,mad -c fly/worker.toml
 ```
 
 e definir `JELLYCARE_REGION` distinto por máquina. A partir daí, uma região que
