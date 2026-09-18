@@ -121,6 +121,49 @@ const FORMS: Record<string, string> = {
     </script>
   </body></html>`,
 
+  // O padrão completo de um formulário de biblioteca de componentes: botão de
+  // envio com `type="button"` porque a submissão é feita por JavaScript, e a
+  // nascer desativado até o próprio formulário se dar por válido; checkbox
+  // escondida por CSS com um `<span>` a fazer de caixa visível.
+  '/componentes': `<!doctype html><html><head><style>
+      .escondida input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    </style></head><body>
+    <form class="Form_form__abc">
+      <label>O seu nome *<input type="text"></label>
+      <label>Email *<input type="email"></label>
+      <label>Mensagem *<textarea rows="6"></textarea></label>
+      <button type="button" aria-pressed="false">Urgente</button>
+      <button type="button" aria-pressed="false">Sem pressa</button>
+      <label class="escondida"><input type="checkbox"><span>Autorizo o tratamento dos dados nos termos da política de privacidade.</span></label>
+      <button class="Button_btn__x" type="button" disabled>Enviar pedido</button>
+    </form>
+    <div id="ok" style="display:none">Obrigado! A sua mensagem foi enviada.</div>
+    <script>
+      const form = document.querySelector('form')
+      const enviar = form.querySelector('.Button_btn__x')
+      const campos = form.querySelectorAll('input, textarea')
+      const valido = () =>
+        campos[0].value && campos[1].value && campos[2].value && campos[3].checked
+      form.addEventListener('input', () => { enviar.disabled = !valido() })
+      form.addEventListener('change', () => { enviar.disabled = !valido() })
+      enviar.addEventListener('click', async () => {
+        const corpo = new URLSearchParams({
+          nome: campos[0].value,
+          email: campos[1].value,
+          mensagem: campos[2].value,
+          rgpd: campos[3].checked ? 'sim' : 'nao',
+        })
+        await fetch('/enviar', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: corpo.toString(),
+        })
+        form.style.display = 'none'
+        document.getElementById('ok').style.display = 'block'
+      })
+    </script>
+  </body></html>`,
+
   '/login': `<!doctype html><html><body>
     <form id="entrar" method="post" action="/autenticar">
       <input name="email" type="email">
@@ -282,6 +325,35 @@ describe('submitForm', () => {
     // Sem marcar a checkbox obrigatória a validação HTML5 bloqueava tudo, e
     // sem `name` nem sequer havia como lhe chegar.
     expect(submission?.rgpd).toBe('sim')
+  }, 60_000)
+
+  it('envia um formulário cujo botão é type=button e nasce desativado', async () => {
+    // Três armadilhas de uma vez, todas do padrão dominante: o botão não se
+    // declara como submit, começa desativado à espera da validação do próprio
+    // formulário, e a checkbox obrigatória está escondida por CSS.
+    received.length = 0
+    const result = await submit('/componentes')
+
+    expect(result.submitted).toBe(true)
+    expect(result.reason).toBeUndefined()
+
+    const submission = received[0]
+    expect(submission?.email).toBe('check+site1-abc12345@check.jellycare.pt')
+    expect(submission?.nome).toBe('Jellycare Monitor')
+    expect(submission?.rgpd).toBe('sim')
+  }, 60_000)
+
+  it('não confunde uma chip de escolha com o botão de envio', async () => {
+    // As chips são `type="button"` como o botão de envio. O que as distingue é
+    // o `aria-pressed`: clicar numa delas mudava a resposta em vez de a enviar.
+    const { form, url } = await formAt('/componentes')
+    const plan = buildFillPlan(form, canary)
+    received.length = 0
+
+    const result = await submitForm({ browser, pageUrl: url, form, plan, timeoutMs: 20_000 })
+
+    expect(result.submitted).toBe(true)
+    expect(received).toHaveLength(1)
   }, 60_000)
 
   it('recusa-se a submeter um formulário de login', async () => {

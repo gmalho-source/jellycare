@@ -1,4 +1,4 @@
-import type { Browser, Page, Response as PlaywrightResponse } from 'playwright'
+import type { Browser, Locator, Page, Response as PlaywrightResponse } from 'playwright'
 import { USER_AGENT } from '@jellycare/core'
 import type { FillPlan } from './canary.js'
 import { isTestable, type DiscoveredForm } from './discovery.js'
@@ -165,11 +165,26 @@ export async function submitForm(options: SubmitOptions): Promise<SubmitResult> 
 
     const urlBefore = page.url()
 
-    const submitButton = formLocator
-      .locator('button[type="submit"], input[type="submit"], button:not([type])')
-      .first()
+    const submitButton = await findSubmitControl(formLocator)
 
-    if ((await submitButton.count()) > 0) {
+    if (submitButton) {
+      // O botão costuma nascer desativado e só ser libertado pelo JavaScript do
+      // formulário quando ele se dá por válido. Esperar por isso é o que um
+      // visitante faz; clicar antes não produz nada.
+      const enabled = await waitUntilEnabled(submitButton, Math.min(timeoutMs, 10_000))
+      if (!enabled) {
+        return {
+          submitted: false,
+          signal: null,
+          finalUrl: page.url(),
+          validationErrors: await collectValidationErrors(page),
+          reason:
+            'O botão de envio continuou desativado depois de o formulário estar preenchido. ' +
+            'A validação do próprio formulário não se deu por satisfeita: pode faltar um campo ' +
+            'que só ele considera obrigatório.',
+          durationMs: Date.now() - startedAt,
+        }
+      }
       await submitButton.click({ timeout: timeoutMs })
     } else {
       // Sem botão identificável, Enter no último campo de texto é o que um
@@ -252,4 +267,60 @@ export async function submitForm(options: SubmitOptions): Promise<SubmitResult> 
 /** Escape de id para seletor, sem depender do `CSS` global do browser. */
 function CSS_ESCAPE(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`)
+}
+
+/**
+ * Vocabulário de um botão que envia.
+ *
+ * Só é consultado quando não há botão canónico. Num formulário controlado por
+ * JavaScript o botão de envio costuma ser `type="button"` — não há submissão
+ * nativa a desencadear — e então o texto é o único sinal que resta.
+ */
+const SUBMIT_TEXT =
+  /(enviar|submeter|submit|send|solicitar|pedir|request|contactar|falar|marcar)/i
+
+/**
+ * O controlo que envia o formulário.
+ *
+ * Primeiro o que o HTML declara. Só depois, e por texto, os botões que não se
+ * declaram: um `type="button"` com "Enviar pedido" escrito é o botão de envio,
+ * por muito que o atributo diga o contrário.
+ *
+ * Botões com `aria-pressed` ficam de fora sempre: são alternadores — as
+ * "chips" de escolha múltipla — e clicar num deles muda a resposta em vez de
+ * a enviar.
+ */
+async function findSubmitControl(form: Locator): Promise<Locator | null> {
+  const canonical = form
+    .locator('button[type="submit"], input[type="submit"], button:not([type])')
+    .first()
+  if ((await canonical.count()) > 0) return canonical
+
+  const candidates = form.locator('button, [role="button"], input[type="button"]')
+  const total = await candidates.count()
+
+  // De trás para a frente: o botão de envio é convencionalmente o último.
+  for (let index = total - 1; index >= 0; index -= 1) {
+    const candidate = candidates.nth(index)
+    if ((await candidate.getAttribute('aria-pressed')) !== null) continue
+
+    const text =
+      (await candidate.innerText().catch(() => '')) ||
+      (await candidate.getAttribute('value').catch(() => '')) ||
+      (await candidate.getAttribute('aria-label').catch(() => '')) ||
+      ''
+    if (SUBMIT_TEXT.test(text)) return candidate
+  }
+
+  return null
+}
+
+/** Espera que o botão deixe de estar desativado. */
+async function waitUntilEnabled(control: Locator, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (await control.isEnabled().catch(() => false)) return true
+    if (Date.now() >= deadline) return false
+    await control.page().waitForTimeout(250)
+  }
 }
