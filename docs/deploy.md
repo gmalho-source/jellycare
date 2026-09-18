@@ -317,15 +317,33 @@ e a geração de PDF abre um contexto por relatório.
 retenção de `docs/riscos.md` implementada como tarefa de limpeza — ainda não
 está. A verificação de propriedade do domínio já é obrigatória no código.
 
-## O que ainda não foi testado
+## Estado das imagens
 
-Os `Dockerfile` e os `fly.toml` deste diretório foram escritos mas **não
-construídos**: o ambiente onde foram desenvolvidos não tinha daemon de Docker.
-O que foi verificado sem containers:
+As duas imagens já foram construídas no builder remoto do Fly:
 
-- o migrador de produção aplica as migrações numa base de dados limpa e é
-  idempotente
-- a saída autónoma do Next arranca e serve, e não contém o Playwright
+| | |
+|---|---|
+| `jellycare-worker` | 2,6 GB — o Chromium é quase tudo |
+| `jellycare-web` | 290 MB — sem Chromium, como se pretendia |
 
-O primeiro `fly deploy` deve ser tratado como a primeira execução real destas
-imagens.
+A primeira construção revelou três problemas, todos corrigidos e todos
+invisíveis fora de um build a sério:
+
+- o `pnpm deploy` do worker precisa de `--legacy` a partir do pnpm 10
+- `apps/web/public` não existia e o `Dockerfile` copiava-a
+- a string de ligação do Neon traz `channel_binding=require`, que o
+  `postgres.js` reencaminha para o servidor como parâmetro de arranque; o
+  Postgres recusa a ligação com `unrecognized configuration parameter`. A
+  limpeza passou a ser feita em `packages/db/src/connection-url.ts`, por isso
+  a string da consola pode ser copiada tal como vem
+
+O que continua por verificar é o que só se vê com as máquinas a correr: o
+arranque do worker, a aplicação das migrações contra o Neon, e o primeiro
+relatório gerado em produção.
+
+### Nota sobre o builder
+
+O Fly usa por omissão o Depot. Em ambientes atrás de um proxy que corte
+ligações longas, o `flyctl` fica preso em *Waiting for depot builder* e acaba
+por desistir; nesse caso, `--depot=false` usa o builder clássico e funciona.
+Numa máquina normal não é preciso.
