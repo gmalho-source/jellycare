@@ -46,6 +46,30 @@ describe('redisConnection', () => {
   })
 })
 
+describe('redisConnection com valor inválido', () => {
+  it('não deixa a password ir para a mensagem de erro', () => {
+    // O caso real: foi colada a linha de comando inteira do Upstash em vez do
+    // endereço. O erro nativo do `new URL` traz a string toda, password
+    // incluída, e o Fly guarda isso no log.
+    const comando =
+      'redis-cli --tls -u redis://default:PASSWORD-SECRETA@host.upstash.io:6379'
+
+    let mensagem = ''
+    try {
+      redisConnection(comando)
+    } catch (error) {
+      mensagem = error instanceof Error ? error.message : String(error)
+    }
+
+    expect(mensagem).toContain('REDIS_URL')
+    expect(mensagem).not.toContain('PASSWORD-SECRETA')
+    // Nada do valor recebido é devolvido: nem a password, nem o host, nem a
+    // string original. A mensagem diz o formato esperado e mais nada.
+    expect(mensagem).not.toContain('host.upstash.io')
+    expect(mensagem).not.toContain(comando)
+  })
+})
+
 describe('assertRedisReachable', () => {
   it('passa contra um Redis que responde', async () => {
     const url = process.env.TEST_REDIS_URL ?? 'redis://localhost:56379'

@@ -9,7 +9,19 @@ import type { ConnectionOptions } from 'bullmq'
  * morre no arranque sem chegar a processar nada.
  */
 export function redisConnection(url: string): ConnectionOptions {
-  const parsed = new URL(url)
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    // Nunca reenviar o valor original. O erro nativo do `new URL` inclui a
+    // string inteira na mensagem, e essa string tem a password lá dentro — foi
+    // assim que uma credencial do Upstash foi parar aos logs em produção.
+    throw new Error(
+      'REDIS_URL não é um URL válido. O Upstash mostra a linha de comando ' +
+        'completa (`redis-cli --tls -u ...`); o que se guarda no segredo é só ' +
+        'o endereço, no formato rediss://default:<password>@<host>:6379.',
+    )
+  }
 
   const connection: {
     host: string
