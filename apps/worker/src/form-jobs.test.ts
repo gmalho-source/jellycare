@@ -169,6 +169,17 @@ describe('runFormDiscovery', () => {
     expect(forms[0]?.fieldMap).toMatchObject({ email: 'email', mensagem: 'message' })
   }, 60_000)
 
+  it('dá ao formulário um rótulo que se lê, e não um seletor CSS', async () => {
+    // O que o cliente vê no painel e no relatório. `form:nth-of-type(1)` não
+    // significa nada para ninguém fora do código — e era o que sobrava em
+    // qualquer formulário sem id nem botão declarado.
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const [form] = await storedForms()
+    expect(form?.label).toBe('Formulário de contacto · /contactos')
+    expect(form?.label).not.toContain('nth-of-type')
+  }, 60_000)
+
   it('correr duas vezes não duplica o inventário', async () => {
     await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
     await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })

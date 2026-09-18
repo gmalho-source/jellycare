@@ -87,6 +87,49 @@ function marksRequired(label: string | undefined): boolean {
   return label !== undefined && label.slice(0, 80).includes('*')
 }
 
+/**
+ * Vocabulário de um botão que envia.
+ *
+ * Num formulário controlado por JavaScript o botão de envio é `type="button"`
+ * — não há submissão nativa a desencadear — e então o texto é o único sinal
+ * que resta para o distinguir dos outros botões.
+ */
+export const SUBMIT_TEXT =
+  /(enviar|submeter|submit|send|solicitar|pedir|request|contactar|falar|marcar)/i
+
+/**
+ * O texto do botão que envia o formulário.
+ *
+ * Primeiro o que o HTML declara; depois, por vocabulário, os botões que não se
+ * declaram. Botões com `aria-pressed` ficam de fora: são alternadores, e o seu
+ * texto descreve uma opção e não um envio.
+ */
+function findSubmitText(
+  $: cheerio.CheerioAPI,
+  $form: ReturnType<cheerio.CheerioAPI>,
+): string | undefined {
+  const canonical = $form
+    .find('button[type="submit"], input[type="submit"], button:not([type])')
+    .first()
+  const declared = canonical.text().trim() || canonical.attr('value')?.trim()
+  if (declared) return declared
+
+  const candidates = $form.find('button, input[type="button"], [role="button"]').toArray()
+  // De trás para a frente: o botão de envio é convencionalmente o último.
+  for (const element of candidates.reverse()) {
+    const $candidate = $(element)
+    if ($candidate.attr('aria-pressed') !== undefined) continue
+    const text =
+      $candidate.text().trim() ||
+      $candidate.attr('value')?.trim() ||
+      $candidate.attr('aria-label')?.trim() ||
+      ''
+    if (text && SUBMIT_TEXT.test(text)) return text
+  }
+
+  return undefined
+}
+
 function haystack(field: DiscoveredField): string {
   return [
     field.name,
@@ -297,10 +340,7 @@ export function discoverForms(html: string, pageUrl: string): DiscoveredForm[] {
       selector,
     })
 
-    const submitText =
-      $form.find('button[type="submit"], input[type="submit"], button:not([type])').first().text().trim() ||
-      $form.find('input[type="submit"]').first().attr('value') ||
-      undefined
+    const submitText = findSubmitText($, $form)
 
     const discovered: DiscoveredForm = {
       selector,

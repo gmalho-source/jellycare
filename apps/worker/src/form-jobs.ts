@@ -37,15 +37,47 @@ export interface FormDiscoveryConfig {
   crawlDelayMs?: number
 }
 
-function formLabel(form: DiscoveredSiteForm): string {
-  const path = (() => {
-    try {
-      return new URL(form.pageUrl).pathname
-    } catch {
-      return form.pageUrl
-    }
-  })()
-  return `${form.submitText?.trim() || form.selector} · ${path}`
+/** Nome de cada natureza de formulário, como aparece ao cliente. */
+const KIND_LABELS: Record<string, string> = {
+  contact: 'Formulário de contacto',
+  search: 'Formulário de pesquisa',
+  login: 'Formulário de entrada',
+  registration: 'Formulário de registo',
+  commerce: 'Formulário de compra',
+  newsletter: 'Subscrição de newsletter',
+  unknown: 'Formulário',
+}
+
+function pathOf(pageUrl: string): string {
+  try {
+    return new URL(pageUrl).pathname
+  } catch {
+    return pageUrl
+  }
+}
+
+/**
+ * Rótulo do formulário, para quem o lê no painel e no relatório.
+ *
+ * Diz o que a coisa é e onde está. O texto do botão só entra quando há mais do
+ * que um formulário do mesmo tipo na mesma página, que é quando ele deixa de
+ * ser ruído e passa a ser a única forma de os distinguir.
+ *
+ * O seletor nunca aparece: `form:nth-of-type(1)` não significa nada para
+ * ninguém fora do código, e é o que sobrava em qualquer formulário sem `id`
+ * nem botão declarado — ou seja, na maioria dos formulários modernos.
+ */
+function formLabel(form: DiscoveredSiteForm, all: readonly DiscoveredSiteForm[]): string {
+  const path = pathOf(form.pageUrl)
+  const base = `${KIND_LABELS[form.kind] ?? KIND_LABELS.unknown} · ${path}`
+
+  const sameBase = all.filter(
+    (other) => other.kind === form.kind && pathOf(other.pageUrl) === path,
+  )
+  if (sameBase.length < 2) return base
+
+  const qualifier = form.submitText?.trim() || form.selector
+  return `${KIND_LABELS[form.kind] ?? KIND_LABELS.unknown} "${qualifier}" · ${path}`
 }
 
 function fieldMapOf(form: DiscoveredSiteForm): Record<string, string> {
@@ -89,7 +121,7 @@ export async function runFormDiscovery(
       .insert(schema.forms)
       .values({
         siteId: site.id,
-        label: formLabel(form),
+        label: formLabel(form, discovery.forms),
         pageUrl: form.pageUrl,
         selector: form.selector,
         fieldMap: fieldMapOf(form),
@@ -104,7 +136,7 @@ export async function runFormDiscovery(
         // `excluded` é atualizado sempre, porque um formulário que passou a ser
         // de login tem de deixar de ser submetido imediatamente.
         set: {
-          label: formLabel(form),
+          label: formLabel(form, discovery.forms),
           fieldMap: fieldMapOf(form),
           excluded: !isTestable(form),
           discoveredAt: now,
@@ -133,7 +165,7 @@ export async function runFormDiscovery(
       severity: 'high',
       title: 'Formulário de contacto desapareceu da página',
       detail:
-        `O formulário ${known.selector} já não existe em ${known.pageUrl}. Se a remoção foi ` +
+        `O "${known.label}" já não existe em ${known.pageUrl}. Se a remoção foi ` +
         'intencional, desative-o no painel; caso contrário, o site deixou de receber pedidos ' +
         'por esta via.',
       evidence: { pageUrl: known.pageUrl, selector: known.selector },
