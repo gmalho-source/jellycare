@@ -389,8 +389,12 @@ describe('agendador', () => {
 
     const result = await tick({ db, queue, spreadMs: 0 })
 
-    expect(result.enqueued).toBe(1)
-    expect(await queue.getWaitingCount()).toBe(1)
+    const jobs = await queue.getJobs(['wait', 'delayed', 'active', 'paused', 'prioritized', 'failed'])
+    const inventario = JSON.stringify(
+      await Promise.all(jobs.map(async (j) => ({ id: j.id, estado: await j.getState(), data: j.data }))),
+    )
+    expect(result.enqueued, inventario).toBe(1)
+    expect(await queue.getWaitingCount(), inventario).toBe(1)
 
     const configs = await db
       .select()
