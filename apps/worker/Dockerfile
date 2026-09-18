@@ -18,8 +18,14 @@ RUN pnpm --filter @jellycare/core --filter @jellycare/db --filter @jellycare/che
          exec tsc -p tsconfig.json
 # `pnpm deploy` resolve os links do workspace numa árvore autónoma, que é o que
 # permite copiar o resultado para uma imagem limpa.
-RUN pnpm deploy --filter=@jellycare/worker --prod /prod/worker
-RUN pnpm deploy --filter=@jellycare/db --prod /prod/db
+#
+# `--legacy` porque a partir do pnpm 10 o comando só corre em workspaces com
+# `inject-workspace-packages=true`. Ligar essa opção arrumava o build mas
+# estragava o desenvolvimento: as dependências do workspace passariam a ser
+# cópias, e cada alteração num pacote exigiria reinstalar para se propagar.
+# A flag limita a mudança ao passo que precisa dela.
+RUN pnpm deploy --legacy --filter=@jellycare/worker --prod /prod/worker
+RUN pnpm deploy --legacy --filter=@jellycare/db --prod /prod/db
 
 FROM base AS runtime
 WORKDIR /app
