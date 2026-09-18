@@ -13,6 +13,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
+import { normalizeConnectionUrl } from './connection-url.js'
 
 export interface MigrateOptions {
   databaseUrl: string
@@ -26,7 +27,10 @@ export async function runMigrations(options: MigrateOptions): Promise<void> {
     resolve(dirname(fileURLToPath(import.meta.url)), '..', 'migrations')
 
   // `max: 1` porque o migrador precisa de uma ligação única para o bloqueio.
-  const sql = postgres(options.databaseUrl, { max: 1, onnotice: () => {} })
+  const sql = postgres(normalizeConnectionUrl(options.databaseUrl).url, {
+    max: 1,
+    onnotice: () => {},
+  })
 
   try {
     await migrate(drizzle(sql), { migrationsFolder: folder })

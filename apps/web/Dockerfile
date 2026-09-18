@@ -21,6 +21,9 @@ ENV HOSTNAME=0.0.0.0
 # A saída standalone do Next traz apenas o que o servidor usa em execução.
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+# A pasta `public` existe vazia de propósito, com um .gitkeep. Sem ela este
+# COPY falha o build; tirando o COPY, um ficheiro lá posto mais tarde passaria
+# a servir em desenvolvimento e a desaparecer em produção, sem erro nenhum.
 COPY --from=build /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000

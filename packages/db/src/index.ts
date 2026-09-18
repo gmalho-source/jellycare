@@ -1,5 +1,6 @@
 export * as schema from './schema.js'
 export * from './client.js'
+export * from './connection-url.js'
 export * from './findings-repo.js'
 export * from './auth-repo.js'
 export * from './forms-repo.js'
