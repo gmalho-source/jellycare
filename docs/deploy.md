@@ -282,11 +282,23 @@ e definir `JELLYCARE_REGION` distinto por máquina. A partir daí, uma região q
 não alcance um site é confrontada com a outra antes de se declarar o site em
 baixo — ver `docs/arquitetura.md`.
 
-### 9. Opcional: Google Safe Browsing
+### 9. Fontes de reputação
 
-Projeto no Google Cloud, ativar a Safe Browsing API, criar uma chave, e
-defini-la como `GOOGLE_SAFE_BROWSING_API_KEY` nos segredos do worker. Sem ela o
-check de reputação corre à mesma, só com o URLhaus, e a cobertura fica menor.
+O check de reputação não tem fontes por omissão: cada uma exige credenciais, e
+uma fonte sem credenciais é **saltada**, não tentada — chamá-la só para receber
+401 transformaria "não configurada" em "falhada" e arrastaria o check inteiro.
+Sem nenhuma configurada, o check falha e diz o que falta.
+
+**URLhaus (abuse.ch)** — gratuito, exige registo. A chave vai em
+`URLHAUS_AUTH_KEY` nos segredos do worker. A autenticação passou a ser
+obrigatória; sem o header a API responde 401.
+
+**Google Safe Browsing**
+
+— projeto no Google Cloud, ativar a Safe Browsing API, criar uma chave, e
+defini-la como `GOOGLE_SAFE_BROWSING_API_KEY`. Uma chave inválida, ou a API por
+ativar, dá **400** e não 401; a mensagem de erro do check inclui o que a Google
+respondeu, que é onde isso vem explicado.
 
 A chave é da plataforma e não do cliente: entra uma vez no ambiente do worker e
 serve todos os sites. Não se guarda na configuração de cada check, que seria

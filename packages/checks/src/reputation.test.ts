@@ -6,7 +6,13 @@ import { mockFetch, testSite, type MockRoutes } from './test-utils.js'
 const SAFE_BROWSING = 'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=chave-teste'
 const URLHAUS = 'https://urlhaus-api.abuse.ch/v1/host/'
 
-async function run(routes: MockRoutes, config: ReputationConfig = {}) {
+/** As duas fontes configuradas: é o cenário normal em produção. */
+const AMBAS: ReputationConfig = {
+  safeBrowsingApiKey: 'chave-teste',
+  urlhausAuthKey: 'chave-urlhaus',
+}
+
+async function run(routes: MockRoutes, config: ReputationConfig = AMBAS) {
   const context: CheckContext = {
     site: testSite,
     now: new Date(),
@@ -22,7 +28,7 @@ const CLEAN = {
 
 describe('reputationCheck', () => {
   it('não reporta nada com o domínio limpo', async () => {
-    const outcome = await run(CLEAN, { safeBrowsingApiKey: 'chave-teste' })
+    const outcome = await run(CLEAN, AMBAS)
 
     expect(outcome.status).toBe('ok')
     expect(outcome.findings).toEqual([])
@@ -45,7 +51,7 @@ describe('reputationCheck', () => {
           }),
         },
       },
-      { safeBrowsingApiKey: 'chave-teste' },
+      AMBAS,
     )
 
     expect(outcome.findings).toHaveLength(1)
@@ -88,16 +94,54 @@ describe('reputationCheck', () => {
   })
 
   it('funciona sem chave do Safe Browsing, com cobertura reduzida', async () => {
-    const outcome = await run(CLEAN)
+    const outcome = await run(CLEAN, { urlhausAuthKey: 'chave-urlhaus' })
 
     expect(outcome.status).toBe('ok')
     expect(outcome.metrics.providersQueried).toBe(1)
   })
 
+  it('salta a fonte sem credenciais em vez de a dar por falhada', async () => {
+    // O URLhaus passou a exigir autenticação. Chamá-lo sem chave devolvia 401
+    // e contava como falha, o que arrastava o check inteiro para failed mesmo
+    // com o Safe Browsing a responder bem.
+    const outcome = await run(CLEAN, { safeBrowsingApiKey: 'chave-teste' })
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.metrics.providersQueried).toBe(1)
+    expect(outcome.metrics.providersSucceeded).toBe(1)
+  })
+
+  it('falha, dizendo o que configurar, quando não há fonte nenhuma', async () => {
+    const outcome = await run(CLEAN, {})
+
+    expect(outcome.status).toBe('failed')
+    expect(outcome.error).toContain('GOOGLE_SAFE_BROWSING_API_KEY')
+  })
+
+  it('autentica no URLhaus com a chave da abuse.ch', async () => {
+    const pedidos: { url: string; authKey: string | null }[] = []
+    const context = {
+      site: testSite,
+      now: new Date(),
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers)
+        pedidos.push({ url: String(input), authKey: headers.get('Auth-Key') })
+        return new Response(JSON.stringify({ query_status: 'no_results' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }) as typeof globalThis.fetch,
+    }
+
+    await runCheck(reputationCheck, context, { urlhausAuthKey: 'chave-urlhaus' })
+
+    expect(pedidos.some((p) => p.authKey === 'chave-urlhaus')).toBe(true)
+  })
+
   it('sobrevive à falha de um provider desde que outro responda', async () => {
     const outcome = await run(
       { ...CLEAN, [SAFE_BROWSING]: { status: 503 } },
-      { safeBrowsingApiKey: 'chave-teste' },
+      AMBAS,
     )
 
     expect(outcome.status).toBe('ok')
@@ -107,7 +151,7 @@ describe('reputationCheck', () => {
   it('falha o run quando nenhuma fonte responde', async () => {
     const outcome = await run(
       { [SAFE_BROWSING]: { status: 503 }, [URLHAUS]: { status: 500 } },
-      { safeBrowsingApiKey: 'chave-teste' },
+      AMBAS,
     )
 
     // Sem isto, a reconciliação marcaria uma blacklistagem real como resolvida

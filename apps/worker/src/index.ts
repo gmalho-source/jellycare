@@ -43,6 +43,9 @@ async function main(): Promise<void> {
           ...(process.env.GOOGLE_SAFE_BROWSING_API_KEY
             ? { safeBrowsingApiKey: process.env.GOOGLE_SAFE_BROWSING_API_KEY }
             : {}),
+          ...(process.env.URLHAUS_AUTH_KEY
+            ? { urlhausAuthKey: process.env.URLHAUS_AUTH_KEY }
+            : {}),
         },
         data,
       )

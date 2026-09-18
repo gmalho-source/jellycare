@@ -4,6 +4,8 @@ import { USER_AGENT } from '@jellycare/core'
 export interface ReputationConfig {
   /** Sem chave, o Safe Browsing é saltado e a cobertura fica reduzida. */
   safeBrowsingApiKey?: string
+  /** Chave da abuse.ch. Sem ela o URLhaus responde 401 e é saltado. */
+  urlhausAuthKey?: string
   timeoutMs?: number
   /** Páginas adicionais a submeter, além da homepage. */
   additionalUrls?: string[]
@@ -63,7 +65,17 @@ export async function querySafeBrowsing(
     })
 
     if (!response.ok) {
-      throw new Error(`Safe Browsing respondeu ${response.status}`)
+      // O corpo é onde a Google explica — "API key not valid", por exemplo,
+      // que ela devolve com 400 e não com 401. Sem isto o erro era um número
+      // e obrigava a ir ao painel da Google adivinhar. A chave viaja no URL,
+      // não no corpo, por isso nada de secreto sai daqui.
+      const detalhe = await response
+        .text()
+        .then((texto) => texto.slice(0, 300).replace(/\s+/g, ' ').trim())
+        .catch(() => '')
+      throw new Error(
+        `Safe Browsing respondeu ${response.status}${detalhe ? `: ${detalhe}` : ''}`,
+      )
     }
 
     const body = (await response.json()) as { matches?: SafeBrowsingMatch[] }
@@ -98,6 +110,7 @@ export async function queryUrlhaus(
   hostname: string,
   fetchImpl: typeof globalThis.fetch,
   timeoutMs: number,
+  authKey?: string,
 ): Promise<ObservedFinding[]> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -109,6 +122,9 @@ export async function queryUrlhaus(
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         'user-agent': USER_AGENT,
+        // A abuse.ch tornou a autenticação obrigatória; sem este header a
+        // resposta é 401 e a fonte deixou simplesmente de funcionar.
+        ...(authKey ? { 'Auth-Key': authKey } : {}),
       },
       body: new URLSearchParams({ host: hostname }).toString(),
     })
@@ -151,19 +167,32 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
     const timeoutMs = config.timeoutMs ?? 15_000
     const urls = [context.site.url, ...(config.additionalUrls ?? [])]
 
-    const providers: { name: string; query: () => Promise<ObservedFinding[]> }[] = [
-      {
-        name: 'urlhaus',
-        query: () => queryUrlhaus(context.site.hostname, context.fetch, timeoutMs),
-      },
-    ]
+    // Uma fonte sem credenciais é saltada, não tentada: chamá-la só para
+    // receber 401 transformava "não configurada" em "falhada" e arrastava o
+    // check inteiro com ela.
+    const providers: { name: string; query: () => Promise<ObservedFinding[]> }[] = []
 
     if (config.safeBrowsingApiKey) {
-      providers.unshift({
+      providers.push({
         name: 'safe_browsing',
         query: () =>
           querySafeBrowsing(urls, config.safeBrowsingApiKey as string, context.fetch, timeoutMs),
       })
+    }
+
+    if (config.urlhausAuthKey) {
+      providers.push({
+        name: 'urlhaus',
+        query: () =>
+          queryUrlhaus(context.site.hostname, context.fetch, timeoutMs, config.urlhausAuthKey),
+      })
+    }
+
+    if (providers.length === 0) {
+      throw new NoReputationDataError([
+        'nenhuma fonte configurada: defina GOOGLE_SAFE_BROWSING_API_KEY, ' +
+          'URLHAUS_AUTH_KEY, ou ambas',
+      ])
     }
 
     const results = await Promise.allSettled(providers.map((provider) => provider.query()))

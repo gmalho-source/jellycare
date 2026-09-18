@@ -44,6 +44,8 @@ export interface RunnerDeps {
    * duplicar a mesma credencial por cada linha da tabela.
    */
   safeBrowsingApiKey?: string
+  /** Chave da abuse.ch para o URLhaus. Também da plataforma. */
+  urlhausAuthKey?: string
 }
 
 /** O que o runner precisa de saber sobre uma verificação, venha ela de onde vier. */
@@ -214,8 +216,12 @@ async function execute(
   const registered = getCheck(checkType)
   if (registered) {
     const withPlatformConfig =
-      checkType === 'reputation' && deps.safeBrowsingApiKey
-        ? { ...config, safeBrowsingApiKey: deps.safeBrowsingApiKey }
+      checkType === 'reputation'
+        ? {
+            ...config,
+            ...(deps.safeBrowsingApiKey ? { safeBrowsingApiKey: deps.safeBrowsingApiKey } : {}),
+            ...(deps.urlhausAuthKey ? { urlhausAuthKey: deps.urlhausAuthKey } : {}),
+          }
         : config
     return runCheck(registered.definition, context, withPlatformConfig as never)
   }
