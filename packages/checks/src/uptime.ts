@@ -15,6 +15,20 @@ export interface UptimeConfig {
 
 const DEFAULT_SLOW_THRESHOLD_MS = 3_000
 
+/**
+ * O conteúdo esperado está na resposta?
+ *
+ * A comparação ignora maiúsculas de propósito. A pergunta é "a página
+ * verdadeira ainda está aqui", não "a caixa das letras continua igual": um
+ * redesign que troque SCALLENT por Scallent não partiu nada, e tratá-lo como
+ * conteúdo desaparecido dispara um alerta crítico sobre um site saudável.
+ *
+ * Foi exatamente isso que aconteceu no primeiro site real em produção.
+ */
+function containsExpected(body: string, expected: string): boolean {
+  return body.toLowerCase().includes(expected.toLowerCase())
+}
+
 export const uptimeCheck: CheckDefinition<UptimeConfig> = {
   type: 'uptime',
   defaultIntervalMinutes: 5,
@@ -65,7 +79,7 @@ export const uptimeCheck: CheckDefinition<UptimeConfig> = {
           redirectChain: response.redirectChain,
         },
       })
-    } else if (config.expectedContent && !response.body.includes(config.expectedContent)) {
+    } else if (config.expectedContent && !containsExpected(response.body, config.expectedContent)) {
       findings.push({
         code: 'content_missing',
         severity: 'critical',

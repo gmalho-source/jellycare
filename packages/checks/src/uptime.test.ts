@@ -70,6 +70,32 @@ describe('uptimeCheck', () => {
     expect(outcome.findings).toHaveLength(0)
   })
 
+  it('ignora a caixa das letras ao procurar o conteúdo esperado', async () => {
+    // O primeiro falso positivo em produção: configurado "SCALLENT", a página
+    // escreve "Scallent", e a plataforma declarava conteúdo desaparecido com
+    // severidade crítica num site perfeitamente saudável. A pergunta é se a
+    // página verdadeira ainda lá está, não se as maiúsculas se mantiveram.
+    const outcome = await run(
+      { 'https://cliente.pt': { body: '<h1>Scallent — talento a sério</h1>' } },
+      { expectedContent: 'SCALLENT' },
+    )
+
+    expect(outcome.findings).toHaveLength(0)
+    expect(outcome.metrics.up).toBe(1)
+  })
+
+  it('continua a apanhar o conteúdo que desapareceu mesmo ignorando a caixa', async () => {
+    // A tolerância é só à caixa das letras: um texto que não está lá continua
+    // a não estar, e isso continua a ser crítico.
+    const outcome = await run(
+      { 'https://cliente.pt': { body: '<h1>Outra coisa qualquer</h1>' } },
+      { expectedContent: 'SCALLENT' },
+    )
+
+    expect(outcome.findings[0]?.code).toBe('content_missing')
+    expect(outcome.findings[0]?.severity).toBe('critical')
+  })
+
   it('segue redirects e conta os saltos', async () => {
     const outcome = await run({
       'https://cliente.pt': { status: 301, headers: { location: 'https://cliente.pt/pt' } },
