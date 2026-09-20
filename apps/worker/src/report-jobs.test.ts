@@ -1,4 +1,4 @@
-import { createDatabase, schema } from '@jellycare/db'
+import { createDatabase, latestReportRequest, requestReport, schema } from '@jellycare/db'
 import { monthPeriod } from '@jellycare/reports'
 import { existsSync } from 'node:fs'
 import { and, eq } from 'drizzle-orm'
@@ -8,6 +8,7 @@ import {
   generatePendingReports,
   generateReport,
   regenerateReport,
+  runReportRequests,
   type ReportMessage,
 } from './report-jobs.js'
 
@@ -307,4 +308,66 @@ describe('regenerateReport', () => {
       .where(and(eq(schema.reports.siteId, siteId), eq(schema.reports.periodMonth, 5)))
     expect(maio).toHaveLength(1)
   }, 180_000)
+})
+
+
+describe('runReportRequests', () => {
+  it('envia para o destinatário escolhido no pedido, e não para os configurados', async () => {
+    // O caso de uso: mandar o relatório a um contacto novo do cliente, ou a
+    // si próprio antes de uma reunião, sem alterar a configuração do site e
+    // sem passar a mandá-lo para lá todos os meses.
+    await requestReport(db, { siteId, recipients: ['pontual@exemplo.pt'] })
+
+    await runReportRequests(deps())
+
+    // Filtra-se em vez de se contar o total: a função processa todos os
+    // pedidos pendentes da base de dados, como tem de ser, e a base de testes
+    // é partilhada com os outros pacotes a correr em paralelo.
+    const meus = sent.filter((message) => message.to.includes('pontual@exemplo.pt'))
+    expect(meus).toHaveLength(1)
+  }, 120_000)
+
+  it('sem destinatário escolhido, vai para os configurados no site', async () => {
+    await requestReport(db, { siteId })
+
+    await runReportRequests(deps())
+
+    expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(1)
+  }, 120_000)
+
+  it('marca o pedido como concluído, com o período e para quem foi', async () => {
+    const { request } = await requestReport(db, { siteId, recipients: ['pontual@exemplo.pt'] })
+
+    await runReportRequests(deps())
+
+    const depois = await latestReportRequest(db, siteId)
+    expect(depois?.id).toBe(request.id)
+    expect(depois?.completedAt).not.toBeNull()
+    expect(depois?.sentTo).toEqual(['pontual@exemplo.pt'])
+    expect(depois?.periodMonth).toBeGreaterThan(0)
+    expect(depois?.error).toBeNull()
+  }, 120_000)
+
+  it('um envio que falha fica registado e não bloqueia o site', async () => {
+    // Deixar o pedido por concluir bloqueava o site para sempre: o índice
+    // parcial não deixa criar outro enquanto houver um pendente.
+    await requestReport(db, { siteId })
+
+    await runReportRequests(
+      deps({
+        sendReport: async () => {
+          throw new Error('SMTP recusou')
+        },
+      }),
+    )
+
+    const depois = await latestReportRequest(db, siteId)
+    expect(depois?.completedAt).not.toBeNull()
+  }, 120_000)
+
+  it('não envia nada deste site quando ele não pediu nada', async () => {
+    await runReportRequests(deps())
+
+    expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(0)
+  }, 60_000)
 })

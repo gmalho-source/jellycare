@@ -1,7 +1,13 @@
 'use server'
 
 import { buildChallenge, verifyOwnership } from '@jellycare/checks'
-import { grantAccess, revokeAccess, revokeSession, schema } from '@jellycare/db'
+import {
+  grantAccess,
+  requestReport,
+  revokeAccess,
+  revokeSession,
+  schema,
+} from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
@@ -399,4 +405,76 @@ export async function resendAccessAction(
   await sendAccessEmail(member.email, member.role)
 
   return { message: `Aviso reenviado para ${member.email}.` }
+}
+
+const reportRequestSchema = z.object({
+  siteId: z.string().uuid(),
+  // Vazio significa "os destinatários configurados no site".
+  recipient: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .refine((value) => value === '' || z.string().email().safeParse(value).success, {
+      message: 'Indique um endereço de email válido, ou deixe vazio.',
+    }),
+})
+
+export interface ReportRequestState {
+  message?: string
+  error?: string
+}
+
+/**
+ * Pede o envio imediato do relatório do último mês completo.
+ *
+ * O dashboard não gera o PDF: não tem browser. Deixa o pedido na base de
+ * dados e o worker, que tem, apanha-o em segundos. É por isso que a resposta
+ * diz "a preparar" e não "enviado" — prometer o que ainda não aconteceu era
+ * mentir a quem está a olhar para o ecrã.
+ */
+export async function requestReportAction(
+  _previous: ReportRequestState,
+  formData: FormData,
+): Promise<ReportRequestState> {
+  const user = await requireUser()
+
+  const parsed = reportRequestSchema.safeParse({
+    siteId: formData.get('siteId'),
+    recipient: formData.get('recipient') ?? '',
+  })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' }
+  }
+
+  const rows = await getDb()
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, parsed.data.siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Não tem permissão para enviar relatórios deste site.' }
+  }
+
+  const { created } = await requestReport(getDb(), {
+    siteId: parsed.data.siteId,
+    requestedBy: user.id,
+    ...(parsed.data.recipient ? { recipients: [parsed.data.recipient] } : {}),
+  })
+
+  revalidatePath(`/sites/${parsed.data.siteId}`)
+
+  if (!created) {
+    return { message: 'Já havia um pedido a decorrer para este site; não foi criado outro.' }
+  }
+
+  return {
+    message: parsed.data.recipient
+      ? `A preparar o relatório para ${parsed.data.recipient}. Demora menos de um minuto.`
+      : 'A preparar o relatório para os destinatários configurados. Demora menos de um minuto.',
+  }
 }

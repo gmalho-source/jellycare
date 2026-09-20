@@ -3,7 +3,7 @@ import { createBrowserPool } from './browser-pool.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
-import { generatePendingReports } from './report-jobs.js'
+import { generatePendingReports, runReportRequests } from './report-jobs.js'
 import { assertRedisReachable, redisConnection } from './redis-url.js'
 import { startScheduler } from './scheduler.js'
 
@@ -120,6 +120,23 @@ async function main(): Promise<void> {
   const retentionTimer = setInterval(() => void sweepRetention(), 24 * 60 * 60_000)
   void sweepRetention()
 
+  // Pedidos manuais do painel. De vinte em vinte segundos porque quem carregou
+  // no botão está à espera: a passagem horária dos relatórios agendados serve
+  // para o que é mensal, não para o que é "agora".
+  const sweepRequests = async () => {
+    try {
+      const result = await runReportRequests(reportDeps)
+      if (result.processed > 0) {
+        console.info(`Pedidos de relatório executados: ${result.processed}.`)
+      }
+    } catch (error) {
+      console.error('Falha ao executar pedidos de relatório:', error)
+    }
+  }
+
+  const requestTimer = setInterval(() => void sweepRequests(), 20_000)
+  void sweepRequests()
+
   console.info(`Worker Jellycare a correr na região ${region}.`)
 
   // Encerramento ordenado: um SIGTERM a meio de um deploy não pode deixar
@@ -129,6 +146,7 @@ async function main(): Promise<void> {
     scheduler.stop()
     clearInterval(reportTimer)
     clearInterval(retentionTimer)
+    clearInterval(requestTimer)
     await worker.close()
     await browsers.close()
     await queue.close()

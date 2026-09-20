@@ -1,4 +1,9 @@
-import { schema, type Database } from '@jellycare/db'
+import {
+  claimNextReportRequest,
+  completeReportRequest,
+  schema,
+  type Database,
+} from '@jellycare/db'
 import {
   buildReport,
   monthPeriod,
@@ -82,6 +87,14 @@ export async function generateReport(
   deps: ReportJobDeps,
   siteId: string,
   period: ReportPeriod,
+  /**
+   * Destinatários para este envio, em vez dos configurados no site.
+   *
+   * Existe para o envio imediato a partir do painel poder ir para alguém
+   * pontualmente, sem alterar a configuração e sem passar a mandá-lo para lá
+   * todos os meses.
+   */
+  recipientsOverride?: string[],
 ): Promise<ReportOutcome> {
   const { db } = deps
 
@@ -237,7 +250,9 @@ export async function generateReport(
 
   if (!inserted) return { status: 'skipped', reason: 'Relatório gerado por outra instância' }
 
-  const recipients = site.reportRecipients.filter((value) => value.includes('@'))
+  const recipients = (recipientsOverride ?? site.reportRecipients).filter((value) =>
+    value.includes('@'),
+  )
   if (recipients.length === 0 || !deps.sendReport) {
     return { status: 'generated', reportId: inserted.id, sentTo: [] }
   }
@@ -316,6 +331,7 @@ export async function regenerateReport(
   siteId: string,
   year: number,
   month: number,
+  recipientsOverride?: string[],
 ): Promise<ReportOutcome> {
   const period = monthPeriod(year, month, deps.timeZone ?? DEFAULT_TIME_ZONE)
 
@@ -329,7 +345,62 @@ export async function regenerateReport(
       ),
     )
 
-  return generateReport(deps, siteId, period)
+  return generateReport(deps, siteId, period, recipientsOverride)
 }
 
 export { zonedYearMonth }
+
+/**
+ * Executa os pedidos manuais deixados no painel.
+ *
+ * O período é o último mês completo, resolvido aqui com a mesma função que o
+ * envio agendado usa. O painel não o calcula: essa conta tem de respeitar o
+ * fuso do cliente e a hora de verão, e duplicá-la do outro lado era duplicar
+ * exatamente a parte onde é fácil errar.
+ *
+ * Regenera sempre, em vez de reenviar o que estivesse guardado. Quem carrega
+ * no botão quer o retrato de agora — se um problema foi resolvido esta manhã,
+ * o relatório tem de o dizer.
+ */
+export async function runReportRequests(deps: ReportJobDeps): Promise<{ processed: number }> {
+  const now = deps.now ?? new Date()
+  const timeZone = deps.timeZone ?? DEFAULT_TIME_ZONE
+  let processed = 0
+
+  for (;;) {
+    const request = await claimNextReportRequest(deps.db)
+    if (!request) break
+
+    processed++
+    const period = previousMonth(now, timeZone)
+
+    try {
+      const outcome = await regenerateReport(
+        deps,
+        request.siteId,
+        period.year,
+        period.month,
+        request.recipients.length > 0 ? request.recipients : undefined,
+      )
+
+      await completeReportRequest(deps.db, request.id, {
+        periodYear: period.year,
+        periodMonth: period.month,
+        ...(outcome.status === 'generated'
+          ? { sentTo: outcome.sentTo }
+          : { error: `O relatório não foi gerado: ${outcome.status}.` }),
+      })
+    } catch (error) {
+      // O pedido fica concluído com o erro escrito: deixá-lo por concluir
+      // bloqueava o site para sempre, porque o índice parcial não deixa criar
+      // outro enquanto houver um pendente.
+      await completeReportRequest(deps.db, request.id, {
+        periodYear: period.year,
+        periodMonth: period.month,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return { processed }
+}

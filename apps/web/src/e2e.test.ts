@@ -315,6 +315,35 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 120_000)
 
+  it('pede o envio imediato do relatório para o email escolhido', async () => {
+    // O painel não gera o PDF — não tem browser — por isso a resposta diz "a
+    // preparar" e não "enviado". Prometer o que ainda não aconteceu a quem
+    // está a olhar para o ecrã era mentir-lhe.
+    const painel = await entrarComo(email)
+    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.waitForSelector('#report-recipient')
+
+    await painel.fill('#report-recipient', 'reuniao@exemplo.pt')
+    await painel.click('button:has-text("Enviar agora")')
+
+    await painel.waitForSelector('text=A preparar o relatório para reuniao@exemplo.pt')
+    await painel.close()
+
+    // O pedido ficou registado com o destinatário escolhido, à espera do worker.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 1 })
+    try {
+      const pedidos = await db
+        .select()
+        .from(schema.reportRequests)
+        .where(eq(schema.reportRequests.siteId, siteId))
+      expect(pedidos).toHaveLength(1)
+      expect(pedidos[0]?.recipients).toEqual(['reuniao@exemplo.pt'])
+      expect(pedidos[0]?.completedAt).toBeNull()
+    } finally {
+      await close()
+    }
+  }, 120_000)
+
   it('reenvia o convite a quem já tem acesso', async () => {
     // Sem isto, uma mensagem apagada ou apanhada pelo spam obrigava a retirar
     // o acesso e a voltar a dá-lo só para o email sair outra vez.

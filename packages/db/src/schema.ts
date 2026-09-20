@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   customType,
@@ -470,5 +471,61 @@ export const reports = pgTable(
     // o job pode correr de hora a hora sem duplicar nada.
     uniqueIndex('reports_site_period_idx').on(table.siteId, table.periodYear, table.periodMonth),
     index('reports_site_idx').on(table.siteId, table.generatedAt),
+  ],
+)
+
+/**
+ * Pedidos manuais de relatório, feitos a partir do painel.
+ *
+ * O dashboard não pode gerar o PDF: não tem browser, de propósito, para não
+ * arrastar um Chromium inteiro para dentro da imagem de quem só serve páginas.
+ * Por isso o botão não gera nada — deixa aqui um pedido, e o worker, que tem
+ * browser, apanha-o em segundos.
+ *
+ * Uma tabela e não uma fila: um pedido tem estado que interessa mostrar a
+ * quem carregou no botão, e sobrevive a um reinício do worker a meio.
+ */
+export const reportRequests = pgTable(
+  'report_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    requestedBy: uuid('requested_by').references(() => users.id, { onDelete: 'set null' }),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Quando o worker o reclamou. É isto que impede dois workers de o fazerem. */
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    /**
+     * O período só é conhecido depois de o worker o resolver.
+     *
+     * O cálculo do mês anterior tem de respeitar o fuso do cliente e a hora de
+     * verão, e essa lógica vive em `@jellycare/reports`. Duplicá-la no
+     * dashboard para preencher isto à partida era duplicar exatamente a parte
+     * onde é fácil errar.
+     */
+    periodYear: integer('period_year'),
+    periodMonth: integer('period_month'),
+    /**
+     * Destinatários escolhidos no momento do pedido.
+     *
+     * Vazio significa "os que estão configurados no site". Serve para enviar
+     * o relatório a alguém pontualmente — um contacto novo do cliente, ou o
+     * próprio comercial antes de uma reunião — sem mexer na configuração nem
+     * passar a mandá-lo para lá todos os meses.
+     */
+    recipients: jsonb('recipients').$type<string[]>().notNull().default([]),
+    /** Para quem o relatório foi enviado, ou vazio se não foi para ninguém. */
+    sentTo: jsonb('sent_to').$type<string[]>().notNull().default([]),
+    error: text('error'),
+  },
+  (table) => [
+    index('report_requests_site_idx').on(table.siteId, table.requestedAt),
+    // Um pedido por site de cada vez. Dois cliques seguidos não geram dois
+    // relatórios nem dois emails para o cliente.
+    uniqueIndex('report_requests_pending_idx')
+      .on(table.siteId)
+      .where(sql`completed_at is null`),
   ],
 )
