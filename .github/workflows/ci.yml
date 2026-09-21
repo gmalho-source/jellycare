@@ -72,4 +72,11 @@ jobs:
 
       - run: pnpm typecheck
 
+      # O build tem de vir antes dos testes, e não é só para o validar: os
+      # testes ponta a ponta do dashboard saltam-se sozinhos quando não
+      # encontram o `.next`. Sem este passo, o teste que garante que um
+      # cliente não vê os sites de outra organização ficava marcado como
+      # "skipped" e ninguém reparava.
+      - run: pnpm build
+
       - run: pnpm test
