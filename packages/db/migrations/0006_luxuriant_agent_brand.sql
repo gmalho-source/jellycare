@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "form_test_urls" jsonb DEFAULT '[]'::jsonb NOT NULL;

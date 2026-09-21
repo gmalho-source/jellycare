@@ -136,11 +136,49 @@ combater.
 
 A verificação mais valiosa e a que o mercado não faz bem.
 
+### Onde se testa: declarado, não adivinhado
+
+**O administrador declara até três páginas por site. Só os formulários que
+vivem nessas páginas são preenchidos e submetidos. Sem nenhuma página
+declarada, o teste de formulários não corre.**
+
+Não foi sempre assim, e a mudança vem de duas falhas opostas do mesmo erro —
+deixar a heurística decidir onde é que escrevemos no site de um cliente:
+
+1. Submetia-se um formulário que não devia ser submetido. A classificação
+   acerta quase sempre, e "quase sempre" não chega quando o custo de errar é
+   um pedido falso a entrar no CRM de um cliente.
+2. Não se testava um formulário real. Um formulário montado por JavaScript,
+   dentro de um iframe, ou numa página que o orçamento de rastreio não
+   alcança, era invisível — e o cliente ficava a pagar por uma vigilância que
+   não existia, sem nada que o dissesse.
+
+Declarar **restringe** onde mexemos; não autoriza mexer em tudo. Um formulário
+de entrada, registo, compra ou pagamento continua a nunca ser submetido, esteja
+ou não numa página declarada.
+
+Uma página declarada é uma afirmação — "aqui há um formulário para testar" — e
+quando não se confirma, dizemo-lo:
+
+| Situação | Resultado |
+|---|---|
+| Página analisada, formulário encontrado | testado |
+| Página analisada, nenhum formulário | finding `declared_form_page_empty` |
+| Página pedida, sem HTML utilizável | finding `declared_form_page_unreachable` |
+| Página nunca pedida (orçamento, robots.txt) | aviso de cobertura, não é finding |
+
+A última linha é deliberada: uma limitação nossa não se disfarça de problema
+do cliente.
+
 ### Descoberta
 Durante o crawl, identificação de `<form>` com campos de contacto, e deteção
 de formulários renderizados por JavaScript (Contact Form 7, WPForms, Gravity
-Forms, Typeform embebido, HubSpot, componentes React). Formulários também
-podem ser configurados manualmente com seletores.
+Forms, Typeform embebido, HubSpot, componentes React).
+
+O crawl continua a inventariar o site inteiro e o inventário aparece no
+painel — mas deixou de mandar no que se testa. Serve para o administrador
+saber o que há para declarar, e as páginas declaradas entram como sementes,
+visitadas antes de tudo o resto para que nenhum orçamento as deixe de fora.
 
 ### Submissão canária
 Playwright preenche o formulário com dados identificáveis:

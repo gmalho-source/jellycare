@@ -3,6 +3,7 @@
 import { buildChallenge, verifyOwnership } from '@jellycare/checks'
 import {
   grantAccess,
+  parseFormTestUrls,
   requestReport,
   revokeAccess,
   revokeSession,
@@ -477,4 +478,63 @@ export async function requestReportAction(
       ? `A preparar o relatório para ${parsed.data.recipient}. Demora menos de um minuto.`
       : 'A preparar o relatório para os destinatários configurados. Demora menos de um minuto.',
   }
+}
+
+export interface FormTestUrlsState {
+  message?: string
+  error?: string
+  /** O que foi recusado, para o painel poder dizer o quê e porquê. */
+  rejected?: { input: string; reason: string }[]
+}
+
+/**
+ * Declara as páginas onde os formulários podem ser testados.
+ *
+ * O teste de formulários escreve em campos e carrega em botões no site de um
+ * cliente. Deixar a descoberta automática decidir onde era um erro: tanto
+ * submetia o que ninguém queria submetido como ignorava o único formulário
+ * que interessava. A decisão passa a ser de quem responde pelo site.
+ */
+export async function setFormTestUrlsAction(
+  _previous: FormTestUrlsState,
+  formData: FormData,
+): Promise<FormTestUrlsState> {
+  const user = await requireUser()
+
+  const siteId = String(formData.get('siteId') ?? '')
+  if (!siteId) return { error: 'Site em falta.' }
+
+  const rows = await getDb()
+    .select({ organizationId: schema.sites.organizationId, url: schema.sites.url })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Não tem permissão para configurar este site.' }
+  }
+
+  const inputs = String(formData.get('urls') ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+
+  const { urls, rejected } = parseFormTestUrls(inputs, site.url)
+
+  await getDb()
+    .update(schema.sites)
+    .set({ formTestUrls: urls })
+    .where(eq(schema.sites.id, siteId))
+
+  revalidatePath(`/sites/${siteId}`)
+
+  const base =
+    urls.length === 0
+      ? 'Nenhuma página declarada: o teste de formulários não vai correr neste site.'
+      : `${urls.length} ${urls.length === 1 ? 'página declarada' : 'páginas declaradas'}. O teste corre no próximo ciclo.`
+
+  return rejected.length > 0 ? { message: base, rejected } : { message: base }
 }

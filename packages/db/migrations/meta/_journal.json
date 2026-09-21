@@ -43,6 +43,13 @@
       "when": 1789916307841,
       "tag": "0005_thin_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789990233165,
+      "tag": "0006_luxuriant_agent_brand",
+      "breakpoints": true
     }
   ]
 }

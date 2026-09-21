@@ -112,6 +112,9 @@ beforeEach(async () => {
     .returning({ id: schema.organizations.id })
   organizationId = org!.id
 
+  // A página de contactos vai declarada: desde que o teste de formulários
+  // deixou de ser decidido pela heurística, um site sem páginas declaradas
+  // não submete nada, e é isso que os testes de declaração abaixo verificam.
   const [row] = await db
     .insert(schema.sites)
     .values({
@@ -120,6 +123,7 @@ beforeEach(async () => {
       url: baseUrl,
       hostname: '127.0.0.1',
       state: 'active',
+      formTestUrls: [`${baseUrl}/contactos`],
     })
     .returning({ id: schema.sites.id })
 
@@ -475,5 +479,122 @@ describe('inventário visível no painel', () => {
       .where(and(eq(schema.forms.siteId, site.id), eq(schema.forms.excluded, true)))
 
     expect(forms).toHaveLength(1)
+  }, 60_000)
+})
+
+describe('só se testa onde o administrador mandou', () => {
+  async function declarar(...urls: string[]) {
+    await db
+      .update(schema.sites)
+      .set({ formTestUrls: urls })
+      .where(eq(schema.sites.id, site.id))
+  }
+
+  it('sem páginas declaradas não submete nada, e diz porquê', async () => {
+    // O caso que motivou tudo isto: não queremos escrever no site de ninguém
+    // por iniciativa de uma heurística. Sem declaração, não se toca.
+    await declarar()
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const outcome = await runFormTest(deps(), site, {
+      canaryDomain: 'check.jellycare.pt',
+    })
+
+    expect(outcome.metrics.formsTested).toBe(0)
+    expect(submissions).toBe(0)
+    expect(outcome.warnings?.[0]).toContain('Nenhuma página de formulário declarada')
+  }, 60_000)
+
+  it('não testa um formulário que está fora das páginas declaradas', async () => {
+    await declarar(`${baseUrl}/outra-pagina`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const outcome = await runFormTest(deps(), site, {
+      canaryDomain: 'check.jellycare.pt',
+    })
+
+    expect(outcome.metrics.formsTested).toBe(0)
+    expect(submissions).toBe(0)
+  }, 60_000)
+
+  it('a descoberta não ativa um formulário de uma página não declarada', async () => {
+    await declarar(`${baseUrl}/outra-pagina`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const contacto = (await storedForms()).find((form) => form.pageUrl.includes('/contactos'))
+    expect(contacto).toBeDefined()
+    // Está no inventário — o cliente tem de o ver — mas não em teste.
+    expect(contacto?.enabled).toBe(false)
+    expect(contacto?.excluded).toBe(false)
+  }, 60_000)
+
+  it('desativa um formulário que ficou ativo antes de haver declaração', async () => {
+    // Migração do comportamento antigo: o que a heurística deixou ligado tem
+    // de se desligar sozinho, senão continuava a ser submetido para sempre.
+    await declarar(`${baseUrl}/contactos`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+    expect((await storedForms()).some((form) => form.enabled)).toBe(true)
+
+    await declarar(`${baseUrl}/outra-pagina`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    expect((await storedForms()).some((form) => form.enabled)).toBe(false)
+  }, 60_000)
+
+  it('testa o formulário quando a página está declarada', async () => {
+    await declarar(`${baseUrl}/contactos`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const outcome = await runFormTest(deps(), site, {
+      canaryDomain: 'check.jellycare.pt',
+    })
+
+    expect(outcome.metrics.formsTested).toBe(1)
+    expect(submissions).toBe(1)
+  }, 60_000)
+
+  it('uma barra final na declaração não impede o teste', async () => {
+    // Parece detalhe e não é: um teste que não corresse por causa disto era
+    // indistinguível de um teste desligado.
+    await declarar(`${baseUrl}/contactos/`)
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const outcome = await runFormTest(deps(), site, {
+      canaryDomain: 'check.jellycare.pt',
+    })
+
+    expect(outcome.metrics.formsTested).toBe(1)
+  }, 60_000)
+
+  it('reporta a página declarada que foi analisada e não tem formulário', async () => {
+    // A homepage do servidor de teste só tem um link, sem formulário nenhum.
+    await declarar(`${baseUrl}/`)
+    const outcome = await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const finding = outcome.findings.find((f) => f.code === 'declared_form_page_empty')
+    expect(finding).toBeDefined()
+    expect(finding?.severity).toBe('medium')
+  }, 60_000)
+
+  it('reporta a página declarada que não existe', async () => {
+    await declarar(`${baseUrl}/pagina-que-nao-existe`)
+    const outcome = await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const finding = outcome.findings.find((f) => f.code === 'declared_form_page_unreachable')
+    expect(finding).toBeDefined()
+  }, 60_000)
+
+  it('nunca submete um formulário de login, mesmo numa página declarada', async () => {
+    // Declarar restringe onde mexemos; não autoriza mexer em tudo.
+    await declarar(`${baseUrl}/contactos`)
+    contactPage = LOGIN_FORM
+    await runFormDiscovery(deps(), site, { crawlDelayMs: 0 })
+
+    const outcome = await runFormTest(deps(), site, {
+      canaryDomain: 'check.jellycare.pt',
+    })
+
+    expect(outcome.metrics.formsTested).toBe(0)
+    expect(submissions).toBe(0)
   }, 60_000)
 })

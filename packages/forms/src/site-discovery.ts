@@ -47,6 +47,17 @@ export interface SiteFormDiscoveryResult {
   requestsMade: number
   /** Páginas que não foi possível obter. */
   pagesFailed: number
+  /**
+   * Páginas que se chegou a pedir, tenham sido analisadas ou não.
+   *
+   * É o que distingue "esta página falhou" de "nunca chegámos a esta página
+   * porque o orçamento acabou". As duas parecem iguais olhando só para o que
+   * foi analisado, e tratar a segunda como a primeira inventa problemas que
+   * não existem.
+   */
+  attemptedPages: string[]
+  /** Páginas pedidas que não deram HTML utilizável: erro, não-2xx ou outro tipo. */
+  failedPages: string[]
 }
 
 /** Caminhos onde um formulário de contacto costuma estar, em PT e EN. */
@@ -142,6 +153,7 @@ export async function discoverSiteForms(
   const requested = new Set<string>()
   const parsedPages = new Set<string>()
   const forms = new Map<string, DiscoveredSiteForm>()
+  const failedPages = new Set<string>()
   let pagesFailed = 0
 
   // A homepage primeiro — traz os links de navegação —, depois os caminhos
@@ -166,11 +178,18 @@ export async function discoverSiteForms(
       response = await request(pageUrl, { timeoutMs, fetchImpl })
     } catch {
       pagesFailed++
+      failedPages.add(pageUrl)
       continue
     }
 
-    if (response.status < 200 || response.status >= 300) continue
-    if (!(response.headers.get('content-type') ?? '').includes('html')) continue
+    if (response.status < 200 || response.status >= 300) {
+      failedPages.add(pageUrl)
+      continue
+    }
+    if (!(response.headers.get('content-type') ?? '').includes('html')) {
+      failedPages.add(pageUrl)
+      continue
+    }
 
     parsedPages.add(response.finalUrl)
 
@@ -204,5 +223,7 @@ export async function discoverSiteForms(
     pagesVisited: parsedPages.size,
     requestsMade: requested.size,
     pagesFailed,
+    attemptedPages: [...requested],
+    failedPages: [...failedPages],
   }
 }

@@ -8,13 +8,14 @@ import {
   formatDateTime,
   formatRelative,
 } from '@/components/ui'
-import { latestReportRequest, listMembers } from '@jellycare/db'
+import { latestReportRequest, listMembers, MAX_FORM_TEST_URLS } from '@jellycare/db'
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
+import { FormUrlsPanel } from './form-urls-panel'
 import { ReportPanel } from './report-panel'
 import { VerificationPanel } from './verification-panel'
 
@@ -188,10 +189,14 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
             <ul className="divide-y divide-ink-100">
               {detail.forms.map((form) => (
                 <li key={form.id} className="px-5 py-3 text-sm">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="text-ink-900">{form.label}</span>
-                    <span className="text-xs text-ink-400">
-                      {form.excluded ? 'Não submetido' : form.enabled ? 'Em teste' : 'Desativado'}
+                    <span className="shrink-0 text-xs text-ink-400">
+                      {form.excluded
+                        ? 'Não submetido'
+                        : form.enabled
+                          ? 'Em teste'
+                          : 'Página não declarada'}
                     </span>
                   </div>
                   <span className="mt-0.5 block truncate text-xs text-ink-400">
@@ -201,6 +206,18 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
               ))}
             </ul>
           )}
+
+          <FormUrlsPanel
+            siteId={detail.site.id}
+            urls={detail.site.formTestUrls}
+            maxUrls={MAX_FORM_TEST_URLS}
+            suggestions={[
+              ...new Set(
+                detail.forms.filter((form) => !form.excluded).map((form) => form.pageUrl),
+              ),
+            ]}
+            canManage={manageable}
+          />
         </Card>
       </div>
 

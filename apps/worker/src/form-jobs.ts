@@ -1,6 +1,6 @@
 import { request } from '@jellycare/checks'
 import type { CheckOutcome, ObservedFinding, Site } from '@jellycare/core'
-import { schema, type Database } from '@jellycare/db'
+import { isDeclaredPage, schema, type Database } from '@jellycare/db'
 import {
   buildCanaryIdentity,
   buildFillPlan,
@@ -46,6 +46,23 @@ const KIND_LABELS: Record<string, string> = {
   commerce: 'Formulário de compra',
   newsletter: 'Subscrição de newsletter',
   unknown: 'Formulário',
+}
+
+/**
+ * Os URLs que o administrador declarou para este site.
+ *
+ * Lidos da base de dados a cada execução, e não passados na configuração do
+ * check: quem os muda no painel espera que a mudança valha já, e não no
+ * próximo reagendamento.
+ */
+async function declaredPages(deps: FormJobDeps, siteId: string): Promise<string[]> {
+  const rows = await deps.db
+    .select({ urls: schema.sites.formTestUrls })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+
+  return rows[0]?.urls ?? []
 }
 
 function pathOf(pageUrl: string): string {
@@ -94,6 +111,13 @@ function fieldMapOf(form: DiscoveredSiteForm): Record<string, string> {
  *
  * Guarda todos, incluindo os que nunca serão submetidos: o cliente tem de ver
  * no painel que os conhecemos e porque é que ficam de fora.
+ *
+ * O inventário deixou de mandar no teste. Antes, tudo o que fosse
+ * classificado como formulário de contacto ficava `enabled` e era submetido
+ * no ciclo seguinte — a heurística decidia onde é que escrevíamos no site de
+ * um cliente. Agora só ficam ativos os formulários que vivem numa página
+ * declarada pelo administrador; o resto é catálogo, e serve para ele saber o
+ * que há para declarar.
  */
 export async function runFormDiscovery(
   deps: FormJobDeps,
@@ -102,11 +126,16 @@ export async function runFormDiscovery(
 ): Promise<CheckOutcome> {
   const startedAt = Date.now()
   const now = deps.now ?? new Date()
+  const declared = await declaredPages(deps, site.id)
+
+  // As páginas declaradas entram como sementes: são as que interessam, e o
+  // orçamento de rastreio nunca as pode deixar de fora.
+  const seeds = [...new Set([...(config.seedPaths ?? []), ...declared])]
 
   const discovery = await discoverSiteForms({
     siteUrl: site.url,
     ...(config.maxPages !== undefined ? { maxPages: config.maxPages } : {}),
-    ...(config.seedPaths !== undefined ? { seedPaths: config.seedPaths } : {}),
+    ...(seeds.length > 0 ? { seedPaths: seeds } : {}),
     ...(config.crawlDelayMs !== undefined ? { crawlDelayMs: config.crawlDelayMs } : {}),
     ...(deps.fetch ? { fetchImpl: deps.fetch } : {}),
   })
@@ -117,6 +146,11 @@ export async function runFormDiscovery(
     .where(eq(schema.forms.siteId, site.id))
 
   for (const form of discovery.forms) {
+    // Duas condições, e ambas têm de valer: o administrador declarou esta
+    // página, e o formulário é de contacto. A declaração restringe onde
+    // mexemos — não autoriza submeter um formulário de login ou de compra.
+    const testável = isTestable(form) && isDeclaredPage(form.pageUrl, declared, site.url)
+
     await deps.db
       .insert(schema.forms)
       .values({
@@ -125,21 +159,23 @@ export async function runFormDiscovery(
         pageUrl: form.pageUrl,
         selector: form.selector,
         fieldMap: fieldMapOf(form),
-        enabled: isTestable(form),
+        enabled: testável,
         excluded: !isTestable(form),
         discoveredAt: now,
       })
       .onConflictDoUpdate({
         target: [schema.forms.siteId, schema.forms.pageUrl, schema.forms.selector],
-        // `enabled` fica de fora de propósito: se alguém desativou o teste deste
-        // formulário, uma redescoberta não o pode reativar pelas costas. Já
-        // `excluded` é atualizado sempre, porque um formulário que passou a ser
-        // de login tem de deixar de ser submetido imediatamente.
         set: {
           label: formLabel(form, discovery.forms),
           fieldMap: fieldMapOf(form),
           excluded: !isTestable(form),
           discoveredAt: now,
+          // `enabled` só se mexe numa direção: para desligar. Num formulário
+          // de página declarada fica como está, porque se alguém o desativou
+          // à mão uma redescoberta não o pode reativar pelas costas. Fora das
+          // páginas declaradas é forçado a falso — é o que apaga o que ficou
+          // ativo do tempo em que a heurística decidia sozinha.
+          ...(testável ? {} : { enabled: false }),
         },
       })
   }
@@ -172,6 +208,53 @@ export async function runFormDiscovery(
     })
   }
 
+  // Uma página declarada é uma afirmação: "aqui há um formulário para
+  // testar". Quando não se confirma, há três situações distintas e só duas
+  // são problema do cliente.
+  const naoAlcancadas: string[] = []
+  for (const page of declared) {
+    const bate = (candidate: string) => isDeclaredPage(candidate, [page], site.url)
+
+    if (discovery.parsedPages.some(bate)) {
+      if (discovery.forms.some((form) => bate(form.pageUrl))) continue
+
+      findings.push({
+        code: 'declared_form_page_empty',
+        discriminator: page,
+        severity: 'medium',
+        title: 'Página declarada não tem nenhum formulário detetável',
+        detail:
+          `Declarou ${page} como página com formulário a testar e a página foi ` +
+          'analisada, mas não se encontrou lá nenhum formulário. Costuma querer ' +
+          'dizer que o formulário é montado por JavaScript ou está dentro de um ' +
+          'iframe de outro serviço.',
+        evidence: { pageUrl: page },
+      })
+      continue
+    }
+
+    if (discovery.failedPages.some(bate)) {
+      findings.push({
+        code: 'declared_form_page_unreachable',
+        discriminator: page,
+        severity: 'medium',
+        title: 'Página de formulário declarada está inacessível',
+        detail:
+          `Declarou ${page} como página com formulário a testar, e o pedido a ` +
+          'essa página não devolveu uma página utilizável. Confirme o endereço ' +
+          'e se a página responde.',
+        evidence: { pageUrl: page },
+      })
+      continue
+    }
+
+    // Nem analisada nem falhada: nunca foi pedida. É limitação nossa — um
+    // orçamento de rastreio esgotado ou o robots.txt a proibir — e inventar
+    // aqui um problema do cliente era exatamente o erro que a deteção de
+    // formulário desaparecido já tem o cuidado de não cometer.
+    naoAlcancadas.push(page)
+  }
+
   const contactForms = discovery.forms.filter(isTestable).length
 
   return {
@@ -180,9 +263,17 @@ export async function runFormDiscovery(
     metrics: {
       formsFound: discovery.forms.length,
       contactForms,
+      declaredPages: declared.length,
       pagesVisited: discovery.pagesVisited,
       requestsMade: discovery.requestsMade,
     },
+    ...(naoAlcancadas.length > 0
+      ? {
+          warnings: [
+            `Páginas declaradas que o rastreio não chegou a pedir: ${naoAlcancadas.join(', ')}.`,
+          ],
+        }
+      : {}),
     durationMs: Date.now() - startedAt,
   }
 }
@@ -216,7 +307,28 @@ export async function runFormTest(
     throw new Error('O teste de formulários precisa de um browser.')
   }
 
-  const forms = await deps.db
+  // O portão que conta. O `enabled` na tabela é conveniência de painel e pode
+  // estar velho — um formulário ativado no tempo em que a heurística decidia
+  // sozinha continua lá com `enabled: true`. A lista declarada é a autoridade,
+  // e é lida agora, imediatamente antes de escrevermos no site de alguém.
+  const declared = await declaredPages(deps, site.id)
+
+  if (declared.length === 0) {
+    // Nenhum URL declarado não é um erro: é a configuração por omissão de um
+    // site novo, e significa exatamente o que diz. Preferimos não testar nada
+    // a testar o que ninguém mandou.
+    return {
+      status: 'ok',
+      findings: [],
+      metrics: { formsTested: 0, formsFailed: 0, declaredPages: 0 },
+      warnings: [
+        'Nenhuma página de formulário declarada: o teste de formulários não corre neste site.',
+      ],
+      durationMs: Date.now() - startedAt,
+    }
+  }
+
+  const stored = await deps.db
     .select()
     .from(schema.forms)
     .where(
@@ -227,6 +339,8 @@ export async function runFormTest(
       ),
     )
 
+  const forms = stored.filter((form) => isDeclaredPage(form.pageUrl, declared, site.url))
+
   const findings: ObservedFinding[] = []
   let tested = 0
   let failed = 0
@@ -235,7 +349,10 @@ export async function runFormTest(
     return {
       status: 'ok',
       findings,
-      metrics: { formsTested: 0, formsFailed: 0 },
+      metrics: { formsTested: 0, formsFailed: 0, declaredPages: declared.length },
+      warnings: [
+        'Nenhum formulário testável nas páginas declaradas. Ver o resultado da descoberta.',
+      ],
       durationMs: Date.now() - startedAt,
     }
   }

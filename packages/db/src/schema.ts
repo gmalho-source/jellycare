@@ -139,6 +139,19 @@ export const sites = pgTable(
     slaTarget: real('sla_target').notNull().default(99.9),
     /** Quem recebe o relatório mensal deste site. */
     reportRecipients: jsonb('report_recipients').$type<string[]>().notNull().default([]),
+    /**
+     * Páginas onde o administrador declara existirem formulários a testar.
+     *
+     * A descoberta automática continua a inventariar o site, mas deixou de
+     * decidir o que se submete: só os formulários que vivem numa destas
+     * páginas são preenchidos e enviados. São duas falhas que isto fecha —
+     * submeter um formulário que não devia ser submetido, e não testar um
+     * formulário real que a heurística não encontrou.
+     *
+     * Vazio significa que o teste de formulários não corre. É deliberado:
+     * preferimos não testar nada a testar o que ninguém mandou.
+     */
+    formTestUrls: jsonb('form_test_urls').$type<string[]>().notNull().default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],
