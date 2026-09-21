@@ -28,7 +28,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A mesma definição que corre nos pull requests, reutilizada e não copiada.
+  test:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    # Nada vai a produção sem a suite verde. Isto ficou de fora quando montei
+    # os workflows, de propósito e dito na altura: era preciso ver o job de
+    # testes passar num runner a sério antes de lhe dar poder de travar um
+    # deploy. Passou várias vezes seguidas, portanto passa a travar.
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
