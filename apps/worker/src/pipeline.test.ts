@@ -263,6 +263,36 @@ describe('ciclo completo do worker', () => {
     expect(outcome).toMatchObject({ status: 'skipped' })
   })
 
+  it('não corre num site arquivado', async () => {
+    await addCheck('uptime')
+    await db.update(schema.sites).set({ state: 'archived' }).where(eq(schema.sites.id, siteId))
+
+    const outcome = await run()
+    expect(outcome).toMatchObject({ status: 'skipped' })
+  })
+
+  it('corre a disponibilidade num site por verificar', async () => {
+    // O painel promete que um site por verificar é monitorizado em
+    // disponibilidade. Não era: ficava em `onboarding` e nem chegava a ser
+    // agendado, portanto não corria nada — um cliente podia estar a pagar
+    // com zero verificações.
+    await addCheck('uptime')
+    await db.update(schema.sites).set({ state: 'onboarding' }).where(eq(schema.sites.id, siteId))
+
+    const outcome = await run()
+    expect(outcome.status).toBe('completed')
+  })
+
+  it('num site por verificar, os checks de segurança continuam a não correr', async () => {
+    // O que muda é só a disponibilidade. Examinar a configuração de um
+    // domínio sem prova de propriedade continua fora de questão.
+    await addCheck('security_headers')
+    await db.update(schema.sites).set({ state: 'onboarding' }).where(eq(schema.sites.id, siteId))
+
+    const outcome = await run(new RecordingNotifier(), 'security_headers')
+    expect(outcome).toMatchObject({ status: 'skipped' })
+  })
+
   it('suprime o alerta durante uma janela de manutenção mas regista o problema', async () => {
     await addCheck('uptime')
     await addTarget()

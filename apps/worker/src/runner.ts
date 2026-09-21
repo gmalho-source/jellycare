@@ -123,7 +123,10 @@ export async function executeCheckJob(
 
   const siteRow = siteRows[0]
   if (!siteRow) return { status: 'skipped', reason: 'Site não encontrado' }
-  if (siteRow.state !== 'active') {
+  // Pausado e arquivado param tudo. `onboarding` não: um site por verificar
+  // tem de ser monitorizado em disponibilidade, e é o gate de propriedade
+  // logo abaixo que decide o que mais pode correr.
+  if (siteRow.state === 'paused' || siteRow.state === 'archived') {
     return { status: 'skipped', reason: `Site em estado ${siteRow.state}` }
   }
 

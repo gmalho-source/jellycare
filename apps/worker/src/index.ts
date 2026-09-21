@@ -5,6 +5,7 @@ import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
 import { generatePendingReports, runReportRequests } from './report-jobs.js'
 import { assertRedisReachable, redisConnection } from './redis-url.js'
+import { sweepPendingVerifications } from './verification-jobs.js'
 import { startScheduler } from './scheduler.js'
 
 function required(name: string): string {
@@ -146,6 +147,22 @@ async function main(): Promise<void> {
   }
 
   const requestTimer = setInterval(() => void sweepRequests(), 20_000)
+
+  // Verificação de propriedade, de hora a hora. É o que o painel promete a
+  // quem publica o registo TXT ou o ficheiro e fecha a janela.
+  async function sweepVerifications(): Promise<void> {
+    try {
+      const result = await sweepPendingVerifications({ db })
+      if (result.verified > 0) {
+        console.info(`Sites verificados: ${result.verified}.`)
+      }
+    } catch (error) {
+      console.error('Falha na verificação de propriedade:', error)
+    }
+  }
+
+  void sweepVerifications()
+  const verificationTimer = setInterval(() => void sweepVerifications(), 60 * 60_000)
   void sweepRequests()
 
   console.info(`Worker Jellycare a correr na região ${region}.`)
@@ -157,6 +174,7 @@ async function main(): Promise<void> {
     scheduler.stop()
     clearInterval(reportTimer)
     clearInterval(retentionTimer)
+    clearInterval(verificationTimer)
     clearInterval(requestTimer)
     await worker.close()
     await browsers.close()

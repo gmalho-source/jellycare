@@ -1,5 +1,6 @@
 import { schema, type Database } from '@jellycare/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { CHECK_REGISTRY } from '@jellycare/checks'
+import { and, eq, inArray, or } from 'drizzle-orm'
 import type { Queue } from 'bullmq'
 import { checkJobId } from './queues.js'
 import type { CheckJobData } from './runner.js'
@@ -27,6 +28,16 @@ export interface TickResult {
  * ele termina. Se fosse ao contrário, um check que ficasse pendurado seria
  * enfileirado outra vez a cada tick.
  */
+/**
+ * Os checks que podem correr sem propriedade comprovada.
+ *
+ * Derivado do registo e não escrito à mão: é a mesma fonte que o runner usa
+ * para decidir o que recusa.
+ */
+const PUBLIC_CHECK_TYPES = Object.values(CHECK_REGISTRY)
+  .filter((check) => check.access === 'public')
+  .map((check) => check.definition.type)
+
 export async function tick(options: SchedulerOptions): Promise<TickResult> {
   const now = options.now?.() ?? new Date()
   const batchSize = options.batchSize ?? 100
@@ -43,7 +54,31 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
     })
     .from(schema.checkConfigs)
     .innerJoin(schema.sites, eq(schema.sites.id, schema.checkConfigs.siteId))
-    .where(and(eq(schema.checkConfigs.enabled, true), eq(schema.sites.state, 'active')))
+    // Um site por verificar tem de ser monitorizado em disponibilidade — é o
+    // que o painel promete, e observar que um URL público responde não é
+    // diferente do que faz qualquer visitante. Antes ficava de fora e não
+    // corria nada: um cliente podia estar a pagar com zero verificações.
+    //
+    // Mas só os checks que podem mesmo correr sem prova de propriedade.
+    // Enfileirar os outros era encher a fila de trabalho que o runner ia
+    // recusar de certeza, e num site que ficasse meses por verificar isso
+    // repetia-se a cada ciclo.
+    //
+    // A lista vem do registo de checks, que é a mesma fonte que o runner
+    // consulta. Escrevê-la à mão aqui era uma segunda cópia da regra, e duas
+    // cópias divergem.
+    .where(
+      and(
+        eq(schema.checkConfigs.enabled, true),
+        or(
+          eq(schema.sites.state, 'active'),
+          and(
+            eq(schema.sites.state, 'onboarding'),
+            inArray(schema.checkConfigs.checkType, PUBLIC_CHECK_TYPES),
+          ),
+        ),
+      ),
+    )
 
   const checks: SchedulableCheck[] = rows.map((row) => ({
     id: row.id,

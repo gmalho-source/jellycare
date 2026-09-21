@@ -11,12 +11,14 @@ import {
 import { latestReportRequest, listMembers, MAX_FORM_TEST_URLS } from '@jellycare/db'
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
+import { getSiteDashboard } from '@/lib/dashboard'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
+import { SiteDashboard } from './dashboard'
 import { SettingsPanel } from './settings-panel'
 import { WordPressPanel } from './wordpress-panel'
 import { ReportPanel } from './report-panel'
@@ -55,6 +57,9 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const umbrella = manageable
     ? await listUmbrellaProjects()
     : { projects: [], unavailable: undefined }
+  // Só depois de verificado. Antes disso só há disponibilidade, e um painel
+  // de métricas com tudo a zero diz menos do que o aviso que está no lugar.
+  const dashboard = detail.verified ? await getSiteDashboard(id) : null
 
   const verification = detail.verified ? null : await getPendingVerification(id)
   // As duas vias, com o mesmo token. A que foi escolhida na criação aparece
@@ -95,6 +100,8 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           canManage={manageable}
         />
       )}
+
+      {dashboard ? <SiteDashboard data={dashboard} /> : null}
 
       <Card>
         <CardHeader
