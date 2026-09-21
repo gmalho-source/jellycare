@@ -7,12 +7,14 @@
  * dimensões fixas, e não há nada para o otimizador fazer que não seja pedir
  * `dangerouslyAllowSVG` em troca de nada.
  *
- * A altura é 28px por medição, não por gosto: a 20px o "care" fecha os
- * contra-formas e a 32px a marca domina uma barra que também tem de conter o
- * email e o botão de saída.
+ * A altura por omissão é 28px por medição, não por gosto: a 20px o "care"
+ * fecha as contra-formas e a 32px a marca domina uma barra de topo que também
+ * tem de conter o email e o botão de saída. O ecrã de entrada passa uma
+ * altura maior porque ali a marca é o assunto e não um rótulo.
  *
- * A marca é branca e vermelha, o que obriga a barra de topo a ser escura.
+ * A marca é branca e vermelha, o que obriga a fundo escuro onde quer que
+ * apareça.
  */
-export function Brand() {
-  return <img src="/jellycare.svg" alt="Jellycare" className="h-7 w-auto" />
+export function Brand({ className = 'h-7' }: { className?: string }) {
+  return <img src="/jellycare.svg" alt="Jellycare" className={`${className} w-auto`} />
 }

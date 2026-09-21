@@ -7,7 +7,7 @@ export function LoginForm() {
   const [state, action, pending] = useActionState<LoginState, FormData>(requestLoginLink, {})
 
   return (
-    <form action={action} className="space-y-4 rounded-xl border border-ink-200 bg-white p-6">
+    <form action={action} className="space-y-4 rounded-xl bg-white p-6">
       <div>
         <label htmlFor="email" className="text-sm font-medium text-ink-900">
           Email
