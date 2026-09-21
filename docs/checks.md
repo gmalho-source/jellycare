@@ -151,6 +151,24 @@ não consegue corrigir.
 
 ---
 
+## Prova de propriedade
+
+Nenhuma verificação de segurança corre contra um domínio cuja propriedade não
+foi provada. A prova aceita-se por registo TXT em `_jellycare.<domínio>` ou
+por ficheiro em `/.well-known/`, com o mesmo token — muda só onde é publicado,
+e a verificação tenta as duas sem ninguém ter de escolher.
+
+**Um site por verificar é monitorizado em disponibilidade, e só nisso.**
+Observar que um URL público responde não é diferente do que faz qualquer
+visitante. O agendador enfileira, para esses sites, apenas os checks marcados
+como `public` no registo — enfileirar os outros seria encher a fila de
+trabalho que o runner recusaria de certeza, e num site que ficasse meses por
+verificar isso repetia-se a cada ciclo.
+
+A verificação corre de hora a hora no worker, além do botão no painel. Não
+corria: durante meses o painel prometeu-o e o único caminho era o botão, o que
+deixava à espera para sempre quem publicasse o registo e fechasse a janela.
+
 ## Cobertura reduzida
 
 Um check pode ter sucesso com menos cobertura do que devia: uma fonte de
