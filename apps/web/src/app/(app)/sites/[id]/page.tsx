@@ -17,6 +17,7 @@ import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
+import { SettingsPanel } from './settings-panel'
 import { WordPressPanel } from './wordpress-panel'
 import { ReportPanel } from './report-panel'
 import { VerificationPanel } from './verification-panel'
@@ -362,6 +363,21 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           </table>
         )}
       </Card>
+
+      {manageable ? (
+        <Card>
+          <CardHeader title="Definições" />
+          <SettingsPanel
+            siteId={detail.site.id}
+            label={detail.site.label}
+            url={detail.site.url}
+            state={detail.site.state}
+            expectedContent={detail.site.expectedContent}
+            recipients={detail.site.reportRecipients}
+            slaTarget={detail.site.slaTarget}
+          />
+        </Card>
+      ) : null}
 
       <AccessPanel
         organizationId={detail.site.organizationId}

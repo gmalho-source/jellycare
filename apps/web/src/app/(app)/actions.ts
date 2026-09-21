@@ -4,6 +4,7 @@ import { buildChallenge, verifyOwnership } from '@jellycare/checks'
 import {
   grantAccess,
   parseFormTestUrls,
+  parseSiteSettings,
   requestReport,
   revokeAccess,
   revokeSession,
@@ -625,4 +626,156 @@ export async function linkUmbrellaProjectAction(
 
   revalidatePath(`/sites/${siteId}`)
   return { message: 'Site ligado. O inventário é recolhido no próximo ciclo.' }
+}
+
+export interface SiteSettingsState {
+  message?: string
+  error?: string
+}
+
+/** Lê o site e confirma que quem pede pode mexer nele. */
+async function siteForManagement(siteId: string, user: Awaited<ReturnType<typeof requireUser>>) {
+  const rows = await getDb()
+    .select({
+      organizationId: schema.sites.organizationId,
+      label: schema.sites.label,
+      state: schema.sites.state,
+    })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' as const }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Não tem permissão para configurar este site.' as const }
+  }
+
+  return { site }
+}
+
+/**
+ * Definições do site.
+ *
+ * O URL não é editável. Mudar o endereço de um site já verificado invalida a
+ * prova de propriedade e faz o histórico de disponibilidade passar a medir
+ * outra coisa — quem muda mesmo de domínio tem um site novo, não um campo
+ * diferente.
+ */
+export async function updateSiteSettingsAction(
+  _previous: SiteSettingsState,
+  formData: FormData,
+): Promise<SiteSettingsState> {
+  const user = await requireUser()
+  const siteId = String(formData.get('siteId') ?? '')
+  if (!siteId) return { error: 'Site em falta.' }
+
+  const guard = await siteForManagement(siteId, user)
+  if ('error' in guard) return { error: guard.error }
+
+  const parsed = parseSiteSettings({
+    label: String(formData.get('label') ?? ''),
+    expectedContent: String(formData.get('expectedContent') ?? ''),
+    recipients: String(formData.get('recipients') ?? ''),
+    slaTarget: String(formData.get('slaTarget') ?? ''),
+  })
+
+  if (parsed.error || !parsed.settings) return { error: parsed.error ?? 'Dados inválidos.' }
+
+  await getDb()
+    .update(schema.sites)
+    .set(parsed.settings)
+    .where(eq(schema.sites.id, siteId))
+
+  // O conteúdo esperado é lido pelo check de disponibilidade a partir da
+  // configuração dele, e não da coluna do site. Mudar num sítio e não no
+  // outro deixava o check a verificar uma palavra que já ninguém escolheu.
+  await getDb()
+    .update(schema.checkConfigs)
+    .set({
+      config: parsed.settings.expectedContent
+        ? { expectedContent: parsed.settings.expectedContent }
+        : {},
+    })
+    .where(and(eq(schema.checkConfigs.siteId, siteId), eq(schema.checkConfigs.checkType, 'uptime')))
+
+  revalidatePath(`/sites/${siteId}`)
+  revalidatePath('/')
+
+  return {
+    message:
+      parsed.settings.reportRecipients.length === 0
+        ? 'Guardado. Sem destinatários, o relatório mensal é gerado mas não é enviado a ninguém.'
+        : 'Guardado.',
+  }
+}
+
+/**
+ * Arquiva ou reativa um site.
+ *
+ * Arquivar pára tudo — o agendador só olha para sites `active` — mas não
+ * apaga nada. Um relatório que já foi para o cliente tem de continuar a bater
+ * certo, e a política de retenção é que decide quando os dados saem.
+ */
+export async function setSiteStateAction(
+  _previous: SiteSettingsState,
+  formData: FormData,
+): Promise<SiteSettingsState> {
+  const user = await requireUser()
+  const siteId = String(formData.get('siteId') ?? '')
+  const target = String(formData.get('state') ?? '')
+
+  if (target !== 'archived' && target !== 'active') return { error: 'Estado inválido.' }
+
+  const guard = await siteForManagement(siteId, user)
+  if ('error' in guard) return { error: guard.error }
+
+  await getDb()
+    .update(schema.sites)
+    .set({ state: target })
+    .where(eq(schema.sites.id, siteId))
+
+  revalidatePath(`/sites/${siteId}`)
+  revalidatePath('/')
+
+  return {
+    message:
+      target === 'archived'
+        ? 'Site arquivado. Deixa de ser verificado; o histórico fica.'
+        : 'Site reativado. As verificações recomeçam no próximo ciclo.',
+  }
+}
+
+/**
+ * Apaga um site e tudo o que pende dele.
+ *
+ * Existe porque um cliente que sai tem direito a que os dados desapareçam, e
+ * não conseguir cumprir isso seria um problema nosso e não dele. O `on delete
+ * cascade` leva execuções, findings, formulários, submissões, relatórios e
+ * inventário atrás.
+ *
+ * Exige o nome escrito à mão. Não é cerimónia: é a única barreira entre um
+ * clique distraído e dados que não voltam.
+ */
+export async function deleteSiteAction(
+  _previous: SiteSettingsState,
+  formData: FormData,
+): Promise<SiteSettingsState> {
+  const user = await requireUser()
+  const siteId = String(formData.get('siteId') ?? '')
+  const confirmation = String(formData.get('confirmation') ?? '').trim()
+
+  const guard = await siteForManagement(siteId, user)
+  if ('error' in guard) return { error: guard.error }
+
+  if (confirmation !== guard.site.label) {
+    return { error: `Para apagar, escreva o nome do site exatamente: ${guard.site.label}` }
+  }
+
+  await getDb().delete(schema.sites).where(eq(schema.sites.id, siteId))
+
+  revalidatePath('/')
+  redirect('/')
 }
