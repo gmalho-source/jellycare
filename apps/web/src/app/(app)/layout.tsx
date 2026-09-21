@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen">
       <header className="bg-ink-900">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-          <Link href="/" className="flex items-baseline gap-2">
+          <Link href="/" className="flex items-center gap-2.5">
             <Brand />
             <span className="text-xs text-ink-400">por Jelly</span>
           </Link>

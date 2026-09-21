@@ -23,7 +23,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
     <div className="min-h-screen bg-ink-50">
       <header className="bg-ink-900">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
-          <Link href="/portal" className="flex items-baseline gap-2">
+          <Link href="/portal" className="flex items-center gap-2.5">
             <Brand />
             <span className="text-xs text-ink-400">manutenção e vigilância por Jelly</span>
           </Link>
