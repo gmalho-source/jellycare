@@ -13,9 +13,14 @@ FROM base AS build
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @jellycare/core --filter @jellycare/db --filter @jellycare/checks \
-         --filter @jellycare/forms --filter @jellycare/reports --filter @jellycare/worker \
-         exec tsc -p tsconfig.json
+# Todos os pacotes da biblioteca, por caminho e não por nome.
+#
+# A lista era escrita à mão e ficou desactualizada assim que apareceu um
+# pacote novo: o `@jellycare/connectors` não estava cá, e o build do worker
+# parou com "Cannot find module" depois de o código já ter passado nos testes
+# e no typecheck — porque no workspace o `dist` já existia e aqui não.
+# Um filtro por caminho não precisa de ser mantido.
+RUN pnpm --filter "./packages/*" --filter @jellycare/worker exec tsc -p tsconfig.json
 # `pnpm deploy` resolve os links do workspace numa árvore autónoma, que é o que
 # permite copiar o resultado para uma imagem limpa.
 #

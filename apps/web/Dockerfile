@@ -8,8 +8,10 @@ FROM base AS build
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @jellycare/core --filter @jellycare/db --filter @jellycare/checks \
-         --filter @jellycare/forms exec tsc -p tsconfig.json
+# Por caminho e não por nome, pela mesma razão que no worker: uma lista
+# escrita à mão fica desactualizada em silêncio, e a falha só aparece no
+# build da imagem, depois de tudo o resto ter passado.
+RUN pnpm --filter "./packages/*" exec tsc -p tsconfig.json
 RUN pnpm --filter @jellycare/web build
 
 FROM base AS runtime
