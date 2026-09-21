@@ -13,16 +13,17 @@
   },
   "dependencies": {
     "@jellycare/checks": "workspace:*",
+    "@jellycare/connectors": "workspace:*",
     "@jellycare/core": "workspace:*",
     "@jellycare/db": "workspace:*",
     "@jellycare/forms": "workspace:*",
-    "bullmq": "^5.34.5",
-    "ioredis": "^5.4.2",
-    "zod": "^3.24.1",
-    "drizzle-orm": "^0.38.3",
-    "playwright": "1.63.0",
+    "@jellycare/legal": "workspace:*",
     "@jellycare/reports": "workspace:*",
-    "@jellycare/connectors": "workspace:*"
+    "bullmq": "^5.34.5",
+    "drizzle-orm": "^0.38.3",
+    "ioredis": "^5.4.2",
+    "playwright": "1.63.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

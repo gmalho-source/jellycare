@@ -98,16 +98,28 @@ describe('claimNextReportRequest', () => {
     // Dois workers a reclamar ao mesmo tempo não podem levar o mesmo pedido,
     // senão o cliente recebe o relatório duas vezes.
     //
-    // A asserção é sobre este pedido e não sobre o total: a função varre a
-    // tabela inteira, como tem de ser, e a base de testes é partilhada com os
-    // outros pacotes a correr em paralelo.
+    // A base de testes é partilhada, e a função leva sempre o pedido mais
+    // antigo por reclamar — como tem de ser. Esperar que o primeiro que sai
+    // seja o nosso era assumir que a tabela estava vazia, e bastava um
+    // pedido pendente deixado por outro teste para isto falhar sem nada
+    // estar partido. Reclama-se até o nosso aparecer, e é a partir daí que
+    // se verifica a propriedade: reclamado uma vez, não volta a sair.
     const { request } = await requestReport(db, { siteId })
 
-    const primeiro = await claimNextReportRequest(db)
-    const segundo = await claimNextReportRequest(db)
+    const reclamados: string[] = []
+    for (let i = 0; i < 100; i++) {
+      const reclamado = await claimNextReportRequest(db)
+      if (!reclamado) break
+      reclamados.push(reclamado.id)
+      if (reclamado.id === request.id) break
+    }
+    expect(reclamados).toContain(request.id)
 
-    expect(primeiro?.id).toBe(request.id)
-    expect(segundo?.id).not.toBe(request.id)
+    for (let i = 0; i < 20; i++) {
+      const outra = await claimNextReportRequest(db)
+      if (!outra) break
+      expect(outra.id).not.toBe(request.id)
+    }
   })
 
   it('devolve a linha com os nomes do código, e não os da base de dados', async () => {

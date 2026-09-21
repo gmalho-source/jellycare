@@ -61,6 +61,14 @@ export const notificationChannelEnum = pgEnum('notification_channel', [
 
 export const memberRoleEnum = pgEnum('member_role', ['owner', 'admin', 'member', 'client'])
 
+export const legalDocumentKindEnum = pgEnum('legal_document_kind', [
+  'dpa',
+  'subprocessors',
+  'terms',
+])
+
+export const legalLocaleEnum = pgEnum('legal_locale', ['pt', 'en'])
+
 /* -------------------------------------------------------------------------- */
 /* Tenancy                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -77,6 +85,16 @@ export const organizations = pgTable('organizations', {
   /** Marca a apresentar no relatório. Vazio usa a da Jellycare. */
   brandName: text('brand_name'),
   brandUrl: text('brand_url'),
+  /**
+   * Referência ao DPA negociado em papel, quando existe.
+   *
+   * Um cliente com departamento jurídico próprio não aceita o nosso modelo
+   * num ecrã — manda o dele. Preenchido este campo, o fluxo online de
+   * aceitação desliga-se para esta organização e fica aqui a referência ao
+   * documento que vale. Sem isto, o primeiro cliente sério ficava bloqueado
+   * a olhar para um botão que não podia carregar.
+   */
+  negotiatedDpaRef: text('negotiated_dpa_ref'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -611,4 +629,109 @@ export const reportRequests = pgTable(
       .on(table.siteId)
       .where(sql`completed_at is null`),
   ],
+)
+
+/* -------------------------------------------------------------------------- */
+/* Documentos legais                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cada versão publicada de um documento legal, imutável.
+ *
+ * O corpo é guardado aqui e não lido do repositório em tempo de execução. A
+ * pergunta que este modelo tem de saber responder daqui a três anos é «que
+ * texto exato é que este cliente aceitou», e um ficheiro no repositório muda
+ * com o próximo commit. A linha, uma vez escrita, nunca é alterada: texto
+ * novo é versão nova.
+ *
+ * O `contentHash` existe para que uma alteração silenciosa ao ficheiro de
+ * origem seja detetada na sincronização, em vez de passar despercebida.
+ */
+export const legalDocuments = pgTable(
+  'legal_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: legalDocumentKindEnum('kind').notNull(),
+    locale: legalLocaleEnum('locale').notNull(),
+    version: integer('version').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    /** SHA-256 do corpo, em hexadecimal. */
+    contentHash: text('content_hash').notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Quando passa a valer. Uma data no futuro é o pré-aviso da cláusula 7.ª:
+     * a lista de subcontratantes nova fica visível e anunciada, mas só
+     * substitui a anterior no fim do prazo.
+     */
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('legal_documents_kind_locale_version_idx').on(
+      table.kind,
+      table.locale,
+      table.version,
+    ),
+    index('legal_documents_kind_idx').on(table.kind, table.effectiveAt),
+  ],
+)
+
+/**
+ * Quem aceitou o quê, quando, e de onde.
+ *
+ * A aceitação é da organização, mas quem carrega no botão é uma pessoa: as
+ * duas coisas ficam registadas, porque o artigo 28.º exige contrato com o
+ * responsável pelo tratamento e é preciso poder mostrar que quem aceitou
+ * tinha poderes para o fazer. `representedBy` guarda o cargo declarado nesse
+ * momento, e não o que estiver no perfil hoje.
+ */
+export const legalAcceptances = pgTable(
+  'legal_acceptances',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => legalDocuments.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Cargo declarado por quem aceitou, no momento em que aceitou. */
+    representedBy: text('represented_by').notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull().defaultNow(),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+  },
+  (table) => [
+    uniqueIndex('legal_acceptances_org_document_idx').on(table.organizationId, table.documentId),
+    index('legal_acceptances_org_idx').on(table.organizationId, table.acceptedAt),
+  ],
+)
+
+/**
+ * Oposição a um subcontratante ulterior novo.
+ *
+ * A cláusula 7.ª promete este direito. Uma promessa contratual sem sítio no
+ * produto onde ser exercida é uma promessa que se cumpre por email, mal e
+ * tarde — e ninguém consegue depois dizer quantas oposições houve.
+ */
+export const legalObjections = pgTable(
+  'legal_objections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => legalDocuments.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('legal_objections_org_idx').on(table.organizationId, table.createdAt)],
 )

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Brand } from '@/components/brand'
+import { getLegalState } from '@/lib/legal'
 import { requireUser } from '@/lib/session'
 import { signOut } from '../(app)/actions'
 
@@ -16,8 +18,29 @@ import { signOut } from '../(app)/actions'
  * A equipa da Jelly também pode entrar, de propósito: ver o que o cliente vê
  * antes de uma reunião vale mais do que qualquer descrição.
  */
-export default async function PortalLayout({ children }: { children: ReactNode }) {
+export default async function PortalLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
   const user = await requireUser()
+
+  // Sem acordo de tratamento aceite, o portal abre no acordo.
+  //
+  // O bloqueio é aqui e não no painel interno de propósito. Tratar dados sem
+  // contrato escrito é a infração; mas parar o trabalho da equipa porque o
+  // cliente ainda não carregou num botão punia quem não pode resolver. O
+  // cliente é quem aceita, e é a ele que se pede antes de mais nada.
+  //
+  // O ecrã de aceitação vive em `/legal/aceitar`, fora deste layout. Se
+  // vivesse dentro dele, este encaminhamento apontava para uma página que o
+  // volta a disparar — um ciclo. Estar fora resolve-o por construção, em vez
+  // de por uma exceção ao caminho que alguém um dia esquecia.
+  const pertenca = user.memberships.find((m) => m.role === 'client')
+  if (pertenca) {
+    const estado = await getLegalState(pertenca.organizationId)
+    if (estado.missing.length > 0 && !estado.negotiatedRef) redirect('/legal/aceitar')
+  }
 
   return (
     <div className="min-h-screen bg-ink-50">
@@ -31,6 +54,9 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           </Link>
 
           <div className="flex items-center gap-4 text-sm">
+            <Link href="/legal/aceitar" className="text-ink-400 hover:text-white">
+              Dados
+            </Link>
             <span className="hidden text-ink-400 sm:inline">{user.email}</span>
             <form action={signOut}>
               <button

@@ -1,4 +1,5 @@
 import { applyRetention, createDatabase, DEFAULT_RETENTION } from '@jellycare/db'
+import { syncLegalDocuments } from '@jellycare/legal'
 import { createBrowserPool } from './browser-pool.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
@@ -19,6 +20,23 @@ async function main(): Promise<void> {
   const connection = redisConnection(required('REDIS_URL'))
   await assertRedisReachable(connection)
   const region = process.env.JELLYCARE_REGION ?? 'eu-west'
+
+  // Publicar é fazer deploy: as versões novas dos documentos legais entram na
+  // base de dados aqui, logo a seguir às migrações. No worker e não no
+  // dashboard, pela mesma razão que as migrações: o dashboard pode ter várias
+  // instâncias, e o worker tem uma.
+  //
+  // Se falhar, o arranque falha. Um conflito de versão significa que alguém
+  // alterou um texto já aceite por um cliente, e continuar a correr com isso
+  // por resolver é pior do que não arrancar.
+  const documentos = await syncLegalDocuments(db)
+  if (documentos.inserted.length > 0) {
+    for (const documento of documentos.inserted) {
+      console.info(
+        `[legal] publicado ${documento.kind}/${documento.locale} v${documento.version}`,
+      )
+    }
+  }
 
   const notifier = new MultiChannelNotifier({
     ...(process.env.RESEND_API_KEY ? { resendApiKey: process.env.RESEND_API_KEY } : {}),

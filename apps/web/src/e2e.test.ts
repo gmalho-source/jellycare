@@ -478,6 +478,104 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 120_000)
 
+  it('trava o portal até o cliente aceitar o acordo, e guarda a prova', async () => {
+    // O acordo do artigo 28.º é entre o cliente, que é o responsável pelo
+    // tratamento, e a Jelly, que é a subcontratante. Quem aceita é o cliente:
+    // um acordo que nós aceitássemos em nome dele não provava nada.
+    //
+    // Organização e utilizador próprios deste teste. `legal_documents` é
+    // global — publicar um DPA passa a exigi-lo a toda a gente, que é
+    // precisamente o comportamento pretendido — e por isso o que este teste
+    // publica tem de sair no fim, senão contamina os outros ficheiros que
+    // correm contra a mesma base de dados.
+    const marca = Date.now()
+    const emailDpa = `dpa-${marca}@exemplo.pt`
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let documentoId = ''
+    let organizationId = ''
+    try {
+      const [org] = await db
+        .insert(schema.organizations)
+        .values({ name: `DPA ${marca}`, slug: `dpa-${marca}` })
+        .returning({ id: schema.organizations.id })
+      organizationId = org!.id
+
+      const [utilizador] = await db
+        .insert(schema.users)
+        .values({ email: emailDpa })
+        .returning({ id: schema.users.id })
+      await db.insert(schema.memberships).values({
+        organizationId,
+        userId: utilizador!.id,
+        role: 'client',
+      })
+
+      // A publicação é normalmente feita pela sincronização do worker; aqui
+      // insere-se diretamente, que é o que ela faz.
+      const [documento] = await db
+        .insert(schema.legalDocuments)
+        .values({
+          kind: 'dpa',
+          locale: 'pt',
+          version: 800_000 + Math.floor(Math.random() * 90_000),
+          title: `Acordo de teste ${marca}`,
+          body: `# Acordo de teste\n\nCláusula única ${marca} para efeitos de teste.`,
+          contentHash: 'a'.repeat(64),
+        })
+        .returning({ id: schema.legalDocuments.id })
+      documentoId = documento!.id
+
+      // Público: o jurídico do cliente tem de poder ler antes de haver conta.
+      const anonimo = await browser.newPage()
+      await anonimo.goto(`${baseUrl}/legal/dpa`)
+      expect(await anonimo.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+      await anonimo.close()
+
+      // Com documento publicado e por aceitar, a entrada no portal abre no
+      // acordo — inclusive vinda do link de entrada, que aponta para `/portal`.
+      const cliente = await entrarComo(emailDpa)
+      await cliente.waitForURL(`${baseUrl}/legal/aceitar`)
+      expect(await cliente.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+
+      await cliente.fill('input[name=representedBy]', 'Diretor de Marketing')
+      await cliente.check('input[name=confirma]')
+      await cliente.click('button[type=submit]')
+      // Aceite, o formulário deixa de existir — não há nada por aceitar — e
+      // o registo aparece no lugar dele, com o cargo declarado.
+      await cliente.waitForSelector('text=Diretor de Marketing')
+      expect(await cliente.isVisible('input[name=representedBy]')).toBe(false)
+
+      // Aceite, o portal abre.
+      await cliente.goto(`${baseUrl}/portal`)
+      await cliente.waitForURL(`${baseUrl}/portal`)
+
+      // E o comprovativo diz quem aceitou, com que cargo e quando.
+      await cliente.goto(`${baseUrl}/legal/comprovativo`)
+      expect(await cliente.isVisible('text=Diretor de Marketing')).toBe(true)
+      expect(await cliente.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+      await cliente.close()
+
+      const linhas = await db
+        .select({
+          representedBy: schema.legalAcceptances.representedBy,
+          documentId: schema.legalAcceptances.documentId,
+        })
+        .from(schema.legalAcceptances)
+        .where(eq(schema.legalAcceptances.organizationId, organizationId))
+      expect(linhas).toHaveLength(1)
+      expect(linhas[0]?.representedBy).toBe('Diretor de Marketing')
+      expect(linhas[0]?.documentId).toBe(documentoId)
+    } finally {
+      if (documentoId) {
+        await db
+          .delete(schema.legalAcceptances)
+          .where(eq(schema.legalAcceptances.documentId, documentoId))
+        await db.delete(schema.legalDocuments).where(eq(schema.legalDocuments.id, documentoId))
+      }
+      await close()
+    }
+  }, 120_000)
+
   it('mostra as verificações de segurança bloqueadas até o domínio estar provado', async () => {
     const page = await browser.newPage()
 

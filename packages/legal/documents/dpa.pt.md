@@ -1,38 +1,22 @@
-# Acordo de Subcontratação de Tratamento de Dados Pessoais
-
-> **Modelo.** Os campos entre `[ ]` são preenchidos por contrato. As marcações
-> `[a confirmar]` assinalam factos jurídicos que têm de ser verificados junto
-> do fornecedor antes da primeira utilização — não os invente.
->
-> Este modelo foi escrito a partir do que o Jellycare faz de facto. Os anexos
-> I a III descrevem o sistema tal como está em produção, e não uma intenção:
-> os prazos de conservação do Anexo I são os que `packages/db/src/retention.ts`
-> executa todos os dias, e a lista do Anexo III é a dos serviços que a
-> plataforma contacta. **Quando a infraestrutura mudar, os anexos mudam com
-> ela** — é por isso que vivem neste repositório e não numa pasta de contratos.
->
-> Deve ser validado por advogado antes da primeira assinatura.
-
----
-
 ## Partes
 
 **Responsável pelo tratamento** (adiante «Cliente»)
-[DENOMINAÇÃO SOCIAL], NIPC [NIF], com sede em [MORADA], representada por
-[NOME], na qualidade de [CARGO].
+A pessoa coletiva titular da conta Jellycare em nome da qual o presente
+Acordo é aceite, identificada no comprovativo de aceitação, que dele faz
+parte integrante e que indica a denominação, a pessoa que aceitou, a
+qualidade em que o fez e a data.
 
 **Subcontratante** (adiante «Jelly»)
 JELLY — DIGITAL AGENCY, LDA., pessoa coletiva n.º 509686605, com sede na Rua
-João de Freitas Branco, n.º 20 A/B, 1500-359 Lisboa, Portugal, representada
-por [NOME], na qualidade de [CARGO].
+João de Freitas Branco, n.º 20 A/B, 1500-359 Lisboa, Portugal.
 
 Em conjunto designadas «Partes».
 
 ## Considerandos
 
-1. As Partes celebraram em [DATA] um contrato de prestação de serviços de
-   manutenção, vigilância e monitorização de sítios Web (o «Contrato
-   Principal»), executado através da plataforma Jellycare.
+1. As Partes celebraram um contrato de prestação de serviços de manutenção,
+   vigilância e monitorização de sítios Web (o «Contrato Principal»),
+   executado através da plataforma Jellycare.
 2. A execução do Contrato Principal implica o tratamento, pela Jelly, de dados
    pessoais pelos quais o Cliente é responsável.
 3. O presente Acordo cumpre o disposto no artigo 28.º, n.º 3, do Regulamento
@@ -219,10 +203,20 @@ proteção de dados e consulta prévia à autoridade de controlo.
 3. Para a resolução de litígios é competente o foro da comarca de Lisboa,
    com expressa renúncia a qualquer outro.
 
-[LOCAL], [DATA]
+## Cláusula 16.ª — Forma da aceitação
 
-Pelo Cliente: ______________________
-Pela Jelly: ______________________
+1. O presente Acordo é celebrado por escrito em formato eletrónico, nos
+   termos do artigo 28.º, n.º 9, do RGPD.
+2. A aceitação é feita na plataforma por pessoa que declara ter poderes para
+   vincular o Cliente, e fica registada com a data, a hora, a qualidade
+   declarada e o endereço de origem.
+3. O comprovativo, acessível ao Cliente na plataforma, reproduz o texto
+   integral da versão aceite e o respetivo resumo criptográfico SHA-256, que
+   permite verificar a qualquer momento que o texto não foi alterado depois
+   de aceite.
+4. Uma versão nova deste Acordo não substitui a aceite: carece de nova
+   aceitação. Alterações à lista de subcontratantes seguem, essas, o
+   mecanismo da Cláusula 7.ª.
 
 ---
 
@@ -357,27 +351,14 @@ Executados diariamente pelo processo automático de retenção
 
 # Anexo III — Subcontratantes ulteriores autorizados
 
-Lista à data de [DATA]. A Jelly comunica ao Cliente qualquer alteração com o
-pré-aviso da Cláusula 7.ª.
+A lista em vigor está publicada em **https://jellycare.pt/legal/subcontratantes**
+e faz parte integrante do presente Acordo.
 
-| Subcontratante | Serviço prestado | Dados a que acede | Localização do tratamento | Mecanismo de transferência |
-|---|---|---|---|---|
-| **Fly.io** ([entidade a confirmar]) | Alojamento da aplicação e do processo de recolha | Todos os dados em trânsito e em memória durante a execução | Frankfurt, Alemanha (`fra`) | Não aplicável (EEE) — [confirmar entidade contratante e eventual acesso de suporte a partir dos EUA] |
-| **Neon** ([entidade a confirmar]) | Base de dados | Todos os dados conservados | [região a confirmar] | [a confirmar] |
-| **Upstash** ([entidade a confirmar]) | Fila de trabalho | Identificadores de sítio e tipo de verificação; sem dados de contacto | [região a confirmar] | [a confirmar] |
-| **Resend** ([entidade a confirmar]) | Envio de alertas e relatórios, e receção das mensagens de teste na caixa canária | Endereços de email dos destinatários indicados pelo Cliente e conteúdo das mensagens enviadas | [a confirmar] | [a confirmar — provável necessidade de Cláusulas Contratuais-Tipo] |
-| **Cloudflare** ([entidade a confirmar]) | DNS e camada de rede | Metadados de tráfego, incluindo endereços IP de quem acede ao painel e ao portal | [a confirmar] | [a confirmar] |
-| **WP Umbrella** ([entidade a confirmar]) | Inventário e vulnerabilidades conhecidas de componentes WordPress | Nome de anfitrião do sítio, plugins, temas e versões instaladas | [a confirmar] | [a confirmar] |
+Fica em documento próprio de propósito. A lista muda quando muda a
+infraestrutura, e o mecanismo da Cláusula 7.ª — pré-aviso de 30 dias e
+direito de oposição — só funciona se houver um sítio único onde ela vive e
+onde cada alteração fica datada. Uma cópia colada aqui ficaria desatualizada
+na primeira mudança, e as duas versões divergentes seriam ambas contratuais.
 
-**Nota sobre a cadeia WordPress.** Os dados de vulnerabilidades apresentados
-pela WP Umbrella têm origem, no todo ou em parte, em base de dados de
-terceiro (Patchstack). Essa entidade é subcontratante ulterior da WP Umbrella
-e não da Jelly; o Cliente pode consultar o acordo de tratamento da WP Umbrella
-para conhecer a respetiva cadeia. Esta entrada só é aplicável quando o sítio
-do Cliente seja WordPress e esteja associado a um projeto na WP Umbrella.
-
-**Nota sobre os limites deste anexo.** As marcações `[a confirmar]` são
-deliberadas: a entidade contratante, a região de tratamento e o mecanismo de
-transferência de cada fornecedor têm de ser lidos no respetivo acordo de
-tratamento antes de este anexo ser entregue a um cliente. Um anexo com uma
-localização errada é pior do que um anexo incompleto.
+A versão em vigor à data da aceitação deste Acordo fica registada com ela, e
+pode ser consultada no comprovativo.

@@ -1,48 +1,23 @@
-# Data Processing Agreement
-
-> **Template.** Fields in `[ ]` are completed per contract. `[to confirm]`
-> marks legal facts that must be verified with the vendor before first use —
-> do not invent them.
->
-> This template describes what Jellycare actually does. Annexes I to III
-> describe the system as deployed, not as intended: the retention periods in
-> Annex I are the ones `packages/db/src/retention.ts` enforces daily, and
-> Annex III lists the services the platform actually calls. **When the
-> infrastructure changes, the annexes change with it** — which is why they
-> live in this repository and not in a contracts folder.
->
-> This is the English counterpart of `docs/dpa-pt.md`. It is drafted on the
-> GDPR, which is the right basis for EU clients and for UAE clients who
-> offer goods or services into the EU or monitor behaviour there. For a UAE
-> client with no EU nexus, the applicable regime is Federal Decree-Law No. 45
-> of 2021 (or DIFC DP Law 2020 / ADGM DPR 2021 if the client is established
-> in one of those free zones), and the clauses on supervisory authorities,
-> international transfers and governing law have to be reworked accordingly.
-> That reworking is a decision for counsel, not a translation exercise.
->
-> To be reviewed by legal counsel before first signature.
-
----
-
 ## Parties
 
 **Controller** (the "Client")
-[LEGAL NAME], [company number], registered at [ADDRESS], represented by
-[NAME], [TITLE].
+The legal entity holding the Jellycare account on whose behalf this Agreement
+is accepted, identified in the acceptance record, which forms an integral
+part of this Agreement and states the entity, the person who accepted, the
+capacity in which they did so, and the date.
 
 **Processor** ("Jelly")
 JELLY — DIGITAL AGENCY, LDA., a private limited company incorporated in
 Portugal under registration and tax number 509686605, with registered office
-at Rua João de Freitas Branco, n.º 20 A/B, 1500-359 Lisbon, Portugal,
-represented by [NAME], [TITLE].
+at Rua João de Freitas Branco, n.º 20 A/B, 1500-359 Lisbon, Portugal.
 
 Together, the "Parties".
 
 ## Background
 
-1. On [DATE] the Parties entered into an agreement for website maintenance,
-   monitoring and surveillance services (the "Main Agreement"), delivered
-   through the Jellycare platform.
+1. The Parties entered into an agreement for website maintenance, monitoring
+   and surveillance services (the "Main Agreement"), delivered through the
+   Jellycare platform.
 2. Performing the Main Agreement requires Jelly to process personal data for
    which the Client is the controller.
 3. This Agreement gives effect to Article 28(3) of Regulation (EU) 2016/679
@@ -222,10 +197,20 @@ impact assessments and prior consultation with the supervisory authority.
 2. It is governed by [the law of Portugal / the law of [JURISDICTION]].
 3. The courts of [JURISDICTION] have exclusive jurisdiction.
 
-[PLACE], [DATE]
+## 16. Form of acceptance
 
-For the Client: ______________________
-For Jelly: ______________________
+1. This Agreement is concluded in writing in electronic form, in accordance
+   with Article 28(9) GDPR.
+2. Acceptance is given in the platform by a person who declares they have
+   authority to bind the Client, and is recorded with the date, time,
+   declared capacity and originating address.
+3. The acceptance record, available to the Client in the platform, reproduces
+   the full text of the accepted version together with its SHA-256 digest,
+   which allows anyone to verify at any time that the text has not changed
+   since it was accepted.
+4. A new version of this Agreement does not replace the accepted one: it
+   requires fresh acceptance. Changes to the sub-processor list follow the
+   mechanism in Clause 7 instead.
 
 ---
 
@@ -352,27 +337,15 @@ Enforced daily by the automated retention process
 
 # Annex III — Authorised sub-processors
 
-List as at [DATE]. Jelly notifies the Client of any change on the notice
-period in Clause 7.
+The list in force is published at
+**https://jellycare.pt/legal/subprocessors** and forms an integral part of
+this Agreement.
 
-| Sub-processor | Service | Data accessed | Location of processing | Transfer mechanism |
-|---|---|---|---|---|
-| **Fly.io** ([entity to confirm]) | Application and collection process hosting | All data in transit and in memory during execution | Frankfurt, Germany (`fra`) | Not applicable (EEA) — [confirm contracting entity and any US-based support access] |
-| **Neon** ([entity to confirm]) | Database | All stored data | [region to confirm] | [to confirm] |
-| **Upstash** ([entity to confirm]) | Job queue | Site identifiers and check types; no contact data | [region to confirm] | [to confirm] |
-| **Resend** ([entity to confirm]) | Sending alerts and reports, and receiving test messages in the canary inbox | Email addresses of the recipients nominated by the Client, and the content of messages sent | [to confirm] | [to confirm — Standard Contractual Clauses likely required] |
-| **Cloudflare** ([entity to confirm]) | DNS and network layer | Traffic metadata, including IP addresses of dashboard and portal users | [to confirm] | [to confirm] |
-| **WP Umbrella** ([entity to confirm]) | WordPress component inventory and known vulnerabilities | Site hostname, installed plugins, themes and versions | [to confirm] | [to confirm] |
+It is kept as a separate document on purpose. The list changes when the
+infrastructure changes, and the mechanism in Clause 7 — 30 days' notice and a
+right to object — only works if there is one place where the list lives and
+where each change is dated. A copy pasted here would be stale on the first
+change, and both divergent versions would be contractual.
 
-**Note on the WordPress chain.** The vulnerability data presented by WP
-Umbrella originates, wholly or in part, from a third-party database
-(Patchstack). That entity is a sub-processor of WP Umbrella, not of Jelly; the
-Client may consult WP Umbrella's own data processing agreement for that chain.
-This row applies only where the Client's site runs WordPress and is linked to
-a WP Umbrella project.
-
-**Note on the limits of this annex.** The `[to confirm]` markers are
-deliberate: each vendor's contracting entity, processing region and transfer
-mechanism must be read from its own data processing agreement before this
-annex is put in front of a client. An annex with the wrong location is worse
-than an incomplete one.
+The version in force when this Agreement is accepted is recorded with the
+acceptance and can be consulted in the acceptance record.
