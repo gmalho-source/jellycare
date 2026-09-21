@@ -29,6 +29,9 @@ importers:
       '@jellycare/checks':
         specifier: workspace:*
         version: link:../../packages/checks
+      '@jellycare/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@jellycare/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -84,6 +87,9 @@ importers:
       '@jellycare/checks':
         specifier: workspace:*
         version: link:../../packages/checks
+      '@jellycare/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@jellycare/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -139,6 +145,19 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.3)(lightningcss@1.32.0)
+
+  packages/connectors:
+    dependencies:
+      '@jellycare/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: ^5.7.2

@@ -1,4 +1,5 @@
 import { CHECK_REGISTRY } from '@jellycare/checks'
+import { CONNECTOR_CHECKS } from '@jellycare/connectors'
 import { FORM_CHECKS } from '@jellycare/forms'
 
 export interface CheckMeta {
@@ -24,6 +25,12 @@ export const ALL_CHECKS: CheckMeta[] = [
     defaultIntervalMinutes: check.definition.defaultIntervalMinutes,
   })),
   ...Object.values(FORM_CHECKS).map((check) => ({
+    type: check.type,
+    label: check.label,
+    access: check.access as 'verified',
+    defaultIntervalMinutes: check.defaultIntervalMinutes,
+  })),
+  ...Object.values(CONNECTOR_CHECKS).map((check) => ({
     type: check.type,
     label: check.label,
     access: check.access as 'verified',

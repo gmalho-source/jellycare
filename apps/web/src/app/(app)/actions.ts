@@ -17,6 +17,7 @@ import { z } from 'zod'
 import { appOrigin } from '@/lib/app-url'
 import { ALL_CHECKS } from '@/lib/checks'
 import { getDb } from '@/lib/db'
+import { listUmbrellaProjects } from '@/lib/umbrella'
 import {
   SESSION_COOKIE,
   assertMembership,
@@ -537,4 +538,91 @@ export async function setFormTestUrlsAction(
       : `${urls.length} ${urls.length === 1 ? 'página declarada' : 'páginas declaradas'}. O teste corre no próximo ciclo.`
 
   return rejected.length > 0 ? { message: base, rejected } : { message: base }
+}
+
+export interface ConnectorState {
+  message?: string
+  error?: string
+}
+
+/**
+ * Liga um site a um projeto da WP Umbrella, ou desliga-o.
+ *
+ * A ligação é manual e não por correspondência automática de hostname. Um
+ * site ligado ao projeto errado faz-nos reportar as vulnerabilidades de um
+ * cliente a outro, e um `base_url` parecido chega para isso acontecer. O
+ * administrador escolhe da lista, que traz o endereço de cada projeto para
+ * ele confirmar.
+ */
+export async function linkUmbrellaProjectAction(
+  _previous: ConnectorState,
+  formData: FormData,
+): Promise<ConnectorState> {
+  const user = await requireUser()
+
+  const siteId = String(formData.get('siteId') ?? '')
+  const projectId = String(formData.get('projectId') ?? '').trim()
+
+  if (!siteId) return { error: 'Site em falta.' }
+
+  const rows = await getDb()
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Não tem permissão para configurar este site.' }
+  }
+
+  if (!projectId) {
+    await getDb()
+      .delete(schema.connectors)
+      .where(and(eq(schema.connectors.siteId, siteId), eq(schema.connectors.type, 'wp_umbrella')))
+
+    // O inventário vai atrás: deixámos de ter fonte para ele, e mostrar um
+    // retrato que já ninguém atualiza é pior do que não mostrar nada.
+    await getDb().delete(schema.wpComponents).where(eq(schema.wpComponents.siteId, siteId))
+
+    revalidatePath(`/sites/${siteId}`)
+    return { message: 'Ligação removida. O inventário WordPress deixa de ser recolhido.' }
+  }
+
+  // O identificador é confrontado com a lista real antes de ser gravado. Não
+  // é cerimónia: um id que não existe faria o worker falhar todos os dias
+  // contra um projeto fantasma, e o painel guardava-o sem se queixar.
+  const { projects, unavailable } = await listUmbrellaProjects()
+  if (unavailable) {
+    return { error: `Não foi possível confirmar o projeto na WP Umbrella: ${unavailable}` }
+  }
+
+  const project = projects.find((candidate) => String(candidate.id) === projectId)
+  if (!project) {
+    return { error: 'Esse projeto não existe na conta da WP Umbrella.' }
+  }
+
+  await getDb()
+    .insert(schema.connectors)
+    .values({
+      siteId,
+      type: 'wp_umbrella',
+      externalId: projectId,
+      externalName: project.name,
+    })
+    .onConflictDoUpdate({
+      target: [schema.connectors.siteId, schema.connectors.type],
+      set: {
+        externalId: projectId,
+        externalName: project.name,
+        lastError: null,
+        lastSyncAt: null,
+      },
+    })
+
+  revalidatePath(`/sites/${siteId}`)
+  return { message: 'Site ligado. O inventário é recolhido no próximo ciclo.' }
 }

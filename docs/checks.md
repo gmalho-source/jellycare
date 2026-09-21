@@ -55,6 +55,48 @@ assinaturas conhecidas (lógica tipo Wappalyzer). Em WordPress, deteção de
 versões de plugins e temas por `readme.txt`, `style.css`, query strings de
 assets e ficheiros estáticos com versão no path.
 
+### 2.1b Inventário exato em WordPress — pela WP Umbrella
+
+**Implementado.** Para sites WordPress geridos pela Jelly, o inventário não é
+adivinhado por fingerprint: é lido da API pública da WP Umbrella, que já tem o
+plugin instalado nesses sites.
+
+Porque é que não escrevemos um plugin nosso: pô-lo-ia a correr com um segredo
+nosso dentro do WordPress de todos os clientes. Isso é uma posição de supply
+chain — se o nosso cofre vazar ou o plugin tiver um bug, o vector somos nós, em
+todos os sites ao mesmo tempo. Não é preciso ocupá-la para entregar o que o
+cliente quer saber, e a WP Umbrella já a ocupa, já mantém o plugin e já
+responde por ele.
+
+O que lemos, diariamente:
+
+- plugins e temas com versão instalada e versão disponível
+- vulnerabilidades conhecidas, da base de dados da Patchstack, com CVSS,
+  versão afetada, versão que corrige e referência
+
+Dois tipos de finding, de propósito diferentes:
+
+- **um por vulnerabilidade**, com a severidade derivada do CVSS nas faixas
+  oficiais do v3 (9.0+ crítico, 7.0–8.9 elevado, 4.0–6.9 médio). Uma a uma,
+  porque um crítico não pode desaparecer dentro de uma contagem. A versão
+  instalada entra no fingerprint: atualizar para uma versão que continua
+  vulnerável é um problema novo, não o mesmo a persistir.
+- **um agregado** para "N atualizações por aplicar", severidade média. Estar
+  desatualizado é dívida, não incidente, e vinte alertas de update ensinam o
+  cliente a ignorar alertas.
+
+A ligação site → projeto é manual, escolhida de uma lista que mostra o
+endereço de cada projeto. Não é emparelhada por hostname: ligar ao projeto
+errado faz-nos reportar a um cliente as vulnerabilidades de outro, e um
+endereço parecido chega para isso.
+
+O token é da conta da Jelly, um só, e vive nos segredos das duas apps como as
+outras chaves de API. A tabela `connectors` guarda o mapeamento e o estado da
+última recolha, não credenciais.
+
+**O que isto acrescenta ao RGPD:** a WP Umbrella e a Patchstack passam a ser
+subprocessadores e têm de ser nomeados no DPA de cada cliente WordPress.
+
 ### 2.2 Matching de CVEs — agentless (preciso) / interno (exato)
 As versões detetadas cruzam-se com:
 - **OSV.dev** e **NVD** para bibliotecas e frameworks genéricos

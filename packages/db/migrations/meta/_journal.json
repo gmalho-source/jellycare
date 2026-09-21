@@ -50,6 +50,13 @@
       "when": 1789990233165,
       "tag": "0006_luxuriant_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789998463844,
+      "tag": "0007_blushing_husk",
+      "breakpoints": true
     }
   ]
 }

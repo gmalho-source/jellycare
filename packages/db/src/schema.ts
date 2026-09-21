@@ -212,6 +212,76 @@ export const checkConfigs = pgTable(
  * particionada por mês e os runs sem findings expurgados aos 90 dias, conforme
  * a política de retenção em docs/riscos.md.
  */
+/**
+ * Ligação de um site a uma ferramenta externa que sabe coisas que nós, de
+ * fora, não conseguimos saber.
+ *
+ * Hoje só existe a WP Umbrella, que já tem o plugin instalado nos sites que a
+ * Jelly gere. Escrever um plugin nosso punha um segredo nosso a correr dentro
+ * do WordPress de todos os clientes — uma posição de supply chain que não
+ * precisamos de ocupar para entregar o que o cliente quer saber.
+ *
+ * As credenciais não estão aqui. O token é da Jelly, é um só, e vive nos
+ * segredos do worker como as outras chaves de API. Esta tabela guarda o
+ * mapeamento — que site nosso é que projeto deles — e o estado da última
+ * sincronização. No dia em que houver mais do que uma agência, é aqui que
+ * entram credenciais cifradas por organização, e não antes: cifra que ainda
+ * não é precisa é só mais uma coisa para se fazer mal.
+ */
+export const connectors = pgTable(
+  'connectors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Por agora `wp_umbrella`. Texto e não enum: o próximo há de vir. */
+    type: text('type').notNull(),
+    /** O identificador do lado de lá. */
+    externalId: text('external_id').notNull(),
+    /** Como a ferramenta externa chama a este site, para o painel confirmar a ligação. */
+    externalName: text('external_name'),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Um site liga-se uma vez a cada ferramenta. Duas ligações à mesma
+    // ferramenta seriam duas fontes de verdade para o mesmo inventário.
+    uniqueIndex('connectors_site_type_idx').on(table.siteId, table.type),
+  ],
+)
+
+/**
+ * O que está instalado num site WordPress.
+ *
+ * Substituído por inteiro a cada sincronização: é um retrato, não um
+ * histórico. O histórico de que precisamos vive nos findings, que já sabem
+ * quando um problema apareceu e quando desapareceu.
+ */
+export const wpComponents = pgTable(
+  'wp_components',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** `plugin`, `theme` ou `core`. */
+    kind: text('kind').notNull(),
+    /** Identificador estável do lado do WordPress. */
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    version: text('version'),
+    /** Preenchido só quando há atualização por aplicar. */
+    latestVersion: text('latest_version'),
+    active: boolean('active').notNull().default(true),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('wp_components_site_kind_key_idx').on(table.siteId, table.kind, table.key),
+  ],
+)
+
 export const checkRuns = pgTable(
   'check_runs',
   {

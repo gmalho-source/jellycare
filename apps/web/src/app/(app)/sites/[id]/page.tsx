@@ -12,10 +12,12 @@ import { latestReportRequest, listMembers, MAX_FORM_TEST_URLS } from '@jellycare
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
+import { listUmbrellaProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
+import { WordPressPanel } from './wordpress-panel'
 import { ReportPanel } from './report-panel'
 import { VerificationPanel } from './verification-panel'
 
@@ -47,6 +49,11 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const manageable = canManage(user, detail.site.organizationId)
   const members = await listMembers(getDb(), detail.site.organizationId)
   const lastRequest = await latestReportRequest(getDb(), detail.site.id)
+  // A lista de projetos só é precisa para quem pode configurar. Quem não pode
+  // não vê o seletor, e não vale um pedido a um terceiro por cada visita.
+  const umbrella = manageable
+    ? await listUmbrellaProjects()
+    : { projects: [], unavailable: undefined }
 
   const verification = detail.verified ? null : await getPendingVerification(id)
   const challenge =
@@ -216,6 +223,39 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
                 detail.forms.filter((form) => !form.excluded).map((form) => form.pageUrl),
               ),
             ]}
+            canManage={manageable}
+          />
+        </Card>
+
+        <Card>
+          <CardHeader title="WordPress" />
+          <WordPressPanel
+            siteId={detail.site.id}
+            linked={
+              detail.connector
+                ? {
+                    externalId: detail.connector.externalId,
+                    externalName: detail.connector.externalName,
+                  }
+                : null
+            }
+            lastSyncAt={detail.connector?.lastSyncAt ?? null}
+            lastError={detail.connector?.lastError ?? null}
+            options={umbrella.projects.map((project) => ({
+              id: project.id,
+              name: project.name,
+              baseUrl: project.baseUrl,
+              connectivity: project.connectivity,
+            }))}
+            {...(umbrella.unavailable ? { unavailable: umbrella.unavailable } : {})}
+            components={detail.wpComponents.map((component) => ({
+              kind: component.kind,
+              key: component.key,
+              name: component.name,
+              version: component.version,
+              latestVersion: component.latestVersion,
+              active: component.active,
+            }))}
             canManage={manageable}
           />
         </Card>

@@ -141,6 +141,10 @@ export interface SiteDetail {
   checks: (typeof schema.checkConfigs.$inferSelect)[]
   forms: (typeof schema.forms.$inferSelect)[]
   reports: SiteReport[]
+  /** Ligação a uma ferramenta externa, quando existe. Hoje só a WP Umbrella. */
+  connector: typeof schema.connectors.$inferSelect | null
+  /** Retrato do que está instalado, quando há conector que o saiba. */
+  wpComponents: (typeof schema.wpComponents.$inferSelect)[]
 }
 
 export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> {
@@ -150,7 +154,8 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
   const site = sites[0]
   if (!site) return null
 
-  const [findings, runs, checks, forms, verifications, reports] = await Promise.all([
+  const [findings, runs, checks, forms, verifications, reports, connectors, wpComponents] =
+    await Promise.all([
     db
       .select()
       .from(schema.findings)
@@ -196,7 +201,16 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
       .where(eq(schema.reports.siteId, siteId))
       .orderBy(desc(schema.reports.periodYear), desc(schema.reports.periodMonth))
       .limit(12),
-  ])
+      db
+        .select()
+        .from(schema.connectors)
+        .where(eq(schema.connectors.siteId, siteId))
+        .limit(1),
+      db
+        .select()
+        .from(schema.wpComponents)
+        .where(eq(schema.wpComponents.siteId, siteId)),
+    ])
 
   // Mais grave primeiro: quem abre a página de um site quer ver o que arde,
   // não a ordem em que a base de dados devolveu as linhas.
@@ -205,7 +219,17 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
     return bySeverity !== 0 ? bySeverity : b.lastSeenAt.getTime() - a.lastSeenAt.getTime()
   })
 
-  return { site, verified: verifications.length > 0, findings, runs, checks, forms, reports }
+  return {
+    site,
+    verified: verifications.length > 0,
+    findings,
+    runs,
+    checks,
+    forms,
+    reports,
+    connector: connectors[0] ?? null,
+    wpComponents,
+  }
 }
 
 export async function getPendingVerification(siteId: string) {

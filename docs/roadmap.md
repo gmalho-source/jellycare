@@ -77,13 +77,31 @@ gestão de incidentes.
 
 ---
 
-## Fase 3 — Profundidade WordPress (4–6 semanas)
+## Fase 3 — Profundidade WordPress
 
-**Objetivo:** igualar e ultrapassar o WP-Umbrella no terreno dele.
+**Objetivo revisto:** em vez de igualar o WP-Umbrella no terreno dele,
+sentarmo-nos por cima dele.
+
+A decisão mudou depois de olhar para a API pública deles: 26 endpoints com
+inventário, vulnerabilidades da Patchstack e updates. Construir o nosso plugin
+custava semanas e punha um segredo nosso a correr dentro do WordPress de todos
+os clientes. Pela API não ocupamos essa posição, e o que nos distingue passa a
+ser o que a Umbrella não faz: formulários com email canário e validação de
+entrega, corroboração de uptime entre regiões, reputação, TLS, o portal do
+cliente, o relatório white-label — e os sites que não são WordPress.
+
+O custo é dependência de um terceiro e mais um subprocessador no RGPD. A
+mitigação é o conector ser uma interface com uma implementação, em
+`@jellycare/connectors`, e não lógica da Umbrella espalhada pelo código.
 
 Âmbito:
-- plugin WordPress com autenticação HMAC e superfície mínima
-- inventário exato de core, plugins e temas
+- **inventário exato de plugins e temas pela API da WP Umbrella — IMPLEMENTADO**
+- **vulnerabilidades com CVSS, da Patchstack — IMPLEMENTADO**
+- updates geridos (`POST /projects/{id}/plugins/update`), que ficam para
+  depois: escrever no site de um cliente através de um terceiro merece o mesmo
+  cuidado que merecia o nosso próprio plugin
+- backups e integridade de ficheiros, também disponíveis na API deles
+- plugin próprio, só se algum dia a margem o justificar
 - file integrity monitoring com checksums oficiais
 - scan de malware no filesystem (YARA e heurísticas) e na base de dados
 - updates geridos com backup, staging, regressão visual e rollback

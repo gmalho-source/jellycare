@@ -1,4 +1,5 @@
 import { getCheck, uptimeCheck } from '@jellycare/checks'
+import { WP_INVENTORY_CHECK } from '@jellycare/connectors'
 import {
   runCheck,
   type CheckContext,
@@ -16,6 +17,7 @@ import {
 import type { Browser } from 'playwright'
 import { and, desc, eq, gte, isNull, ne, or } from 'drizzle-orm'
 import { runFormDelivery, runFormDiscovery, runFormTest } from './form-jobs.js'
+import { runWpInventory } from './wp-jobs.js'
 import { applyRegionCorroboration, toUptimeSample } from './uptime-region.js'
 import type { Notifier } from './channels.js'
 import {
@@ -46,6 +48,8 @@ export interface RunnerDeps {
   safeBrowsingApiKey?: string
   /** Chave da abuse.ch para o URLhaus. Também da plataforma. */
   urlhausAuthKey?: string
+  /** Token da conta Jelly na WP Umbrella, para o inventário WordPress. */
+  umbrellaToken?: string
 }
 
 /** O que o runner precisa de saber sobre uma verificação, venha ela de onde vier. */
@@ -258,8 +262,19 @@ async function execute(
         })
       case FORM_DELIVERY_CHECK:
         return await runFormDelivery(formDeps, site, config)
+      case WP_INVENTORY_CHECK:
+        return await runWpInventory(
+          {
+            db: deps.db,
+            now,
+            ...(deps.umbrellaToken ? { umbrellaToken: deps.umbrellaToken } : {}),
+            ...(deps.fetch ? { fetch: deps.fetch } : {}),
+          },
+          site,
+          config,
+        )
       default:
-        throw new Error(`Rotina de formulários desconhecida: ${checkType}`)
+        throw new Error(`Rotina desconhecida: ${checkType}`)
     }
   } catch (error) {
     return {

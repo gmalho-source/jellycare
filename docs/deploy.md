@@ -133,6 +133,25 @@ check que corre de cinco em cinco minutos não nota a diferença.
 Afinável sem deploy por `JELLYCARE_DRAIN_DELAY_SECONDS` e
 `JELLYCARE_STALLED_INTERVAL_MS`.
 
+### 3b. WP Umbrella
+
+O inventário e as vulnerabilidades dos sites WordPress vêm da API pública da
+WP Umbrella. O token gera-se no perfil da conta, em *Profile → Public API*, e
+precisa do scope `public_api`.
+
+O mesmo token vai aos segredos das **duas** apps:
+
+- `jellycare-worker` — recolhe o inventário e gera os findings
+- `jellycare-web` — lista os projetos para o painel oferecer a ligação
+
+```
+fly secrets set WP_UMBRELLA_TOKEN=... -a jellycare-worker
+fly secrets set WP_UMBRELLA_TOKEN=... -a jellycare-web
+```
+
+Sem o token, o check de WordPress não corre e o painel diz que não consegue
+obter a lista. Nenhuma das duas coisas parte o resto.
+
 ### 4. Resend
 
 Adicionar `jellycare.pt` como domínio de envio e publicar os registos DNS que o
