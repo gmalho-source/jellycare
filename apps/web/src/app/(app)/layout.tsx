@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Brand } from '@/components/brand'
 import { isClientOnly, requireUser } from '@/lib/session'
 import { signOut } from './actions'
 
@@ -12,19 +13,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-ink-200 bg-white">
+      <header className="bg-ink-900">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
           <Link href="/" className="flex items-baseline gap-2">
-            <span className="text-lg font-semibold tracking-tight text-jelly-500">Jellycare</span>
+            <Brand />
             <span className="text-xs text-ink-400">por Jelly</span>
           </Link>
 
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-ink-600">{user.email}</span>
+            <span className="text-ink-400">{user.email}</span>
             <form action={signOut}>
               <button
                 type="submit"
-                className="rounded-md px-2 py-1 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+                className="rounded-md px-2 py-1 text-ink-400 hover:bg-white/10 hover:text-white"
               >
                 Sair
               </button>

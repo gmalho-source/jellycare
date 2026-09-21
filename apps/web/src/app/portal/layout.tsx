@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { Brand } from '@/components/brand'
 import { requireUser } from '@/lib/session'
 import { signOut } from '../(app)/actions'
 
@@ -20,19 +21,19 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   return (
     <div className="min-h-screen bg-ink-50">
-      <header className="border-b border-ink-200 bg-white">
+      <header className="bg-ink-900">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
           <Link href="/portal" className="flex items-baseline gap-2">
-            <span className="text-lg font-semibold tracking-tight text-jelly-500">Jellycare</span>
+            <Brand />
             <span className="text-xs text-ink-400">manutenção e vigilância por Jelly</span>
           </Link>
 
           <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-ink-600 sm:inline">{user.email}</span>
+            <span className="hidden text-ink-400 sm:inline">{user.email}</span>
             <form action={signOut}>
               <button
                 type="submit"
-                className="rounded-md px-2 py-1 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+                className="rounded-md px-2 py-1 text-ink-400 hover:bg-white/10 hover:text-white"
               >
                 Sair
               </button>
