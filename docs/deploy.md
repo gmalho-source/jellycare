@@ -115,6 +115,24 @@ não deve passar pelo pooler.
 Base de dados Redis, região UE, com **eviction desligado**. O BullMQ guarda o
 estado dos jobs em Redis; com eviction ligado, o Redis pode apagar jobs a meio.
 
+**O Upstash cobra ao comando, e o BullMQ não conta com isso.** Por omissão o
+worker reabre a espera por trabalho de cinco em cinco segundos e procura jobs
+abandonados de trinta em trinta. Medido contra um Redis local, um worker
+parado — sem um único job — gastava **96 comandos por minuto**, cerca de
+quatro milhões por mês. O plano gratuito tem quinhentos mil, e chegou aos
+450 mil em três dias sem ter processado praticamente nada.
+
+O worker usa por isso `drainDelay: 60` e `stalledInterval: 300000`, o que
+desce o consumo em vazio para cerca de **2 comandos por minuto** (~90 mil por
+mês). Não há atraso nenhum a pagar por isto: o `bzpopmin` é bloqueante e
+devolve no instante em que chega um job — o que muda é só a frequência com
+que a espera é reaberta quando não chega nada. O preço real é a recuperação
+de um job abandonado, que passa de trinta segundos para cinco minutos, e um
+check que corre de cinco em cinco minutos não nota a diferença.
+
+Afinável sem deploy por `JELLYCARE_DRAIN_DELAY_SECONDS` e
+`JELLYCARE_STALLED_INTERVAL_MS`.
+
 ### 4. Resend
 
 Adicionar `jellycare.pt` como domínio de envio e publicar os registos DNS que o

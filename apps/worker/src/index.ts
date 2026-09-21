@@ -30,6 +30,14 @@ async function main(): Promise<void> {
   const worker = createCheckWorker({
     connection,
     concurrency: Number(process.env.JELLYCARE_CONCURRENCY ?? 5),
+    // Afináveis por variável de ambiente porque quem paga o Redis ao comando
+    // pode precisar de os mexer sem esperar por um deploy.
+    ...(process.env.JELLYCARE_DRAIN_DELAY_SECONDS
+      ? { drainDelaySeconds: Number(process.env.JELLYCARE_DRAIN_DELAY_SECONDS) }
+      : {}),
+    ...(process.env.JELLYCARE_STALLED_INTERVAL_MS
+      ? { stalledIntervalMs: Number(process.env.JELLYCARE_STALLED_INTERVAL_MS) }
+      : {}),
     process: async (data) => {
       const outcome = await executeCheckJob(
         {

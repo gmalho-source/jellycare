@@ -33,6 +33,32 @@ export function createCheckQueue(connection: ConnectionOptions): Queue<CheckJobD
   })
 }
 
+/**
+ * Quanto tempo o worker fica bloqueado à espera de trabalho antes de repetir
+ * o pedido ao Redis.
+ *
+ * O BullMQ usa por omissão cinco segundos, e isso pressupõe um Redis que se
+ * possui: reabrir a espera doze vezes por minuto não custa nada. O Upstash
+ * cobra ao comando, e medimos o que isso dá — um worker parado, sem um único
+ * job para processar, gastava 96 comandos por minuto, ou cerca de quatro
+ * milhões por mês. O plano gratuito tem quinhentos mil.
+ *
+ * Esperar sessenta segundos não atrasa nada: o `bzpopmin` é bloqueante e
+ * devolve no instante em que chega um job. O que muda é só a frequência com
+ * que a espera é reaberta quando não chega nada.
+ */
+const DRAIN_DELAY_SECONDS = 60
+
+/**
+ * De quanto em quanto tempo se procuram jobs abandonados.
+ *
+ * Um job fica "stalled" quando o worker morre a meio. Trinta segundos — a
+ * omissão — é um desperdício aqui: os checks correm de cinco em cinco minutos
+ * no melhor dos casos, e recuperar um job abandonado cinco minutos depois não
+ * muda nada para o cliente.
+ */
+const STALLED_INTERVAL_MS = 300_000
+
 export interface CheckWorkerOptions {
   connection: ConnectionOptions
   /**
@@ -40,7 +66,24 @@ export interface CheckWorkerOptions {
    * cliente, e a plataforma não deve ser a causa do problema que monitoriza.
    */
   concurrency?: number
+  /** Segundos de espera bloqueante. Ver `DRAIN_DELAY_SECONDS`. */
+  drainDelaySeconds?: number
+  /** Intervalo da procura de jobs abandonados. Ver `STALLED_INTERVAL_MS`. */
+  stalledIntervalMs?: number
   process: (data: CheckJobData, job: Job<CheckJobData>) => Promise<unknown>
+}
+
+/** As opções que o worker passa ao BullMQ, à parte para o teste as poder ler. */
+export function checkWorkerSettings(options: CheckWorkerOptions): {
+  concurrency: number
+  drainDelay: number
+  stalledInterval: number
+} {
+  return {
+    concurrency: options.concurrency ?? 5,
+    drainDelay: options.drainDelaySeconds ?? DRAIN_DELAY_SECONDS,
+    stalledInterval: options.stalledIntervalMs ?? STALLED_INTERVAL_MS,
+  }
 }
 
 export function createCheckWorker(options: CheckWorkerOptions): Worker<CheckJobData> {
@@ -50,7 +93,7 @@ export function createCheckWorker(options: CheckWorkerOptions): Worker<CheckJobD
     {
       connection: options.connection,
       prefix: QUEUE_PREFIX,
-      concurrency: options.concurrency ?? 5,
+      ...checkWorkerSettings(options),
     },
   )
 }
