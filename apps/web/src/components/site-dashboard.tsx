@@ -14,7 +14,20 @@ import { UptimeStrip } from './uptime-strip'
  * sobre uma janela deslizante em vez de um mês de calendário. Se fossem
  * calculados aqui à parte, mais cedo ou mais tarde o painel e o PDF
  * discordavam — e a discussão acontecia à frente do cliente.
+ *
+ * O mesmo componente serve o painel interno e o portal do cliente, com a
+ * audiência a decidir o que se mostra. Uma segunda versão para o portal era
+ * a via rápida e a errada: ao fim de duas alterações os dois painéis diziam
+ * números diferentes sobre o mesmo site, e é o cliente que descobre.
+ *
+ * O que a audiência `cliente` esconde não é informação sobre o site dele —
+ * é informação sobre nós. Uma verificação nossa que falhou, o nome do
+ * fornecedor de onde vem o inventário, o erro que ele devolveu: isso é
+ * matéria de operação, e é a mesma regra que já esconde a cobertura reduzida
+ * do portal.
  */
+
+export type Audiencia = 'equipa' | 'cliente' 
 
 const SEVERITY_LABEL: Record<Severity, string> = {
   critical: 'críticos',
@@ -69,8 +82,15 @@ function Tile({
   )
 }
 
-export function SiteDashboard({ data }: { data: DashboardData }) {
+export function SiteDashboard({
+  data,
+  audiencia = 'equipa',
+}: {
+  data: DashboardData
+  audiencia?: Audiencia
+}) {
   const { report, daily, certDaysRemaining, wordpress } = data
+  const interno = audiencia === 'equipa' 
   const { uptime, findings, forms, activity } = report
 
   const abertosGraves = findings.openBySeverity.critical + findings.openBySeverity.high
@@ -181,10 +201,18 @@ export function SiteDashboard({ data }: { data: DashboardData }) {
               ['Problemas resolvidos', String(findings.resolved)],
               ['Problemas novos', String(findings.opened)],
               ['Verificações corridas', String(activity.checksRun)],
-              [
-                'Verificações falhadas',
-                activity.checksFailed === 0 ? 'nenhuma' : String(activity.checksFailed),
-              ],
+              // Uma verificação que falhou é falha nossa, não do site. Conta
+              // para a equipa saber que tem trabalho; ao cliente diria que o
+              // número acima não é bem o que parece, sem lhe dar nada com que
+              // agir.
+              ...(interno
+                ? [
+                    [
+                      'Verificações falhadas',
+                      activity.checksFailed === 0 ? 'nenhuma' : String(activity.checksFailed),
+                    ] as const,
+                  ]
+                : []),
               ['Formulários testados', String(forms.submissions)],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between px-5 py-2.5 text-sm">
@@ -196,7 +224,7 @@ export function SiteDashboard({ data }: { data: DashboardData }) {
         </Card>
       </div>
 
-      {wordpress ? <WordPressMetrics snapshot={wordpress} /> : null}
+      {wordpress ? <WordPressMetrics snapshot={wordpress} interno={interno} /> : null}
     </div>
   )
 }
@@ -210,7 +238,13 @@ export function SiteDashboard({ data }: { data: DashboardData }) {
  * sempre — dados de ontem apresentados como se fossem de agora são pior do
  * que não os ter.
  */
-function WordPressMetrics({ snapshot }: { snapshot: NonNullable<DashboardData['wordpress']> }) {
+function WordPressMetrics({
+  snapshot,
+  interno,
+}: {
+  snapshot: NonNullable<DashboardData['wordpress']>
+  interno: boolean
+}) {
   const vulns = snapshot.vulnerabilities
   const totalVulns = vulns.critical + vulns.high + vulns.medium + vulns.low
 
@@ -269,8 +303,17 @@ function WordPressMetrics({ snapshot }: { snapshot: NonNullable<DashboardData['w
                 ? formatRelative(snapshot.lastSyncAt)
                 : 'ainda não houve'}
           </p>
+          {/* O cliente vê que os números podem estar desatualizados, que é o
+              que lhe importa para os ler. Não vê o nome do fornecedor nem a
+              mensagem de erro dele: é uma avaria nossa, e um erro de API em
+              bruto no portal só serve para o preocupar com o que não pode
+              resolver. */}
           <p className="mt-1 truncate text-xs text-ink-400">
-            {snapshot.lastError ?? snapshot.projectName ?? 'WP Umbrella'}
+            {interno
+              ? (snapshot.lastError ?? snapshot.projectName ?? 'WP Umbrella')
+              : snapshot.lastError
+                ? 'Estamos a tratar disso — os números abaixo podem estar desatualizados.'
+                : 'Recolhido automaticamente.'}
           </p>
         </div>
       </div>

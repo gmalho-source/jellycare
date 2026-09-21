@@ -50,6 +50,7 @@ describeE2E('fluxo de entrada e painel', () => {
   const email = `e2e-${Date.now()}@jelly.pt`
   const emailCliente = `cliente-${Date.now()}@exemplo.pt`
   let siteDeOutroCliente: string
+  let siteVerificado: string
 
   beforeAll(async () => {
     const seeded = await seed({
@@ -152,6 +153,71 @@ describeE2E('fluxo de entrada e painel', () => {
           })
           .returning({ id: schema.sites.id })
         siteDeOutroCliente = outroSite!.id
+
+        // Um segundo site na organização do cliente, este já com a
+        // propriedade provada: é a condição para o painel de métricas
+        // aparecer, no interno e no portal.
+        const [verificado] = await db
+          .insert(schema.sites)
+          .values({
+            organizationId: site!.organizationId,
+            label: 'Site verificado',
+            url: `https://verificado-${Date.now()}.exemplo.pt`,
+            hostname: `verificado-${Date.now()}.exemplo.pt`,
+            state: 'active',
+          })
+          .returning({ id: schema.sites.id })
+        siteVerificado = verificado!.id
+
+        await db.insert(schema.siteVerifications).values({
+          siteId: siteVerificado,
+          method: 'dns_txt',
+          token: `token-${Date.now()}`,
+          state: 'verified',
+          verifiedAt: new Date(),
+        })
+
+        // Uma verificação falhada e uma amostra em baixo: a falha é nossa e
+        // só a equipa a vê; a indisponibilidade é do site e o cliente vê-a.
+        await db.insert(schema.checkRuns).values([
+          {
+            siteId: siteVerificado,
+            checkType: 'uptime',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 5 * 60_000),
+            durationMs: 180,
+            metrics: { up: 1, statusCode: 200, responseTimeMs: 180 },
+          },
+          {
+            siteId: siteVerificado,
+            checkType: 'security_headers',
+            status: 'failed',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 6 * 60_000),
+            durationMs: 90,
+            error: 'ligação recusada',
+            metrics: {},
+          },
+        ])
+        await db.insert(schema.uptimeSamples).values([
+          {
+            siteId: siteVerificado,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 5 * 60_000),
+            up: true,
+            statusCode: 200,
+            responseTimeMs: 180,
+          },
+          {
+            siteId: siteVerificado,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 50 * 60_000),
+            up: false,
+            statusCode: 503,
+            failureReason: 'HTTP 503',
+          },
+        ])
       } finally {
         await close()
       }
@@ -379,6 +445,36 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.waitForSelector('h1')
     expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
     expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
+    await cliente.close()
+  }, 120_000)
+
+  it('dá ao cliente o mesmo painel de métricas, sem o que é falha nossa', async () => {
+    // O painel a 30 dias é o que justifica a avença: o cliente tem de o ver.
+    // O que não pode ver é a contabilidade das nossas próprias falhas — uma
+    // verificação que rebentou do nosso lado não é informação sobre o site
+    // dele, é sobre nós, e é a mesma regra que já esconde a cobertura
+    // reduzida do portal.
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}`)
+    await equipa.waitForSelector('h1')
+    expect(await equipa.isVisible('text=Disponibilidade dia a dia')).toBe(true)
+    expect(await equipa.isVisible('text=Verificações falhadas')).toBe(true)
+    await equipa.close()
+
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    await cliente.goto(`${baseUrl}/portal/sites/${siteVerificado}`)
+    await cliente.waitForSelector('h1')
+
+    // O que é dele, vê.
+    expect(await cliente.isVisible('text=Disponibilidade dia a dia')).toBe(true)
+    expect(await cliente.isVisible('text=Disponibilidade, 30 dias')).toBe(true)
+    expect(await cliente.isVisible('text=Interrupções')).toBe(true)
+    expect(await cliente.isVisible('text=O que foi feito')).toBe(true)
+    expect(await cliente.isVisible('text=Verificações corridas')).toBe(true)
+
+    // O que é nosso, não.
+    expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
     await cliente.close()
   }, 120_000)
 
