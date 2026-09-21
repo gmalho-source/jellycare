@@ -1,6 +1,6 @@
 'use server'
 
-import { buildChallenge, verifyOwnership } from '@jellycare/checks'
+import { buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
 import {
   grantAccess,
   parseFormTestUrls,
@@ -174,8 +174,11 @@ export async function checkVerification(
   const verification = pending[0]
   if (!verification) return { error: 'Não há verificação pendente para este site.' }
 
-  const result = await verifyOwnership({
-    method: verification.method,
+  // Tenta as duas vias com o mesmo token. Quem não controla o DNS do cliente
+  // só descobre que o TXT não é viável depois de tentar, e nessa altura não
+  // deve ter de trocar de método em lado nenhum: publica o ficheiro e carrega
+  // no mesmo botão.
+  const result = await verifyOwnershipAny({
     hostname: site.hostname,
     siteUrl: site.url,
     token: verification.token,
@@ -186,7 +189,11 @@ export async function checkVerification(
     .update(schema.siteVerifications)
     .set({
       lastCheckedAt: now,
-      ...(result.verified ? { state: 'verified' as const, verifiedAt: now } : {}),
+      // O método guardado passa a ser aquele por onde a prova entrou, e não o
+      // que foi escolhido na criação. É o que ficou registado como verdade.
+      ...(result.verified
+        ? { state: 'verified' as const, verifiedAt: now, method: result.method }
+        : {}),
     })
     .where(eq(schema.siteVerifications.id, verification.id))
 

@@ -57,9 +57,20 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
     : { projects: [], unavailable: undefined }
 
   const verification = detail.verified ? null : await getPendingVerification(id)
+  // As duas vias, com o mesmo token. A que foi escolhida na criação aparece
+  // primeiro; a outra fica disponível sem ninguém ter de trocar nada, porque
+  // a verificação aceita qualquer uma das duas.
   const challenge =
     verification && !detail.verified
       ? buildChallenge(verification.method, detail.site.hostname, verification.token)
+      : null
+  const alternative =
+    verification && !detail.verified
+      ? buildChallenge(
+          verification.method === 'dns_txt' ? 'http_file' : 'dns_txt',
+          detail.site.hostname,
+          verification.token,
+        )
       : null
 
   return (
@@ -77,7 +88,12 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
       </div>
 
       {challenge && (
-        <VerificationPanel siteId={detail.site.id} challenge={challenge} canManage={manageable} />
+        <VerificationPanel
+          siteId={detail.site.id}
+          challenge={challenge}
+          alternative={alternative!}
+          canManage={manageable}
+        />
       )}
 
       <Card>

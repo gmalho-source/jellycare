@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { mockFetch, type MockRoutes } from './test-utils.js'
 import {
   buildChallenge,
+  buildChallenges,
   generateVerificationToken,
   verificationFilePath,
   verifyOwnership,
+  verifyOwnershipAny,
 } from './verification.js'
 
 const TOKEN = 'jellycare-site-verification=0123456789abcdef0123456789abcdef'
@@ -150,5 +152,86 @@ describe('verifyOwnership — ficheiro', () => {
 
     expect(result.verified).toBe(false)
     expect(result.detail).toContain('Não foi possível obter')
+  })
+})
+
+describe('verifyOwnershipAny', () => {
+  const TOKEN = 'jellycare-site-verification=abc123'
+  const ENTRADA = { hostname: 'cliente.pt', siteUrl: 'https://cliente.pt', token: TOKEN }
+
+  const semDns = async () => {
+    throw new Error('ENOTFOUND')
+  }
+  const semFicheiro = (async () =>
+    new Response('não encontrado', { status: 404 })) as typeof globalThis.fetch
+
+  const comFicheiro = (async () =>
+    new Response(TOKEN, { status: 200 })) as typeof globalThis.fetch
+
+  it('aceita a prova por DNS e nem chega a pedir o ficheiro', async () => {
+    // O DNS vai primeiro porque não depende de o site estar a responder.
+    let pediu = false
+    const resultado = await verifyOwnershipAny(ENTRADA, {
+      resolveTxt: async () => [[TOKEN]],
+      fetchImpl: (async () => {
+        pediu = true
+        return new Response('', { status: 200 })
+      }) as typeof globalThis.fetch,
+    })
+
+    expect(resultado.verified).toBe(true)
+    expect(resultado.method).toBe('dns_txt')
+    expect(pediu).toBe(false)
+  })
+
+  it('aceita a prova por ficheiro quando o DNS não tem nada', async () => {
+    // É este o caso que motivou tudo: quem não controla o DNS do cliente só
+    // descobre que o TXT não é viável depois de tentar.
+    const resultado = await verifyOwnershipAny(ENTRADA, {
+      resolveTxt: semDns,
+      fetchImpl: comFicheiro,
+    })
+
+    expect(resultado.verified).toBe(true)
+    expect(resultado.method).toBe('http_file')
+  })
+
+  it('explica as duas falhas, e não só a última', async () => {
+    // Quem lê isto precisa de saber o que correu mal em cada via para
+    // escolher qual seguir.
+    const resultado = await verifyOwnershipAny(ENTRADA, {
+      resolveTxt: semDns,
+      fetchImpl: semFicheiro,
+    })
+
+    expect(resultado.verified).toBe(false)
+    expect(resultado.detail).toContain('Registo TXT')
+    expect(resultado.detail).toContain('Ficheiro')
+  })
+
+  it('recusa um ficheiro com o token errado', async () => {
+    const resultado = await verifyOwnershipAny(ENTRADA, {
+      resolveTxt: semDns,
+      fetchImpl: (async () =>
+        new Response('jellycare-site-verification=outro', {
+          status: 200,
+        })) as typeof globalThis.fetch,
+    })
+
+    expect(resultado.verified).toBe(false)
+  })
+})
+
+describe('buildChallenges', () => {
+  it('dá as duas instruções para o mesmo token', () => {
+    // O token é o mesmo nas duas vias: muda só onde é publicado. Se
+    // divergissem, provar por uma não provaria nada sobre a outra.
+    const token = 'jellycare-site-verification=xyz'
+    const { dns, file } = buildChallenges('cliente.pt', token)
+
+    expect(dns.token).toBe(token)
+    expect(file.token).toBe(token)
+    expect(dns.location).toContain('_jellycare.')
+    expect(file.location).toContain('/.well-known/')
   })
 })

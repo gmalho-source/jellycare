@@ -1,19 +1,36 @@
 'use client'
 
 import type { VerificationChallenge } from '@jellycare/checks'
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { checkVerification, type ActionState } from '../../actions'
 
+/**
+ * Prova de propriedade do domínio.
+ *
+ * As duas vias estão sempre disponíveis, com o mesmo token: muda só onde ele
+ * é publicado. Escolher o método na criação do site era uma decisão prematura
+ * — quem não controla o DNS do cliente, ou tem o domínio numa zona gerida por
+ * terceiros, só descobre que o TXT não é viável depois de tentar, e nessa
+ * altura não deve ter de trocar de método em lado nenhum.
+ *
+ * O DNS aparece primeiro por ser o mais comum, e o ficheiro fica a um clique,
+ * dobrado, para não encher o ecrã a quem não precisa dele.
+ */
 export function VerificationPanel({
   siteId,
   challenge,
+  alternative,
   canManage,
 }: {
   siteId: string
   challenge: VerificationChallenge
+  /** A outra via, com o mesmo token. */
+  alternative: VerificationChallenge
   canManage: boolean
 }) {
+  const porFicheiro = alternative.method === 'http_file'
   const [state, action, pending] = useActionState<ActionState, FormData>(checkVerification, {})
+  const [showAlternative, setShowAlternative] = useState(false)
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
@@ -29,8 +46,29 @@ export function VerificationPanel({
         {challenge.instructions}
       </pre>
 
+      {showAlternative ? (
+        <>
+          <p className="mt-3 text-xs font-medium text-amber-900">
+            Em alternativa, {porFicheiro ? 'pelo servidor' : 'por DNS'} — basta uma das duas:
+          </p>
+          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-amber-200 bg-white px-4 py-3 text-xs leading-relaxed text-ink-900">
+            {alternative.instructions}
+          </pre>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowAlternative(true)}
+          className="mt-3 text-xs font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
+        >
+          {porFicheiro
+            ? 'Não consegue mexer no DNS? Provar por ficheiro no servidor'
+            : 'Prefere o DNS? Provar por registo TXT'}
+        </button>
+      )}
+
       {canManage && (
-        <form action={action} className="mt-4 flex items-center gap-3">
+        <form action={action} className="mt-4 flex flex-wrap items-center gap-3">
           <input type="hidden" name="siteId" value={siteId} />
           <button
             type="submit"

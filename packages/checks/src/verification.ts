@@ -172,3 +172,47 @@ export async function verifyOwnership(
     ? verifyDnsTxt(input.hostname, input.token, options)
     : verifyHttpFile(input.siteUrl, input.token, options)
 }
+
+/**
+ * Aceita a prova por qualquer uma das duas vias.
+ *
+ * O token é o mesmo nas duas: muda só onde é publicado. Obrigar a escolher no
+ * momento de criar o site era uma decisão prematura — quem não controla o DNS
+ * do cliente, ou tem o domínio numa zona gerida por terceiros, só descobre que
+ * o TXT não é viável depois de tentar. Tentando as duas, a alternativa está
+ * sempre disponível sem ninguém ter de trocar nada.
+ *
+ * O DNS vai primeiro por ser o mais barato e o que não depende de o site estar
+ * a responder. O ficheiro serve de recurso, e é também o que funciona quando o
+ * DNS demora horas a propagar.
+ */
+export async function verifyOwnershipAny(
+  input: { hostname: string; siteUrl: string; token: string },
+  options: VerifyOptions = {},
+): Promise<VerificationResult> {
+  const dns = await verifyDnsTxt(input.hostname, input.token, options)
+  if (dns.verified) return dns
+
+  const file = await verifyHttpFile(input.siteUrl, input.token, options)
+  if (file.verified) return file
+
+  // As duas explicações, e não só a da última tentativa: quem está a ler isto
+  // precisa de saber o que falhou em cada via para escolher qual seguir.
+  return {
+    method: dns.method,
+    verified: false,
+    detail: `Nenhuma das duas provas foi encontrada. Registo TXT: ${dns.detail} Ficheiro: ${file.detail}`,
+    observed: [...(dns.observed ?? []), ...(file.observed ?? [])],
+  }
+}
+
+/** As duas instruções para o mesmo token, para o painel as mostrar lado a lado. */
+export function buildChallenges(
+  hostname: string,
+  token: string,
+): { dns: VerificationChallenge; file: VerificationChallenge } {
+  return {
+    dns: buildChallenge('dns_txt', hostname, token),
+    file: buildChallenge('http_file', hostname, token),
+  }
+}
