@@ -22,7 +22,8 @@
 [NOME], na qualidade de [CARGO].
 
 **Subcontratante** (adiante «Jelly»)
-[DENOMINAÇÃO SOCIAL DA JELLY], NIPC [NIF], com sede em [MORADA], representada
+JELLY — DIGITAL AGENCY, LDA., pessoa coletiva n.º 509686605, com sede na Rua
+João de Freitas Branco, n.º 20 A/B, 1500-359 Lisboa, Portugal, representada
 por [NOME], na qualidade de [CARGO].
 
 Em conjunto designadas «Partes».
@@ -215,7 +216,7 @@ proteção de dados e consulta prévia à autoridade de controlo.
 1. O presente Acordo entra em vigor na data da sua assinatura e vigora
    enquanto durar o tratamento.
 2. Aplica-se a lei portuguesa.
-3. Para a resolução de litígios é competente o foro da comarca de [COMARCA],
+3. Para a resolução de litígios é competente o foro da comarca de Lisboa,
    com expressa renúncia a qualquer outro.
 
 [LOCAL], [DATA]

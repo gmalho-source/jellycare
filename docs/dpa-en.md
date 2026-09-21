@@ -31,8 +31,10 @@
 [NAME], [TITLE].
 
 **Processor** ("Jelly")
-[JELLY LEGAL NAME], [company number], registered at [ADDRESS], represented by
-[NAME], [TITLE].
+JELLY — DIGITAL AGENCY, LDA., a private limited company incorporated in
+Portugal under registration and tax number 509686605, with registered office
+at Rua João de Freitas Branco, n.º 20 A/B, 1500-359 Lisbon, Portugal,
+represented by [NAME], [TITLE].
 
 Together, the "Parties".
 
