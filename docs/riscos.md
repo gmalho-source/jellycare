@@ -74,8 +74,25 @@ Mitigação:
   Screenshots: a política prevê 30 dias e não há nada a apagar, porque as
   capturas do submissor não são guardadas em lado nenhum. Há um teste que
   falha no dia em que alguém as começar a guardar sem acrescentar a limpeza.
-- DPA com cada cliente, a identificar a Jelly como subcontratante
-- servidores e fornecedores na UE sempre que possível
+- DPA com cada cliente, a identificar a Jelly como subcontratante. **Modelo
+  escrito** em `docs/dpa-pt.md` e `docs/dpa-en.md`, com os três anexos do
+  artigo 28.º: descrição do tratamento, medidas técnicas e organizativas, e
+  lista de subcontratantes ulteriores.
+
+  Os anexos vivem no repositório de propósito. O Anexo I copia os prazos que
+  `retention.ts` executa e o Anexo III lista os serviços que a plataforma
+  contacta — se ficassem numa pasta de contratos, a primeira mudança de
+  fornecedor tornava-os falsos sem ninguém dar por isso. Trocar de
+  alojamento, de base de dados ou de fonte de vulnerabilidades é alterar o
+  Anexo III no mesmo commit.
+
+  Por fazer, e não é trabalho de engenharia: confirmar no acordo de cada
+  fornecedor a entidade contratante, a região de tratamento e o mecanismo de
+  transferência — estão marcados `[a confirmar]` — e validação por advogado
+  antes da primeira assinatura.
+- servidores e fornecedores na UE sempre que possível. Aplicação e worker em
+  `fra` (Frankfurt); as regiões dos restantes fornecedores estão por
+  confirmar no Anexo III
 
 ## Falsos positivos
 
