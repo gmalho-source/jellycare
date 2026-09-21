@@ -15,6 +15,10 @@ import { checkVerification, type ActionState } from '../../actions'
  *
  * O DNS aparece primeiro por ser o mais comum, e o ficheiro fica a um clique,
  * dobrado, para não encher o ecrã a quem não precisa dele.
+ *
+ * As instruções quebram a linha em vez de rolarem na horizontal: num telemóvel
+ * o token ficava cortado a meio e só aparecia a quem descobrisse que aquela
+ * caixa rolava. O que está aqui existe para ser copiado.
  */
 export function VerificationPanel({
   siteId,
@@ -42,7 +46,7 @@ export function VerificationPanel({
         segurança exigem autorização comprovada do proprietário.
       </p>
 
-      <pre className="mt-4 overflow-x-auto rounded-lg border border-amber-200 bg-white px-4 py-3 text-xs leading-relaxed text-ink-900">
+      <pre className="mt-4 whitespace-pre-wrap break-all rounded-lg border border-amber-200 bg-white px-4 py-3 text-xs leading-relaxed text-ink-900">
         {challenge.instructions}
       </pre>
 
@@ -51,7 +55,7 @@ export function VerificationPanel({
           <p className="mt-3 text-xs font-medium text-amber-900">
             Em alternativa, {porFicheiro ? 'pelo servidor' : 'por DNS'} — basta uma das duas:
           </p>
-          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-amber-200 bg-white px-4 py-3 text-xs leading-relaxed text-ink-900">
+          <pre className="mt-1.5 whitespace-pre-wrap break-all rounded-lg border border-amber-200 bg-white px-4 py-3 text-xs leading-relaxed text-ink-900">
             {alternative.instructions}
           </pre>
         </>
@@ -59,7 +63,7 @@ export function VerificationPanel({
         <button
           type="button"
           onClick={() => setShowAlternative(true)}
-          className="mt-3 text-xs font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
+          className="mt-3 text-left text-xs font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
         >
           {porFicheiro
             ? 'Não consegue mexer no DNS? Provar por ficheiro no servidor'

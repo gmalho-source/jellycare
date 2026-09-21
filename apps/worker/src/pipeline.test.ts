@@ -1,3 +1,6 @@
+import { CHECK_REGISTRY } from '@jellycare/checks'
+import { CONNECTOR_CHECKS } from '@jellycare/connectors'
+import { FORM_CHECKS } from '@jellycare/forms'
 import { createDatabase, schema, type Database } from '@jellycare/db'
 import type { Queue } from 'bullmq'
 import { createServer, type Server } from 'node:http'
@@ -556,4 +559,41 @@ describe('checkJobId', () => {
     expect(checkJobId(data, base)).toBe(checkJobId(data, new Date('2026-09-17T10:00:50Z')))
     expect(checkJobId(data, base)).not.toBe(checkJobId(data, new Date('2026-09-17T10:01:10Z')))
   })
+})
+
+describe('registo de checks', () => {
+  /**
+   * Todo o tipo de check que o painel oferece tem de ser reconhecido pelo
+   * runner.
+   *
+   * Este teste existe porque o `wp_inventory` esteve em produção sem correr
+   * uma única vez: o job estava escrito, o dispatch estava escrito, e a
+   * consulta de metadados que vem antes dos dois não conhecia os checks de
+   * conector. O único sinal era uma linha nos logs a dizer "Check
+   * desconhecido", e nada no painel dizia que faltava alguma coisa.
+   *
+   * A lista de tipos vem das mesmas fontes que o painel usa para os oferecer,
+   * portanto um pacote de checks novo é apanhado aqui sem ninguém se lembrar
+   * de acrescentar nada.
+   */
+  it('o runner reconhece todos os tipos que o painel oferece', async () => {
+    const oferecidos = [
+      ...Object.values(CHECK_REGISTRY).map((check) => check.definition.type),
+      ...Object.values(FORM_CHECKS).map((check) => check.type),
+      ...Object.values(CONNECTOR_CHECKS).map((check) => check.type),
+    ]
+
+    const desconhecidos: string[] = []
+    for (const checkType of oferecidos) {
+      const outcome = await executeCheckJob(
+        { db, notifier: new RecordingNotifier(), region: 'eu-west' },
+        { siteId, checkType },
+      )
+      if (outcome.status === 'skipped' && outcome.reason.startsWith('Check desconhecido')) {
+        desconhecidos.push(checkType)
+      }
+    }
+
+    expect(desconhecidos).toEqual([])
+  }, 120_000)
 })

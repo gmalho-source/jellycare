@@ -231,7 +231,7 @@ describeE2E('fluxo de entrada e painel', () => {
 
     // A linha do site mostra o histórico agregado: disponibilidade das últimas
     // 24 horas e quando correu a última verificação.
-    const linha = page.locator('tr', { hasText: 'Site de teste' })
+    const linha = page.locator('li', { hasText: 'Site de teste' })
     await expect.poll(() => linha.textContent()).toContain('50,00%')
     expect(await linha.textContent()).toMatch(/minuto|hora|segundo/)
 

@@ -291,6 +291,11 @@ devolver 502, e nem reiniciar a máquina, nem destruí-la, nem deixar o Fly
 criar um builder novo noutra app resolveu — duas máquinas novas, o mesmo erro,
 sempre em `iad`. Construir no runner tira essa peça do caminho.
 
+**Nada vai a produção sem a suite verde.** O workflow de deploy corre os
+testes como primeiro job — a mesma definição que corre nos pull requests,
+reutilizada por `workflow_call` e não copiada, porque o `needs:` não atravessa
+workflows e duas cópias divergem. Testes vermelhos, deploy não corre.
+
 O worker vai sempre primeiro, porque é ele que aplica as migrações ao
 arrancar. Um dashboard novo contra um esquema velho é meio caminho para um
 erro que só aparece a quem está a usar.

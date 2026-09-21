@@ -12,8 +12,10 @@ name: Testes
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  # Chamado pelo Deploy. É o que permite ao deploy depender dos testes: o
+  # `needs:` não atravessa workflows, e duplicar a definição dos testes num
+  # segundo ficheiro era garantir que um dia divergiam.
+  workflow_call:
 
 jobs:
   test:
