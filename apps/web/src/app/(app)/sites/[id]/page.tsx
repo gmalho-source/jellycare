@@ -118,9 +118,9 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           <ul className="divide-y divide-ink-100">
             {detail.findings.map((finding) => (
               <li key={finding.id} className="px-5 py-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <SeverityBadge severity={finding.severity} />
                       <span className="font-medium text-ink-900">{finding.title}</span>
                       {finding.state === 'acknowledged' && (
@@ -344,21 +344,31 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
         {detail.runs.length === 0 ? (
           <EmptyState>Ainda não correu nenhuma verificação.</EmptyState>
         ) : (
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-ink-100">
-              {detail.runs.map((run) => (
-                <tr key={run.id}>
-                  <td className="px-5 py-2.5 text-ink-900">
+          <ul className="divide-y divide-ink-100">
+            {/* Cinco colunas de tabela não cabem em 390px: era isto que
+                rebentava a página no telemóvel. A mesma grelha empilha em
+                duas linhas no pequeno e alinha nas cinco colunas a partir de
+                `sm`. */}
+            {detail.runs.map((run) => {
+              const motivo = run.error ?? run.warnings.join(' · ')
+
+              return (
+                <li
+                  key={run.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 text-sm sm:grid-cols-[minmax(7rem,1fr)_9.5rem_minmax(0,2fr)_5rem_7rem] sm:gap-4 sm:px-5 sm:py-2.5"
+                >
+                  <span className="min-w-0 truncate text-ink-900">
                     {checkMeta(run.checkType)?.label ?? run.checkType}
-                  </td>
-                  <td className="px-5 py-2.5">
+                  </span>
+
+                  <span className="justify-self-end sm:justify-self-start">
                     <span
                       className={
                         run.status !== 'ok'
-                          ? 'sev-high rounded-full px-2 py-0.5 text-xs'
+                          ? 'sev-high whitespace-nowrap rounded-full px-2 py-0.5 text-xs'
                           : run.warnings.length > 0
-                            ? 'sev-medium rounded-full px-2 py-0.5 text-xs'
-                            : 'sev-ok rounded-full px-2 py-0.5 text-xs'
+                            ? 'sev-medium whitespace-nowrap rounded-full px-2 py-0.5 text-xs'
+                            : 'sev-ok whitespace-nowrap rounded-full px-2 py-0.5 text-xs'
                       }
                     >
                       {run.status !== 'ok'
@@ -367,23 +377,39 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
                           ? 'Cobertura reduzida'
                           : 'Concluída'}
                     </span>
-                  </td>
+                  </span>
+
                   {/* Os avisos só aparecem aqui: dizem respeito à plataforma e
                       não ao site, por isso nunca chegam ao portal do cliente
-                      nem ao relatório mensal. */}
-                  <td className="px-5 py-2.5 text-xs text-ink-400">
-                    {run.error ?? run.warnings.join(' · ')}
-                  </td>
-                  <td className="px-5 py-2.5 text-right tabular-nums text-xs text-ink-400">
-                    {run.durationMs} ms
-                  </td>
-                  <td className="px-5 py-2.5 text-right text-xs text-ink-400">
-                    {formatDateTime(run.startedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      nem ao relatório mensal.
+
+                      Limitado a três linhas. Um erro de API traz a resposta
+                      inteira do fornecedor — a do Safe Browsing ocupava meio
+                      ecrã de telemóvel e empurrava tudo o resto para baixo. O
+                      texto completo fica no `title` e nos registos. */}
+                  <p
+                    title={motivo}
+                    className={`col-span-2 line-clamp-3 min-w-0 break-words text-xs text-ink-400 sm:col-span-1 ${
+                      // Sem motivo não há nada a mostrar no telemóvel, mas a
+                      // célula tem de continuar a existir no grande: uma
+                      // coluna a menos numa linha desalinha a grelha inteira.
+                      motivo ? '' : 'hidden sm:block'
+                    }`}
+                  >
+                    {motivo}
+                  </p>
+
+                  <span className="col-span-2 flex items-center gap-1.5 text-xs text-ink-400 sm:contents">
+                    <span className="tabular-nums sm:text-right">{run.durationMs} ms</span>
+                    <span aria-hidden className="sm:hidden">
+                      ·
+                    </span>
+                    <span className="sm:text-right">{formatDateTime(run.startedAt)}</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </Card>
 

@@ -14,14 +14,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="bg-ink-900">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-          <Link href="/" className="flex items-center gap-2.5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
             <Brand />
-            <span className="text-xs text-ink-400">por Jelly</span>
+            <span className="hidden text-xs text-ink-400 sm:inline">por Jelly</span>
           </Link>
 
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-ink-400">{user.email}</span>
+          <div className="flex min-w-0 items-center gap-2 text-sm sm:gap-4">
+            {/* Truncado e não escondido: saber com que conta se está dentro
+                importa tanto no telemóvel como no computador. */}
+            <span className="max-w-[9rem] truncate text-ink-400 sm:max-w-none">{user.email}</span>
             <form action={signOut}>
               <button
                 type="submit"
@@ -34,7 +36,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </div>
   )
 }

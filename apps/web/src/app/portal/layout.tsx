@@ -22,10 +22,12 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   return (
     <div className="min-h-screen bg-ink-50">
       <header className="bg-ink-900">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
-          <Link href="/portal" className="flex items-center gap-2.5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+          <Link href="/portal" className="flex min-w-0 items-center gap-2.5">
             <Brand />
-            <span className="text-xs text-ink-400">manutenção e vigilância por Jelly</span>
+            <span className="hidden text-xs text-ink-400 sm:inline">
+              manutenção e vigilância por Jelly
+            </span>
           </Link>
 
           <div className="flex items-center gap-4 text-sm">
@@ -42,9 +44,9 @@ export default async function PortalLayout({ children }: { children: ReactNode }
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
 
-      <footer className="mx-auto max-w-5xl px-6 pb-10 text-xs text-ink-400">
+      <footer className="mx-auto max-w-5xl px-4 pb-10 text-xs text-ink-400 sm:px-6">
         Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o
         nosso trabalho e explicá-los faz parte dele.
       </footer>
