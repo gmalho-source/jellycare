@@ -19,7 +19,8 @@
     "react-dom": "^19.0.0",
     "zod": "^3.24.1",
     "@jellycare/forms": "workspace:*",
-    "@jellycare/connectors": "workspace:*"
+    "@jellycare/connectors": "workspace:*",
+    "@jellycare/reports": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
