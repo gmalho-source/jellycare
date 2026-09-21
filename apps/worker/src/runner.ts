@@ -1,5 +1,5 @@
 import { getCheck, uptimeCheck } from '@jellycare/checks'
-import { WP_INVENTORY_CHECK } from '@jellycare/connectors'
+import { CONNECTOR_CHECKS, WP_INVENTORY_CHECK } from '@jellycare/connectors'
 import {
   runCheck,
   type CheckContext,
@@ -75,6 +75,15 @@ function metaFor(checkType: string): CheckMeta | null {
       label: form.label,
       access: form.access,
       confirmationsRequired: form.confirmationsRequired,
+    }
+  }
+
+  const connector = CONNECTOR_CHECKS[checkType]
+  if (connector) {
+    return {
+      label: connector.label,
+      access: connector.access,
+      confirmationsRequired: connector.confirmationsRequired,
     }
   }
 
