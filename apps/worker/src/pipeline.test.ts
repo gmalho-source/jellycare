@@ -413,6 +413,21 @@ describe('disponibilidade multi-região', () => {
 })
 
 describe('agendador', () => {
+  /**
+   * Lote maior do que a base de testes.
+   *
+   * O agendador leva por omissão os cem checks mais vencidos de toda a base,
+   * que é o comportamento certo em produção. Só que a base de testes é
+   * partilhada e vai acumulando: com centenas de checks vencidos deixados
+   * por execuções anteriores, o check que este teste acabou de criar não
+   * entrava no lote e o teste falhava sem nada estar partido — punha em
+   * causa o agendador por causa da sujidade da base.
+   *
+   * Um lote grande faz o teste medir o que quer medir. O limite de cem
+   * continua a ser o de produção e tem teste próprio em `schedule.test.ts`.
+   */
+  const LOTE = 10_000
+
   beforeEach(async () => {
     await queue.obliterate({ force: true })
   })
@@ -435,7 +450,7 @@ describe('agendador', () => {
   it('enfileira o que está vencido e adia o próximo run', async () => {
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
 
-    const result = await tick({ db, queue, spreadMs: 0 })
+    const result = await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
 
     // Limite inferior e não igualdade: o número total é global e depende do
     // que os outros pacotes tiverem em curso.
@@ -454,7 +469,7 @@ describe('agendador', () => {
   it('não enfileira o que ainda não venceu', async () => {
     await addCheck('uptime', 5, new Date(Date.now() + 600_000))
 
-    await tick({ db, queue, spreadMs: 0 })
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
     expect(await queuedForSite()).toHaveLength(0)
   })
 
@@ -462,13 +477,13 @@ describe('agendador', () => {
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
 
     const now = new Date()
-    await tick({ db, queue, spreadMs: 0, now: () => now })
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE, now: () => now })
     // Simula dois schedulers em paralelo durante um deploy, ou um retry.
     await db
       .update(schema.checkConfigs)
       .set({ nextRunAt: new Date(Date.now() - 60_000) })
       .where(eq(schema.checkConfigs.siteId, siteId))
-    await tick({ db, queue, spreadMs: 0, now: () => now })
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE, now: () => now })
 
     expect(await queuedForSite()).toHaveLength(1)
   })
@@ -477,7 +492,7 @@ describe('agendador', () => {
     await addCheck('uptime', 5, null)
     await db.update(schema.sites).set({ state: 'archived' }).where(eq(schema.sites.id, siteId))
 
-    await tick({ db, queue, spreadMs: 0 })
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
     expect(await queuedForSite()).toHaveLength(0)
   })
 
@@ -486,7 +501,7 @@ describe('agendador', () => {
     await addCheck('tls', 1440, null)
     await addCheck('email_auth', 1440, null)
 
-    await tick({ db, queue, spreadMs: 60_000 })
+    await tick({ db, queue, spreadMs: 60_000, batchSize: LOTE })
 
     const jobs = await queuedForSite()
     const delayed = await Promise.all(jobs.map((job) => job.getState()))

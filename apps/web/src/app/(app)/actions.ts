@@ -9,6 +9,7 @@ import {
   revokeAccess,
   revokeSession,
   schema,
+  setNegotiatedDpaRef,
 } from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -785,4 +786,45 @@ export async function deleteSiteAction(
 
   revalidatePath('/')
   redirect('/')
+}
+
+/**
+ * Registar — ou retirar — a referência ao DPA negociado em papel.
+ *
+ * Só quem gere a organização. Marcar isto desliga o fluxo online de
+ * aceitação para o cliente, e é por isso que não é uma caixa que um cliente
+ * possa marcar a si próprio: seria uma forma de dispensar o acordo sem
+ * ninguém negociar nada.
+ *
+ * Campo vazio limpa a referência e devolve a organização ao fluxo normal.
+ */
+export async function setNegotiatedDpaAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({
+      organizationId: z.string().uuid(),
+      ref: z.string().trim().max(200).optional(),
+    })
+    .safeParse({
+      organizationId: formData.get('organizationId'),
+      ref: formData.get('ref') ?? undefined,
+    })
+  if (!parsed.success) return { error: 'Dados inválidos.' }
+
+  assertMembership(user, parsed.data.organizationId)
+  if (!canManage(user, parsed.data.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  const ref = parsed.data.ref ?? ''
+  await setNegotiatedDpaRef(getDb(), parsed.data.organizationId, ref.length > 0 ? ref : null)
+
+  revalidatePath('/sites')
+  return {
+    message: ref.length > 0 ? 'Referência guardada.' : 'Referência removida.',
+  }
 }

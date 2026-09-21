@@ -281,3 +281,50 @@ export async function documentsByIds(
   const rows = await db.select().from(legalDocuments).where(inArray(legalDocuments.id, ids))
   return rows as LegalDocumentRow[]
 }
+
+/**
+ * Marcar — ou desmarcar — que esta organização se rege por um contrato
+ * negociado à parte.
+ *
+ * Vazio limpa a marca e devolve a organização ao fluxo online. É a operação
+ * que faltava: a coluna sozinha era uma promessa sem interruptor.
+ */
+export async function setNegotiatedDpaRef(
+  db: Database,
+  organizationId: string,
+  ref: string | null,
+): Promise<void> {
+  await db
+    .update(organizations)
+    .set({ negotiatedDpaRef: ref && ref.trim().length > 0 ? ref.trim() : null })
+    .where(eq(organizations.id, organizationId))
+}
+
+export interface ObjectionRow {
+  id: string
+  reason: string
+  createdAt: Date
+  documentTitle: string
+  documentVersion: number
+}
+
+/** As oposições registadas por uma organização, mais recentes primeiro. */
+export async function organizationObjections(
+  db: Database,
+  organizationId: string,
+): Promise<ObjectionRow[]> {
+  const rows = await db
+    .select({
+      id: legalObjections.id,
+      reason: legalObjections.reason,
+      createdAt: legalObjections.createdAt,
+      documentTitle: legalDocuments.title,
+      documentVersion: legalDocuments.version,
+    })
+    .from(legalObjections)
+    .innerJoin(legalDocuments, eq(legalDocuments.id, legalObjections.documentId))
+    .where(eq(legalObjections.organizationId, organizationId))
+    .orderBy(desc(legalObjections.createdAt))
+
+  return rows
+}

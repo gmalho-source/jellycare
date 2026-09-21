@@ -8,10 +8,16 @@ import {
   formatDateTime,
   formatRelative,
 } from '@/components/ui'
-import { latestReportRequest, listMembers, MAX_FORM_TEST_URLS } from '@jellycare/db'
+import {
+  latestReportRequest,
+  listMembers,
+  organizationObjections,
+  MAX_FORM_TEST_URLS,
+} from '@jellycare/db'
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getSiteDashboard } from '@/lib/dashboard'
+import { getLegalState } from '@/lib/legal'
 import { getPendingVerification, getSiteDetail } from '@/lib/queries'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
@@ -19,6 +25,7 @@ import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
 import { SiteDashboard } from '@/components/site-dashboard'
+import { LegalPanel } from './legal-panel'
 import { SettingsPanel } from './settings-panel'
 import { WordPressPanel } from './wordpress-panel'
 import { ReportPanel } from './report-panel'
@@ -52,6 +59,10 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const manageable = canManage(user, detail.site.organizationId)
   const members = await listMembers(getDb(), detail.site.organizationId)
   const lastRequest = await latestReportRequest(getDb(), detail.site.id)
+  // Estado legal da organização, não do site. Fica ao lado dos acessos, que
+  // são a outra coisa desta página que pertence à organização e não ao site.
+  const legal = await getLegalState(detail.site.organizationId)
+  const objecoes = await organizationObjections(getDb(), detail.site.organizationId)
   // A lista de projetos só é precisa para quem pode configurar. Quem não pode
   // não vê o seletor, e não vale um pedido a um terceiro por cada visita.
   const umbrella = manageable
@@ -427,6 +438,31 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           />
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader title="Tratamento de dados" />
+        <LegalPanel
+          organizationId={detail.site.organizationId}
+          negotiatedRef={legal.negotiatedRef}
+          aceites={legal.accepted.map((aceite) => ({
+            title: aceite.title,
+            version: aceite.version,
+            acceptedAt: aceite.acceptedAt,
+            representedBy: aceite.representedBy,
+          }))}
+          emFalta={legal.missing.map((documento) => ({
+            title: documento.title,
+            version: documento.version,
+          }))}
+          oposicoes={objecoes.map((oposicao) => ({
+            id: oposicao.id,
+            reason: oposicao.reason,
+            createdAt: oposicao.createdAt,
+            documentTitle: oposicao.documentTitle,
+          }))}
+          canManage={manageable}
+        />
+      </Card>
 
       <AccessPanel
         organizationId={detail.site.organizationId}

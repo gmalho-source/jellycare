@@ -510,6 +510,30 @@ describeE2E('fluxo de entrada e painel', () => {
         role: 'client',
       })
 
+      // A equipa também pertence a esta organização: o estado legal aparece
+      // no painel do site, e é preciso um site para o painel existir.
+      const [daEquipa] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.email, email))
+        .limit(1)
+      await db.insert(schema.memberships).values({
+        organizationId,
+        userId: daEquipa!.id,
+        role: 'owner',
+      })
+      const [siteDpa] = await db
+        .insert(schema.sites)
+        .values({
+          organizationId,
+          label: `Site DPA ${marca}`,
+          url: `https://dpa-${marca}.exemplo.pt`,
+          hostname: `dpa-${marca}.exemplo.pt`,
+          state: 'active',
+        })
+        .returning({ id: schema.sites.id })
+      const siteDpaId = siteDpa!.id
+
       // A publicação é normalmente feita pela sincronização do worker; aqui
       // insere-se diretamente, que é o que ela faz.
       const [documento] = await db
@@ -530,6 +554,30 @@ describeE2E('fluxo de entrada e painel', () => {
       await anonimo.goto(`${baseUrl}/legal/dpa`)
       expect(await anonimo.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
       await anonimo.close()
+
+      // A equipa vê o estado no painel do site, que é onde vai antes de pôr
+      // o cliente a correr.
+      const painel = await entrarComo(email)
+      await painel.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await painel.waitForSelector('text=Tratamento de dados')
+      expect(await painel.isVisible('text=O cliente ainda não aceitou o acordo')).toBe(true)
+
+      // E pode registar que o cliente impôs o contrato dele, o que desliga o
+      // pedido de aceitação. Era a metade que faltava: a coluna existia sem
+      // nada que a escrevesse.
+      await painel.fill('input[name=ref]', 'DPA em papel, assinado a 12/03')
+      await painel.click('form:has(input[name=ref]) button[type=submit]')
+      await painel.waitForSelector('text=Referência guardada')
+
+      const semTrava = await entrarComo(emailDpa)
+      await semTrava.waitForURL(`${baseUrl}/portal`)
+      await semTrava.close()
+
+      // Retirada a referência pela mesma via, volta a travar.
+      await painel.fill('input[name=ref]', '')
+      await painel.click('form:has(input[name=ref]) button[type=submit]')
+      await painel.waitForSelector('text=Referência removida')
+      await painel.close()
 
       // Com documento publicado e por aceitar, a entrada no portal abre no
       // acordo — inclusive vinda do link de entrada, que aponta para `/portal`.
@@ -554,6 +602,12 @@ describeE2E('fluxo de entrada e painel', () => {
       expect(await cliente.isVisible('text=Diretor de Marketing')).toBe(true)
       expect(await cliente.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
       await cliente.close()
+
+      const depois = await entrarComo(email)
+      await depois.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await depois.waitForSelector('text=Acordo aceite')
+      expect(await depois.isVisible('text=Diretor de Marketing')).toBe(true)
+      await depois.close()
 
       const linhas = await db
         .select({
