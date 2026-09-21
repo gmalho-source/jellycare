@@ -1,0 +1,52 @@
+# Deploy para o Fly.
+#
+# A imagem é construída **no runner do GitHub** e não no builder remoto do
+# Fly. Não é preferência: o builder do Fly deixou-nos três vezes sem deploy
+# num único dia, com o proxy deles a não conseguir falar com a própria VM
+# (`http2 error: frame with invalid size`), e nem destruir a máquina nem criar
+# um builder novo resolveu. Construir aqui tira essa peça do caminho — o
+# runner tem Docker, e o `--local-only` empurra a imagem directamente para o
+# registo do Fly.
+#
+# Precisa do segredo FLY_API_TOKEN no repositório (Settings → Secrets and
+# variables → Actions). Use um token de organização: o deploy toca em duas
+# apps e num registo, e um token por app não chega.
+name: Deploy
+
+on:
+  # Manual, a partir de qualquer ramo. É o que permite pôr este ramo em
+  # produção sem esperar por um merge.
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  # Dois deploys ao mesmo tempo dão uma corrida entre migrações e arranque.
+  # Espera-se pelo anterior em vez de o cancelar, porque um deploy cancelado a
+  # meio deixa máquinas em versões diferentes.
+  group: deploy-fly
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # O worker primeiro, sempre. É ele que aplica as migrações ao arrancar,
+      # e um dashboard novo contra um esquema velho é meio caminho para um
+      # erro que só aparece a quem está a usar.
+      - name: Deploy do worker
+        run: flyctl deploy --config fly/worker.toml --local-only --wait-timeout 10m
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy do dashboard
+        run: flyctl deploy --config fly/web.toml --local-only --wait-timeout 10m
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

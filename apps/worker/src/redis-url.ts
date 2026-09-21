@@ -1,0 +1,115 @@
+import type { ConnectionOptions } from 'bullmq'
+
+/**
+ * Opções de ligação ao Redis a partir de um URL.
+ *
+ * O detalhe que interessa é o esquema. `rediss://`, com dois esses, significa
+ * TLS obrigatório — é o que o Upstash e a maioria dos Redis geridos dão. Sem
+ * ligar o TLS do lado do cliente a ligação é simplesmente recusada, e o worker
+ * morre no arranque sem chegar a processar nada.
+ */
+export function redisConnection(url: string): ConnectionOptions {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    // Nunca reenviar o valor original. O erro nativo do `new URL` inclui a
+    // string inteira na mensagem, e essa string tem a password lá dentro — foi
+    // assim que uma credencial do Upstash foi parar aos logs em produção.
+    throw new Error(
+      'REDIS_URL não é um URL válido. O Upstash mostra a linha de comando ' +
+        'completa (`redis-cli --tls -u ...`); o que se guarda no segredo é só ' +
+        'o endereço, no formato rediss://default:<password>@<host>:6379.',
+    )
+  }
+
+  const connection: {
+    host: string
+    port: number
+    username?: string
+    password?: string
+    tls?: Record<string, never>
+  } = {
+    host: parsed.hostname,
+    port: Number(parsed.port || 6379),
+  }
+
+  // O Upstash põe `default` como utilizador. O ioredis autentica com password
+  // só, mas mandar o utilizador quando ele existe evita depender disso.
+  if (parsed.username) connection.username = decodeURIComponent(parsed.username)
+  if (parsed.password) connection.password = decodeURIComponent(parsed.password)
+  if (parsed.protocol === 'rediss:') connection.tls = {}
+
+  return connection
+}
+
+/**
+ * Confirma que o Redis responde, antes de o worker dizer que está a correr.
+ *
+ * Sem isto a falha é silenciosa e é a pior de todas: o ioredis reconecta para
+ * sempre, o `queue.add` do agendador fica pendurado à espera de uma ligação
+ * que nunca vem, e o worker anuncia-se no arranque e nunca mais escreve nada.
+ * Máquina viva, zero trabalho feito, zero erros. Numa plataforma que existe
+ * para dar por falhas alheias, é inaceitável não dar pelas próprias.
+ *
+ * Rebentar é a resposta certa: o Fly reinicia a máquina e o erro fica no log.
+ */
+export async function assertRedisReachable(
+  connection: ConnectionOptions,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const { Redis } = await import('ioredis')
+  const probe = new Redis({
+    ...(connection as Record<string, unknown>),
+    lazyConnect: true,
+    connectTimeout: timeoutMs,
+    maxRetriesPerRequest: 1,
+    // Sem isto, uma ligação recusada volta a ser tentada indefinidamente e a
+    // sonda nunca devolve — exatamente o problema que ela existe para evitar.
+    retryStrategy: () => null,
+  })
+
+  // O erro chega por `connect()`; sem este ouvinte o ioredis ainda o emite
+  // como evento não tratado e suja o log com a mesma informação duas vezes.
+  probe.on('error', () => {})
+
+  try {
+    await probe.connect()
+    await probe.ping()
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error)
+    throw new Error(`Não foi possível ligar ao Redis: ${motivo}.${diagnostico(connection)}`)
+  } finally {
+    probe.disconnect()
+  }
+}
+
+/**
+ * Pista sobre a forma da ligação, para o erro dizer o que está errado em vez
+ * de mandar conferir tudo.
+ *
+ * Nunca inclui a password nem o URL: só o que se observa da configuração.
+ */
+function diagnostico(connection: ConnectionOptions): string {
+  const options = connection as Record<string, unknown>
+  const host = typeof options.host === 'string' ? options.host : ''
+
+  if (!('tls' in options)) {
+    const upstash = host.endsWith('.upstash.io')
+    return (
+      ' A ligação foi tentada sem TLS, porque o REDIS_URL usa `redis://` e não' +
+      ' `rediss://`.' +
+      (upstash
+        ? ' O Upstash fecha ligações sem TLS — é quase de certeza isto. Repare' +
+          ' que a linha `redis-cli --tls -u redis://...` que ele mostra põe o' +
+          ' TLS numa flag à parte; num URL isso escreve-se `rediss://`.'
+        : ' Se o servidor exigir TLS, é isto.')
+    )
+  }
+
+  if (!options.password) {
+    return ' A ligação foi tentada sem password: o REDIS_URL não traz credenciais.'
+  }
+
+  return ' Confirme o REDIS_URL e se o servidor está acessível a partir desta região.'
+}

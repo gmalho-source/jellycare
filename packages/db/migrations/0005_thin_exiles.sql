@@ -1,0 +1,1 @@
+ALTER TABLE "report_requests" ADD COLUMN "recipients" jsonb DEFAULT '[]'::jsonb NOT NULL;
