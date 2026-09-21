@@ -269,6 +269,42 @@ fly secrets set -a jellycare-worker \
 
 Deploy:
 
+## Deploy pelo GitHub Actions
+
+**É esta a forma normal de fazer deploy.** O workflow está em
+`.github/workflows/deploy.yml` e corre manualmente (Actions → Deploy → Run
+workflow) ou sozinho em cada push para `main`.
+
+Precisa do segredo `FLY_API_TOKEN` no repositório, em *Settings → Secrets and
+variables → Actions*. Tem de ser um token de organização — o deploy toca em
+duas apps e no registo de imagens, e um token por app não chega:
+
+```
+fly tokens create org jelly-977
+```
+
+**A imagem é construída no runner do GitHub, com `--local-only`, e não no
+builder remoto do Fly.** Não é preferência. O builder do Fly bloqueou-nos três
+vezes num único dia: o proxy deles deixou de conseguir falar com a própria VM
+(`http2 error: frame with invalid size`), o `_ping` do Docker passou a
+devolver 502, e nem reiniciar a máquina, nem destruí-la, nem deixar o Fly
+criar um builder novo noutra app resolveu — duas máquinas novas, o mesmo erro,
+sempre em `iad`. Construir no runner tira essa peça do caminho.
+
+O worker vai sempre primeiro, porque é ele que aplica as migrações ao
+arrancar. Um dashboard novo contra um esquema velho é meio caminho para um
+erro que só aparece a quem está a usar.
+
+Nota: o `workflow_dispatch` só aparece no separador Actions quando o ficheiro
+existe no ramo por omissão. Enquanto `deploy.yml` não estiver em `main`, o
+botão não existe.
+
+### Deploy a partir de uma máquina local
+
+Continua a funcionar, e é a saída quando o Actions está indisponível. A partir
+da rede de quem faz o deploy o WireGuard costuma funcionar, e aí o flyctl fala
+com o builder por dentro em vez do caminho público:
+
 ```bash
 fly deploy -c fly/worker.toml   # primeiro: aplica as migrações
 fly deploy -c fly/web.toml
