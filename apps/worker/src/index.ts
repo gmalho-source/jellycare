@@ -2,6 +2,7 @@ import { applyRetention, createDatabase, DEFAULT_RETENTION } from '@jellycare/db
 import { syncLegalDocuments } from '@jellycare/legal'
 import { ensureCheckConfigs } from './check-configs.js'
 import { createBrowserPool } from './browser-pool.js'
+import { createThrottledLogger, errorKey } from './log-throttle.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
 import { executeCheckJob } from './runner.js'
@@ -105,11 +106,28 @@ async function main(): Promise<void> {
     console.error(`[${job?.data.checkType}] ${job?.data.siteId}: falhou — ${error.message}`)
   })
 
+  /**
+   * Os erros de infraestrutura, estrangulados.
+   *
+   * Quando o Redis recusa, recusa *tudo*, e a mesma linha repete-se milhares
+   * de vezes por minuto. A primeira sai na hora; as iguais são contadas e a
+   * contagem sai com a seguinte. Ver `log-throttle.ts`.
+   */
+  const infra = createThrottledLogger()
+
+  // A fila e o worker são EventEmitters e não tinham ouvinte de `error`.
+  // Sem ouvinte, cada falha de ligação chega ao Node em bruto, com a pilha
+  // inteira — foi assim que dezoito horas de Redis recusado deram catorze
+  // milhões de linhas. E um `error` sem ouvinte num EventEmitter é, por
+  // omissão, uma exceção que derruba o processo.
+  queue.on('error', (error) => infra.error(errorKey('Erro da fila', error), error))
+  worker.on('error', (error) => infra.error(errorKey('Erro do worker', error), error))
+
   const scheduler = startScheduler({
     db,
     queue,
     intervalMs: Number(process.env.JELLYCARE_SCHEDULER_INTERVAL_MS ?? 30_000),
-    onError: (error) => console.error('Falha no agendador:', error),
+    onError: (error) => infra.error(errorKey('Falha no agendador', error), error),
   })
 
   // Os relatórios não passam pelo agendador de verificações: não são

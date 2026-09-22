@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { HealthBadge, formatRelative, formatUptime } from '@/components/ui'
+import { SchedulerBanner } from '@/components/scheduler-banner'
 import { listSites } from '@/lib/queries'
+import { getSchedulerHealth } from '@/lib/scheduler-health'
 import { requireUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +16,15 @@ const STATE_LABEL: Record<string, string> = {
 
 export default async function SitesPage() {
   const user = await requireUser()
-  const sites = await listSites(user.memberships.map((membership) => membership.organizationId))
+  const [sites, agendador] = await Promise.all([
+    listSites(user.memberships.map((membership) => membership.organizationId)),
+    getSchedulerHealth(),
+  ])
+
+  // Com a monitorização parada, os números são os da última passagem. Dizer
+  // «nenhum com problemas abertos» em cima disso é a afirmação que o painel
+  // manteve durante dezoito horas enquanto não verificava nada.
+  const aVigiar = agendador.status === 'ok'
 
   // Primeiro o que precisa de atenção. Quem abre o painel de manhã quer ver o
   // que arde, não a lista por ordem alfabética.
@@ -28,15 +38,19 @@ export default async function SitesPage() {
 
   return (
     <div className="space-y-6">
+      <SchedulerBanner health={agendador} />
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Sites</h1>
           <p className="mt-1 text-sm text-ink-600">
             {sites.length === 0
               ? 'Ainda não há sites em monitorização.'
-              : comProblemas === 0
-                ? `${sites.length} ${sites.length === 1 ? 'site' : 'sites'} em monitorização, nenhum com problemas abertos.`
-                : `${comProblemas} de ${sites.length} ${sites.length === 1 ? 'site' : 'sites'} com problemas abertos.`}
+              : !aVigiar
+                ? `${sites.length} ${sites.length === 1 ? 'site' : 'sites'} — números da última passagem, ver o aviso acima.`
+                : comProblemas === 0
+                  ? `${sites.length} ${sites.length === 1 ? 'site' : 'sites'} em monitorização, nenhum com problemas abertos.`
+                  : `${comProblemas} de ${sites.length} ${sites.length === 1 ? 'site' : 'sites'} com problemas abertos.`}
           </p>
         </div>
 
