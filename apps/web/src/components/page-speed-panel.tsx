@@ -102,10 +102,16 @@ function Vital({
 
 /** A série da pontuação, pequena, só para se ver se está a subir ou a descer. */
 function Serie({ points }: { points: PageSpeedPoint[] }) {
-  if (points.length < 2) return null
+  // Menos de três medições não dão uma forma. Duas são uma reta por
+  // definição, e uma reta não diz nada que o «+12 pontos» ao lado não diga
+  // melhor — no ecrã lia-se como um traço separador e não como dados.
+  if (points.length < 3) return null
 
   const largura = 320
-  const altura = 44
+  // Alta o suficiente para a escala fixa de 0 a 100 deixar ver a variação
+  // real: a 44px, vinte pontos de diferença desenhavam oito pixéis e a série
+  // lia-se como uma reta.
+  const altura = 64
   const x = (indice: number) => (indice / (points.length - 1)) * largura
   // Escala fixa de 0 a 100, porque é essa a escala da pontuação. Ajustá-la ao
   // intervalo observado fazia uma oscilação de dois pontos parecer um
@@ -120,7 +126,7 @@ function Serie({ points }: { points: PageSpeedPoint[] }) {
     <svg
       viewBox={`0 0 ${largura} ${altura}`}
       preserveAspectRatio="none"
-      className="mt-3 h-11 w-full"
+      className="mt-4 h-16 w-full"
       role="img"
       aria-label={`Pontuação ao longo de ${points.length} medições`}
     >
@@ -133,6 +139,18 @@ function Serie({ points }: { points: PageSpeedPoint[] }) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      {/* Um ponto por medição: sem eles a linha parecia contínua e escondia
+          que cada vértice é uma passagem diária, não uma interpolação. */}
+      {points.map((ponto, indice) => (
+        <circle
+          key={ponto.measuredAt.toISOString()}
+          cx={x(indice)}
+          cy={y(ponto.score)}
+          r={2.5}
+          fill="#17171c"
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
     </svg>
   )
 }
@@ -172,9 +190,13 @@ export function PageSpeedPanel({ history }: { history: PageSpeedHistory }) {
               </>
             )}
           </p>
-          <Serie points={points} />
         </div>
       </div>
+
+      {/* A série fica à largura toda e não ao lado do mostrador: espremida na
+          coluna do texto, no telemóvel, lia-se como um risco solto em vez de
+          uma linha que sobe ou desce. */}
+      <Serie points={points} />
 
       <ul className="mt-4">
         <Vital
