@@ -1,211 +1,248 @@
 {
- "/projects": {
-  "code": "success",
-  "data": [
-   {
-    "base_url": "https://example.com",
-    "name": "Example Website",
-    "source_domain": "example.com",
-    "id": 123,
-    "hosting": "AWS",
-    "is_currently_down": false,
-    "is_disconnected": false,
-    "connectivity": {
-     "status": "paired",
-     "last_ping_at": "2024-01-20T15:45:00Z"
-    },
-    "count_php_issues": 2,
-    "latest_downtime": "2024-01-15T10:30:00Z",
-    "latest_ping": 250,
-    "latest_performance_score": 85.5,
-    "user_id_wp_login": 456,
-    "created_at": "2023-12-01T09:00:00Z",
-    "starred": true,
-    "userId": 789,
-    "labels": [
-     "production",
-     "client-a"
-    ],
-    "plugins": [
-     {
-      "version": "2.1.0",
-      "key": "woocommerce",
-      "slug": "woocommerce",
-      "need_update": true,
-      "is_active": true
-     }
-    ],
-    "themes": [
-     {
-      "id": "twentytwentythree",
-      "version": "1.2",
-      "stylesheet": "twentytwentythree",
-      "latest_version": "1.3",
-      "template": "twentytwentythree",
-      "is_active": true
-     }
-    ],
-    "warnings": {
-     "wordpress_version": "6.4.2",
-     "php_current_version": "8.1",
-     "php_recommended_version": "8.2",
-     "php_is_secure": true,
-     "php_is_supported": true,
-     "is_ssl": true,
-     "is_indexable": true,
-     "is_up_to_date": false,
-     "defined_wp_debug": false
-    },
-    "last_synchronization": {
-     "date": "2024-01-20T15:45:00Z",
-     "date_with_success": "2024-01-20T15:45:00Z",
-     "date_with_success_timestamp": 1705766700
-    },
-    "vulnerabilities": {
-     "plugins": [],
-     "themes": [],
-     "wordpress": []
-    },
-    "maintenanceCustomer": {
-     "id": "cust_123",
-     "company_name": "ACME Corp",
-     "firstname": "John",
-     "lastname": "Doe",
-     "website_url": "https://acme.com"
-    }
-   }
-  ]
- },
- "/projects/{projectId}/plugins": {
-  "code": "success",
-  "data": [
-   {
-    "id": "plugin123",
-    "name": "Example Plugin",
-    "key": "example-plugin/example-plugin.php",
-    "is_active": true,
-    "version": "2.1.0",
-    "require_wp_version": "5.8",
-    "require_php_version": "7.4",
-    "need_update": {
-     "id": "w.org/plugins/example-plugin",
-     "url": "https://wordpress.org/plugins/example-plugin/",
-     "slug": "example-plugin",
-     "plugin": "example-plugin/example-plugin.php",
-     "tested": "6.7.1",
-     "package": "https://downloads.wordpress.org/plugin/example-plugin.2.2.0.zip",
-     "new_version": "2.2.0",
-     "requires_php": "7.4"
-    }
-   },
-   {
-    "id": "plugin456",
-    "name": "Another Plugin",
-    "key": "another-plugin/another-plugin.php",
-    "is_active": false,
-    "version": "1.5.0",
-    "require_wp_version": "5.6",
-    "require_php_version": "7.2",
-    "need_update": {}
-   }
-  ],
-  "links": {
-   "pagination": {
-    "first": "https://public-api.wp-umbrella.com/projects/1/plugins?page=1&per_page=10",
-    "last": "https://public-api.wp-umbrella.com/projects/1/plugins?page=1&per_page=10"
-   }
-  }
- },
- "/projects/{projectId}/themes": {
-  "code": "success",
-  "data": [
-   {
-    "id": 1,
-    "name": "Twenty Twenty-Four",
-    "is_active": true,
-    "version": "1.2.0",
-    "latest_version": "1.3.0",
-    "require_wp_version": "6.4",
-    "require_php_version": "7.4",
-    "author": "WordPress.org",
-    "author_uri": "https://wordpress.org",
-    "theme_uri": "https://wordpress.org/themes/twentytwentyfour/"
-   }
-  ],
-  "links": {
-   "pagination": {
-    "first": "https://public-api.wp-umbrella.com/projects/1/themes?page=1&per_page=10",
-    "last": "https://public-api.wp-umbrella.com/projects/1/themes?page=1&per_page=10"
-   }
-  }
- },
- "/projects/{projectId}/vulnerabilities": {
-  "code": "success",
-  "data": {
-   "plugin_vulnerabilities": [
-    {
-     "plugin": {
-      "id": 1,
-      "name": "contact-form-7",
-      "version": "5.7.0",
-      "latest_version": "5.8.0"
-     },
-     "vulnerabilities": [
+  "/projects": {
+    "code": "success",
+    "data": [
       {
-       "title": "Cross-Site Scripting (XSS)",
-       "description": "A stored XSS vulnerability...",
-       "disclosure_date": "2024-01-15",
-       "cvss_score": 6.1,
-       "version_affected_in": "<= 5.7.0",
-       "version_fixed_in": "5.7.1",
-       "patchstack_id": 12345,
-       "patchstack_url": "https://patchstack.com/database/vulnerability/12345"
+        "base_url": "https://example.com",
+        "name": "Example Website",
+        "source_domain": "example.com",
+        "id": 123,
+        "hosting": "AWS",
+        "is_currently_down": false,
+        "is_disconnected": false,
+        "connectivity": {
+          "status": "paired",
+          "last_ping_at": "2024-01-20T15:45:00Z"
+        },
+        "count_php_issues": 2,
+        "latest_downtime": "2024-01-15T10:30:00Z",
+        "latest_ping": 250,
+        "latest_performance_score": 85.5,
+        "user_id_wp_login": 456,
+        "created_at": "2023-12-01T09:00:00Z",
+        "starred": true,
+        "userId": 789,
+        "labels": [
+          "production",
+          "client-a"
+        ],
+        "plugins": [
+          {
+            "version": "2.1.0",
+            "key": "woocommerce",
+            "slug": "woocommerce",
+            "need_update": true,
+            "is_active": true
+          }
+        ],
+        "themes": [
+          {
+            "id": "twentytwentythree",
+            "version": "1.2",
+            "stylesheet": "twentytwentythree",
+            "latest_version": "1.3",
+            "template": "twentytwentythree",
+            "is_active": true
+          }
+        ],
+        "warnings": {
+          "wordpress_version": "6.4.2",
+          "php_current_version": "8.1",
+          "php_recommended_version": "8.2",
+          "php_is_secure": true,
+          "php_is_supported": true,
+          "is_ssl": true,
+          "is_indexable": true,
+          "is_up_to_date": false,
+          "defined_wp_debug": false
+        },
+        "last_synchronization": {
+          "date": "2024-01-20T15:45:00Z",
+          "date_with_success": "2024-01-20T15:45:00Z",
+          "date_with_success_timestamp": 1705766700
+        },
+        "vulnerabilities": {
+          "plugins": [],
+          "themes": [],
+          "wordpress": []
+        },
+        "maintenanceCustomer": {
+          "id": "cust_123",
+          "company_name": "ACME Corp",
+          "firstname": "John",
+          "lastname": "Doe",
+          "website_url": "https://acme.com"
+        }
       }
-     ]
-    }
-   ],
-   "theme_vulnerabilities": [
-    {
-     "theme": {
-      "id": 1,
-      "name": "flavor",
-      "version": "1.0.0",
-      "latest_version": "1.1.0"
-     },
-     "vulnerabilities": [
-      {
-       "title": "Arbitrary File Upload",
-       "description": "An arbitrary file upload vulnerability...",
-       "disclosure_date": "2024-02-10",
-       "cvss_score": 9.8,
-       "version_affected_in": "<= 1.0.0",
-       "version_fixed_in": "1.0.1",
-       "patchstack_id": 67890,
-       "patchstack_url": "https://patchstack.com/database/vulnerability/67890"
-      }
-     ]
-    }
-   ],
-   "wordpress_vulnerabilities": {
-    "wordpress": {
-     "version": "6.4.0",
-     "latest_version": "6.5.0"
-    },
-    "vulnerabilities": [
-     {
-      "title": "SQL Injection",
-      "description": "An SQL injection vulnerability...",
-      "disclosure_date": "2024-03-01",
-      "cvss_score": 7.5,
-      "version_affected_in": "<= 6.4.0",
-      "version_fixed_in": "6.4.1",
-      "patchstack_id": 11111,
-      "patchstack_url": "https://patchstack.com/database/vulnerability/11111"
-     }
     ]
-   },
-   "last_scan_date": "2024-03-15T10:30:00.000Z",
-   "scan_in_progress": false
+  },
+  "/projects/{projectId}/plugins": {
+    "code": "success",
+    "data": [
+      {
+        "id": "plugin123",
+        "name": "Example Plugin",
+        "key": "example-plugin/example-plugin.php",
+        "is_active": true,
+        "version": "2.1.0",
+        "require_wp_version": "5.8",
+        "require_php_version": "7.4",
+        "need_update": {
+          "id": "w.org/plugins/example-plugin",
+          "url": "https://wordpress.org/plugins/example-plugin/",
+          "slug": "example-plugin",
+          "plugin": "example-plugin/example-plugin.php",
+          "tested": "6.7.1",
+          "package": "https://downloads.wordpress.org/plugin/example-plugin.2.2.0.zip",
+          "new_version": "2.2.0",
+          "requires_php": "7.4"
+        }
+      },
+      {
+        "id": "plugin456",
+        "name": "Another Plugin",
+        "key": "another-plugin/another-plugin.php",
+        "is_active": false,
+        "version": "1.5.0",
+        "require_wp_version": "5.6",
+        "require_php_version": "7.2",
+        "need_update": {}
+      }
+    ],
+    "links": {
+      "pagination": {
+        "first": "https://public-api.wp-umbrella.com/projects/1/plugins?page=1&per_page=10",
+        "last": "https://public-api.wp-umbrella.com/projects/1/plugins?page=1&per_page=10"
+      }
+    }
+  },
+  "/projects/{projectId}/themes": {
+    "code": "success",
+    "data": [
+      {
+        "id": 1,
+        "name": "Twenty Twenty-Four",
+        "is_active": true,
+        "version": "1.2.0",
+        "latest_version": "1.3.0",
+        "require_wp_version": "6.4",
+        "require_php_version": "7.4",
+        "author": "WordPress.org",
+        "author_uri": "https://wordpress.org",
+        "theme_uri": "https://wordpress.org/themes/twentytwentyfour/"
+      }
+    ],
+    "links": {
+      "pagination": {
+        "first": "https://public-api.wp-umbrella.com/projects/1/themes?page=1&per_page=10",
+        "last": "https://public-api.wp-umbrella.com/projects/1/themes?page=1&per_page=10"
+      }
+    }
+  },
+  "/projects/{projectId}/vulnerabilities": {
+    "code": "success",
+    "data": {
+      "plugin_vulnerabilities": [
+        {
+          "plugin": {
+            "id": 1,
+            "name": "contact-form-7",
+            "version": "5.7.0",
+            "latest_version": "5.8.0"
+          },
+          "vulnerabilities": [
+            {
+              "title": "Cross-Site Scripting (XSS)",
+              "description": "A stored XSS vulnerability...",
+              "disclosure_date": "2024-01-15",
+              "cvss_score": 6.1,
+              "version_affected_in": "<= 5.7.0",
+              "version_fixed_in": "5.7.1",
+              "patchstack_id": 12345,
+              "patchstack_url": "https://patchstack.com/database/vulnerability/12345"
+            }
+          ]
+        }
+      ],
+      "theme_vulnerabilities": [
+        {
+          "theme": {
+            "id": 1,
+            "name": "flavor",
+            "version": "1.0.0",
+            "latest_version": "1.1.0"
+          },
+          "vulnerabilities": [
+            {
+              "title": "Arbitrary File Upload",
+              "description": "An arbitrary file upload vulnerability...",
+              "disclosure_date": "2024-02-10",
+              "cvss_score": 9.8,
+              "version_affected_in": "<= 1.0.0",
+              "version_fixed_in": "1.0.1",
+              "patchstack_id": 67890,
+              "patchstack_url": "https://patchstack.com/database/vulnerability/67890"
+            }
+          ]
+        }
+      ],
+      "wordpress_vulnerabilities": {
+        "wordpress": {
+          "version": "6.4.0",
+          "latest_version": "6.5.0"
+        },
+        "vulnerabilities": [
+          {
+            "title": "SQL Injection",
+            "description": "An SQL injection vulnerability...",
+            "disclosure_date": "2024-03-01",
+            "cvss_score": 7.5,
+            "version_affected_in": "<= 6.4.0",
+            "version_fixed_in": "6.4.1",
+            "patchstack_id": 11111,
+            "patchstack_url": "https://patchstack.com/database/vulnerability/11111"
+          }
+        ]
+      },
+      "last_scan_date": "2024-03-15T10:30:00.000Z",
+      "scan_in_progress": false
+    }
+  },
+  "/projects/{projectId}/backups": {
+    "code": "success",
+    "data": [
+      {
+        "id": "clx1abc123",
+        "date": "2026-04-15T03:00:00.000Z",
+        "date_finished": "2026-04-15T03:05:32.000Z",
+        "status": "FINISHED",
+        "trigger_type": "AUTOMATIC",
+        "wordpress_version": "6.7.1",
+        "count_plugin": 12,
+        "count_post": 45,
+        "count_attachment": 230,
+        "size_bytes": 524288000,
+        "error_code": null
+      },
+      {
+        "id": "clx0zzz999",
+        "date": "2026-04-14T03:00:00.000Z",
+        "date_finished": null,
+        "status": "ERROR",
+        "trigger_type": "AUTOMATIC",
+        "wordpress_version": "6.7.1",
+        "count_plugin": 12,
+        "count_post": 45,
+        "count_attachment": 230,
+        "size_bytes": 0,
+        "error_code": "TIMEOUT"
+      }
+    ],
+    "links": {
+      "pagination": {
+        "first": "https://public-api.wp-umbrella.com/projects/1/backups?page=1&per_page=10",
+        "last": "https://public-api.wp-umbrella.com/projects/1/backups?page=1&per_page=10"
+      }
+    }
   }
- }
 }

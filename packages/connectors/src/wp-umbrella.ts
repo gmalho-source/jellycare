@@ -57,6 +57,27 @@ export interface UmbrellaVulnerability {
   reference: string | null
 }
 
+/**
+ * Uma cópia de segurança, tal como o fornecedor a reporta.
+ *
+ * `finishedAt` é nulo enquanto não termina — e continua nulo quando falha,
+ * que é o caso que interessa vigiar.
+ */
+export interface UmbrellaBackup {
+  externalId: string
+  startedAt: string
+  finishedAt: string | null
+  /** `FINISHED`, `ERROR` ou `PENDING`. */
+  status: string
+  /** `AUTOMATIC` quando saiu do agendamento. */
+  triggerType: string | null
+  /** A versão do WordPress no momento da cópia. É a única via pela qual a
+   *  conhecemos: a API não expõe a versão do core em mais lado nenhum. */
+  wordpressVersion: string | null
+  sizeBytes: number | null
+  errorCode: string | null
+}
+
 export class WpUmbrellaError extends Error {
   constructor(
     message: string,
@@ -207,6 +228,31 @@ export class WpUmbrellaClient {
         active: row.is_active === true,
       }
     })
+  }
+
+  /**
+   * As cópias de segurança recentes.
+   *
+   * Só a primeira página, e de propósito: o painel mostra o estado recente e
+   * não o arquivo todo. Um site com dois anos de cópias diárias traria
+   * setecentas linhas por cada recolha, para responder a uma pergunta que se
+   * resolve com as últimas trinta.
+   */
+  async listBackups(projectId: number, limit = 30): Promise<UmbrellaBackup[]> {
+    const payload = (await this.get(
+      `/projects/${projectId}/backups?page=1&per_page=${limit}`,
+    )) as { data?: unknown }
+
+    return rows(payload?.data).map((row) => ({
+      externalId: str(row.id) ?? '',
+      startedAt: str(row.date) ?? '',
+      finishedAt: str(row.date_finished),
+      status: (str(row.status) ?? 'UNKNOWN').toUpperCase(),
+      triggerType: str(row.trigger_type),
+      wordpressVersion: str(row.wordpress_version),
+      sizeBytes: num(row.size_bytes),
+      errorCode: str(row.error_code),
+    }))
   }
 
   /** Vulnerabilidades conhecidas, da base de dados da Patchstack. */

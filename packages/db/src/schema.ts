@@ -631,6 +631,48 @@ export const reportRequests = pgTable(
   ],
 )
 
+/**
+ * As cópias de segurança de um site, tal como a ferramenta de manutenção as
+ * reporta.
+ *
+ * Substituídas por inteiro a cada recolha, como o inventário: é um retrato
+ * das últimas semanas e não um arquivo. Quem quiser restaurar uma cópia
+ * antiga vai à ferramenta; o que aqui interessa é responder a «há cópia
+ * recente e está boa?», que é a pergunta que se faz antes de tocar num site
+ * e depois de ele partir.
+ */
+export const wpBackups = pgTable(
+  'wp_backups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Identificador do lado da ferramenta, para não duplicar entre recolhas. */
+    externalId: text('external_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    /** Nulo enquanto decorre — e também quando falha. */
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** `FINISHED`, `ERROR` ou `PENDING`. */
+    status: text('status').notNull(),
+    /** `AUTOMATIC` quando saiu do agendamento. */
+    triggerType: text('trigger_type'),
+    /**
+     * A versão do WordPress no momento da cópia.
+     *
+     * É a única via pela qual a conhecemos: a API não expõe a versão do core
+     * em mais lado nenhum, e sem ela não se sabe se o core está atrasado.
+     */
+    wordpressVersion: text('wordpress_version'),
+    sizeBytes: integer('size_bytes'),
+    errorCode: text('error_code'),
+  },
+  (table) => [
+    uniqueIndex('wp_backups_site_external_idx').on(table.siteId, table.externalId),
+    index('wp_backups_site_idx').on(table.siteId, table.startedAt),
+  ],
+)
+
 /* -------------------------------------------------------------------------- */
 /* Documentos legais                                                          */
 /* -------------------------------------------------------------------------- */

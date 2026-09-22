@@ -132,6 +132,47 @@ describe('listVulnerabilities', () => {
   })
 })
 
+describe('listBackups', () => {
+  it('lê o estado de cada cópia, incluindo a que falhou', async () => {
+    const backups = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeFetch({
+        '/projects/1/backups': EXEMPLOS['/projects/{projectId}/backups'],
+      }),
+    }).listBackups(1)
+
+    expect(backups).toHaveLength(2)
+    expect(backups[0]).toMatchObject({
+      externalId: 'clx1abc123',
+      status: 'FINISHED',
+      triggerType: 'AUTOMATIC',
+      wordpressVersion: '6.7.1',
+      sizeBytes: 524_288_000,
+      errorCode: null,
+    })
+    // A que falhou não tem fim e traz o código do erro. É este o caso que
+    // interessa vigiar: uma cópia que nunca terminou não é cópia nenhuma.
+    expect(backups[1]).toMatchObject({
+      status: 'ERROR',
+      finishedAt: null,
+      errorCode: 'TIMEOUT',
+    })
+  })
+
+  it('pede uma página só, com o limite pedido', async () => {
+    const registo: string[] = []
+    await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeFetch(
+        { '/projects/7/backups': EXEMPLOS['/projects/{projectId}/backups'] },
+        registo,
+      ),
+    }).listBackups(7, 5)
+
+    expect(registo).toEqual(['/projects/7/backups?page=1&per_page=5'])
+  })
+})
+
 describe('paginação', () => {
   it('segue as páginas até a última vir incompleta', async () => {
     // Um site com mais plugins do que o teto de uma página faria-nos dizer ao

@@ -5,7 +5,11 @@ import {
   WpUmbrellaClient,
   WpUmbrellaError,
 } from '@jellycare/connectors'
-import type { UmbrellaComponent, UmbrellaVulnerability } from '@jellycare/connectors'
+import type {
+  UmbrellaBackup,
+  UmbrellaComponent,
+  UmbrellaVulnerability,
+} from '@jellycare/connectors'
 import { schema, type Database } from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 
@@ -134,14 +138,16 @@ export async function runWpInventory(
   let plugins: UmbrellaComponent[]
   let themes: UmbrellaComponent[]
   let vulnerabilities: UmbrellaVulnerability[]
+  let backups: UmbrellaBackup[]
 
   try {
     // Sequencial e não em paralelo: a API tem limite de pedidos e não o
-    // documenta. Três pedidos por site, espaçados, é barato; um pico de
+    // documenta. Quatro pedidos por site, espaçados, é barato; um pico de
     // paralelismo sobre uma frota inteira não é.
     plugins = await client.listPlugins(projectId)
     themes = await client.listThemes(projectId)
     vulnerabilities = await client.listVulnerabilities(projectId)
+    backups = await client.listBackups(projectId)
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : String(error)
     await deps.db
@@ -164,8 +170,12 @@ export async function runWpInventory(
   }
 
   await replaceInventory(deps.db, site.id, plugins, themes, now)
+  await replaceBackups(deps.db, site.id, backups)
 
   const findings: ObservedFinding[] = vulnerabilities.map(vulnerabilityFinding)
+
+  const aviso = backupFinding(backups, now)
+  if (aviso) findings.push(aviso)
 
   const pluginsPorAtualizar = outdated(plugins)
   const temasPorAtualizar = outdated(themes)
@@ -253,5 +263,96 @@ async function replaceInventory(
   await db.transaction(async (tx) => {
     await tx.delete(schema.wpComponents).where(eq(schema.wpComponents.siteId, siteId))
     if (linhas.length > 0) await tx.insert(schema.wpComponents).values(linhas)
+  })
+}
+
+/**
+ * Quantos dias sem cópia de segurança boa antes de isto ser um problema.
+ *
+ * Sete e não um: uma cópia falhada numa noite é ruído, e o agendamento
+ * habitual é diário. Uma semana inteira sem cópia que tenha terminado é
+ * outra coisa — é descobrir, no dia em que o site parte, que não há por onde
+ * voltar atrás.
+ */
+export const BACKUP_STALE_DAYS = 7
+
+/**
+ * A cópia de segurança é o que nos permite mexer num site sem medo. Vigiá-la
+ * é tão parte do serviço como vigiar se o site responde — e é a única das
+ * duas coisas que ninguém repara que falhou até precisar dela.
+ */
+export function backupFinding(
+  backups: readonly UmbrellaBackup[],
+  now: Date,
+): ObservedFinding | null {
+  const concluidas = backups
+    .filter((backup) => backup.status === 'FINISHED' && backup.finishedAt !== null)
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+
+  const ultima = concluidas[0]
+  const limite = BACKUP_STALE_DAYS * 24 * 3600_000
+
+  if (!ultima) {
+    // Nenhuma cópia concluída de que tenhamos notícia. Se nem sequer há
+    // tentativas, não afirmamos que falharam — dizemos que não vemos
+    // nenhuma, que é o que sabemos.
+    return {
+      code: 'wp_backup_missing',
+      discriminator: 'wp_backup_missing',
+      severity: 'high',
+      title: 'Sem cópia de segurança concluída',
+      detail:
+        backups.length === 0
+          ? 'Não há registo de nenhuma cópia de segurança deste site.'
+          : `Há ${backups.length} ${backups.length === 1 ? 'tentativa registada' : 'tentativas registadas'}, nenhuma concluída com sucesso.`,
+      evidence: { attempts: backups.length },
+    }
+  }
+
+  const idadeMs = now.getTime() - Date.parse(ultima.startedAt)
+  if (idadeMs <= limite) return null
+
+  const dias = Math.floor(idadeMs / (24 * 3600_000))
+  return {
+    code: 'wp_backup_stale',
+    discriminator: 'wp_backup_stale',
+    severity: 'high',
+    title: `Sem cópia de segurança há ${dias} dias`,
+    detail:
+      `A cópia mais recente que concluiu é de ${ultima.startedAt}. ` +
+      'Enquanto isto durar, uma avaria no site não tem por onde ser revertida.',
+    evidence: { lastFinishedAt: ultima.startedAt, days: dias },
+  }
+}
+
+/**
+ * Grava as cópias recentes, apagando o que já não vem na resposta.
+ *
+ * Mesma escolha que o inventário: é um retrato. Uma cópia que saiu da janela
+ * de retenção do fornecedor deixou de existir, e mantê-la aqui era prometer
+ * um restauro que já não é possível.
+ */
+async function replaceBackups(
+  db: Database,
+  siteId: string,
+  backups: readonly UmbrellaBackup[],
+): Promise<void> {
+  const linhas = backups
+    .filter((backup) => backup.externalId.length > 0 && !Number.isNaN(Date.parse(backup.startedAt)))
+    .map((backup) => ({
+      siteId,
+      externalId: backup.externalId,
+      startedAt: new Date(backup.startedAt),
+      finishedAt: backup.finishedAt ? new Date(backup.finishedAt) : null,
+      status: backup.status,
+      triggerType: backup.triggerType,
+      wordpressVersion: backup.wordpressVersion,
+      sizeBytes: backup.sizeBytes,
+      errorCode: backup.errorCode,
+    }))
+
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.wpBackups).where(eq(schema.wpBackups.siteId, siteId))
+    if (linhas.length > 0) await tx.insert(schema.wpBackups).values(linhas)
   })
 }
