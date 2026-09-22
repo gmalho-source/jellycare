@@ -85,6 +85,9 @@ async function main(): Promise<void> {
           ...(process.env.WP_UMBRELLA_TOKEN
             ? { umbrellaToken: process.env.WP_UMBRELLA_TOKEN }
             : {}),
+          ...(process.env.GOOGLE_PAGESPEED_API_KEY
+            ? { pageSpeedApiKey: process.env.GOOGLE_PAGESPEED_API_KEY }
+            : {}),
         },
         data,
       )

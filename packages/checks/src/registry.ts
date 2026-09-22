@@ -2,6 +2,7 @@ import type { CheckDefinition } from '@jellycare/core'
 import { brokenLinksCheck } from './broken-links.js'
 import { emailAuthCheck } from './email-auth.js'
 import { exposedFilesCheck } from './exposed-files.js'
+import { pageSpeedCheck } from './page-speed.js'
 import { reputationCheck } from './reputation.js'
 import { securityHeadersCheck } from './security-headers.js'
 import { tlsCheck } from './tls.js'
@@ -60,6 +61,14 @@ export const CHECK_REGISTRY: Record<string, RegisteredCheck> = {
     definition: brokenLinksCheck as CheckDefinition<any>,
     access: 'verified',
     label: 'Links quebrados',
+  },
+  [pageSpeedCheck.type]: {
+    definition: pageSpeedCheck as CheckDefinition<any>,
+    // A medição é feita pela Google, mas é o site do cliente que é carregado
+    // por inteiro, várias vezes, para ser cronometrado. Não é observação
+    // passiva, por isso espera pela prova de propriedade.
+    access: 'verified',
+    label: 'Velocidade das páginas',
   },
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

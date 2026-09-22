@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { COR_ESTADO } from '@/lib/chart-colors'
 
 /**
  * Tempo de resposta, dia a dia.
@@ -30,14 +31,11 @@ export interface DiaResposta {
 const RAPIDO = 800
 const LENTO = 1800
 
-/** As mesmas cores de estado do resto do produto. */
-const COR = { bom: '#15803d', medio: '#a16207', mau: '#a32233' }
-
 function corDe(ms: number | null): string {
-  if (ms === null) return '#8b8b96'
-  if (ms < RAPIDO) return COR.bom
-  if (ms <= LENTO) return COR.medio
-  return COR.mau
+  if (ms === null) return COR_ESTADO.sem
+  if (ms < RAPIDO) return COR_ESTADO.bom
+  if (ms <= LENTO) return COR_ESTADO.medio
+  return COR_ESTADO.mau
 }
 
 function dataCurta(iso: string): string {
@@ -123,7 +121,7 @@ export function ResponseTimeChart({ days }: { days: DiaResposta[] }) {
           x2={largura}
           y1={y(media)}
           y2={y(media)}
-          stroke="#8b8b96"
+          stroke={COR_ESTADO.sem}
           strokeWidth={1}
           strokeDasharray="4 4"
           vectorEffect="non-scaling-stroke"
@@ -189,15 +187,15 @@ export function ResponseTimeChart({ days }: { days: DiaResposta[] }) {
 
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-500">
         <li className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR.bom }} />
+          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.bom }} />
           Rápido, abaixo de {RAPIDO} ms
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR.medio }} />
+          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.medio }} />
           Aceitável, até {LENTO / 1000} s
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR.mau }} />
+          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.mau }} />
           Lento, acima de {LENTO / 1000} s
         </li>
       </ul>

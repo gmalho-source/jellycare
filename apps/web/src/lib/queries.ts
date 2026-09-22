@@ -275,6 +275,87 @@ export async function getResponseTimes(
   }))
 }
 
+export interface PageSpeedPoint {
+  /** Quando a medição foi feita. */
+  measuredAt: Date
+  /** 0–100. */
+  score: number
+  lcpMs: number | null
+  cls: number | null
+  tbtMs: number | null
+}
+
+export interface PageSpeedHistory {
+  points: PageSpeedPoint[]
+  /** A última medição, ou nulo quando ainda não houve nenhuma. */
+  latest: PageSpeedPoint | null
+  /**
+   * Diferença face à medição mais antiga do período. Nulo com menos de duas
+   * medições: uma seta de tendência desenhada sobre um único ponto é uma
+   * afirmação sobre dados que não existem.
+   */
+  trend: number | null
+}
+
+/**
+ * Histórico da pontuação de velocidade.
+ *
+ * Lê as métricas dos runs em vez de uma tabela própria: a PageSpeed corre uma
+ * vez por dia e o índice `(site, tipo, início)` já serve exatamente esta
+ * pergunta. Uma tabela nova seria a mesma informação escrita duas vezes.
+ */
+export async function getPageSpeedHistory(
+  siteId: string,
+  days = 30,
+): Promise<PageSpeedHistory> {
+  const db = getDb()
+  const start = new Date(Date.now() - days * 24 * 3600_000)
+
+  const runs = await db
+    .select({
+      startedAt: schema.checkRuns.startedAt,
+      metrics: schema.checkRuns.metrics,
+    })
+    .from(schema.checkRuns)
+    .where(
+      and(
+        eq(schema.checkRuns.siteId, siteId),
+        eq(schema.checkRuns.checkType, 'page_speed'),
+        eq(schema.checkRuns.status, 'ok'),
+        gte(schema.checkRuns.startedAt, start),
+      ),
+    )
+    .orderBy(schema.checkRuns.startedAt)
+
+  const numero = (valor: number | undefined): number | null =>
+    typeof valor === 'number' && Number.isFinite(valor) ? valor : null
+
+  const points: PageSpeedPoint[] = []
+  for (const run of runs) {
+    const score = numero(run.metrics.performanceScore)
+    // Um run sem pontuação não entra: o gráfico mostra medições, e uma linha
+    // que cai a zero num dia em que a Google não respondeu leria como uma
+    // regressão do site.
+    if (score === null) continue
+    points.push({
+      measuredAt: run.startedAt,
+      score,
+      lcpMs: numero(run.metrics.lcpMs),
+      cls: numero(run.metrics.cls),
+      tbtMs: numero(run.metrics.tbtMs),
+    })
+  }
+
+  const latest = points.at(-1) ?? null
+  const primeiro = points[0]
+
+  return {
+    points,
+    latest,
+    trend: latest && primeiro && points.length > 1 ? latest.score - primeiro.score : null,
+  }
+}
+
 /** Só os problemas, para a secção que só mostra problemas. */
 export async function getSiteFindings(
   siteId: string,

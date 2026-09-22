@@ -90,6 +90,29 @@ describeE2E('fluxo de entrada e painel', () => {
           warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
           metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
         })
+        // Duas medições de velocidade, para o painel ter uma pontuação atual
+        // e uma tendência. Uma só não prova nada: a tendência não aparece, e
+        // um erro na diferença entre a primeira e a última passava.
+        await db.insert(schema.checkRuns).values([
+          {
+            siteId,
+            checkType: 'page_speed',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 8 * 24 * 3600_000),
+            durationMs: 21_000,
+            metrics: { performanceScore: 51, lcpMs: 4100, cls: 0.19, tbtMs: 410 },
+          },
+          {
+            siteId,
+            checkType: 'page_speed',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 2 * 3600_000),
+            durationMs: 19_400,
+            metrics: { performanceScore: 63, lcpMs: 3200, cls: 0.06, tbtMs: 150 },
+          },
+        ])
         await db.insert(schema.uptimeSamples).values([
           {
             siteId,
@@ -446,6 +469,32 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
     expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
     await cliente.close()
+  }, 120_000)
+
+  it('mostra a velocidade das páginas com a pontuação e os vitals', async () => {
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteId}/desempenho`)
+    await equipa.waitForSelector('h1')
+
+    // A pontuação da última medição, em 0–100. Pelo rótulo do mostrador e não
+    // por «63» em texto: «63» aparece dentro de qualquer número maior, e um
+    // teste que passa com «163» na página não está a provar nada.
+    expect(await equipa.isVisible('[aria-label="63 em 100"]')).toBe(true)
+
+    // A tendência face à primeira medição do período: 63 menos 51.
+    expect(await equipa.isVisible('text=+12 pontos')).toBe(true)
+
+    // Os três vitals, com os valores convertidos para as unidades que se lêem.
+    expect(await equipa.isVisible('text=3.2 s')).toBe(true)
+    expect(await equipa.isVisible('text=0.06')).toBe(true)
+    expect(await equipa.isVisible('text=150 ms')).toBe(true)
+
+    // A cor não anda sozinha: o estado em palavras ao lado de cada métrica.
+    expect(await equipa.isVisible('text=a melhorar')).toBe(true)
+
+    // O tempo de resposta do servidor é outra coisa e fica na mesma secção.
+    expect(await equipa.isVisible('text=Tempo de resposta do servidor')).toBe(true)
+    await equipa.close()
   }, 120_000)
 
   it('dá ao cliente o mesmo painel de métricas, sem o que é falha nossa', async () => {
