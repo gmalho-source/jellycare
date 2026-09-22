@@ -10,6 +10,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { RecordingNotifier } from './channels.js'
 import { createCheckQueue, checkJobId } from './queues.js'
 import { executeCheckJob } from './runner.js'
+import type { CheckJobData } from './runner.js'
 import { tick } from './scheduler.js'
 
 /**
@@ -494,6 +495,50 @@ describe('agendador', () => {
 
     await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
     expect(await queuedForSite()).toHaveLength(0)
+  })
+
+  it('um check que não entra na fila não leva os outros atrás', async () => {
+    // O defeito que deixou a monitorização parada uma noite inteira: o `add`
+    // de um check rebentava, a passagem morria antes de gravar as datas, e
+    // nenhum dos outros checks ficava adiado. À tick seguinte repetia-se
+    // tudo, de trinta em trinta segundos, sem nada correr e sem ninguém saber.
+    const vencido = new Date(Date.now() - 60_000)
+    await addCheck('uptime', 5, vencido)
+    await addCheck('tls', 1440, vencido)
+
+    const filaComFalha = {
+      ...queue,
+      add: (async (name: string, data: CheckJobData, opts: unknown) => {
+        if (data.checkType === 'tls' && data.siteId === siteId) {
+          throw new Error('Redis recusou o comando')
+        }
+        return queue.add(name, data as never, opts as never)
+      }) as unknown as typeof queue.add,
+    } as unknown as typeof queue
+
+    await expect(
+      tick({ db, queue: filaComFalha, spreadMs: 0, batchSize: LOTE }),
+    ).rejects.toThrow('não entraram na fila')
+
+    // O saudável entrou.
+    const tipos = (await queuedForSite()).map((job) => job.data.checkType)
+    expect(tipos).toContain('uptime')
+    expect(tipos).not.toContain('tls')
+
+    const configs = await db
+      .select()
+      .from(schema.checkConfigs)
+      .where(eq(schema.checkConfigs.siteId, siteId))
+
+    // O que entrou fica adiado.
+    const uptime = configs.find((c) => c.checkType === 'uptime')
+    expect(uptime?.nextRunAt?.getTime()).toBeGreaterThan(vencido.getTime())
+
+    // O que não entrou continua vencido, para ser tentado outra vez já a
+    // seguir. Adiá-lo era dizer que correu, e esperar um intervalo inteiro
+    // por uma falha momentânea de fila.
+    const tls = configs.find((c) => c.checkType === 'tls')
+    expect(tls?.nextRunAt?.getTime()).toBe(vencido.getTime())
   })
 
   it('espalha o lote no tempo em vez de o despejar de uma vez', async () => {

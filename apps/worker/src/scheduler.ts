@@ -19,6 +19,23 @@ export interface SchedulerOptions {
 export interface TickResult {
   considered: number
   enqueued: number
+  /** Checks que não conseguiram entrar na fila nesta passagem. */
+  failed: number
+}
+
+/**
+ * Nem todos os checks entraram na fila.
+ *
+ * Lançado no fim da passagem, depois de os que entraram já terem a data
+ * seguinte gravada. Falhar em voz alta é obrigatório — um agendador que não
+ * enfileira e não se queixa deixa a plataforma cega sem ninguém dar por
+ * isso — mas falhar antes de gravar o que correu bem é que era o defeito.
+ */
+export class EnqueueFailures extends Error {
+  constructor(readonly failures: readonly string[]) {
+    super(`${failures.length} checks não entraram na fila: ${failures.join('; ')}`)
+    this.name = 'EnqueueFailures'
+  }
 }
 
 /**
@@ -90,23 +107,40 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
   }))
 
   const due = selectDue(checks, now, batchSize)
-  if (due.length === 0) return { considered: checks.length, enqueued: 0 }
+  if (due.length === 0) return { considered: checks.length, enqueued: 0, failed: 0 }
 
-  let enqueued = 0
+  // Cada check entra na fila por sua conta. Antes, um `add` que rebentasse
+  // levava a passagem inteira com ele — e como a gravação das datas só vinha
+  // a seguir ao ciclo, nenhum dos outros ficava com `nextRunAt` novo. Um só
+  // check problemático parava todos os outros, de trinta em trinta segundos,
+  // em silêncio. Foi assim que a monitorização ficou parada uma noite
+  // inteira sem ninguém saber.
+  const enfileirados: SchedulableCheck[] = []
+  const falhas: string[] = []
 
   for (const [index, check] of due.entries()) {
     const data: CheckJobData = { siteId: check.siteId, checkType: check.checkType }
     const delay = batchDelayMs(index, due.length, spreadMs)
 
-    await options.queue.add(check.checkType, data, {
-      jobId: checkJobId(data, now),
-      delay,
-    })
-    enqueued++
+    try {
+      await options.queue.add(check.checkType, data, {
+        jobId: checkJobId(data, now),
+        delay,
+      })
+      enfileirados.push(check)
+    } catch (error) {
+      falhas.push(
+        `${check.checkType}/${check.siteId}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
 
+  // Só os que entraram mesmo. Adiar um check que não foi enfileirado era
+  // dizer que ele correu, e ele voltaria a ser considerado só daqui a um
+  // intervalo inteiro — o que transforma uma falha momentânea de fila numa
+  // hora sem monitorização.
   const nextRunById = new Map(
-    due.map((check) => [check.id, computeNextRun(check, now)] as const),
+    enfileirados.map((check) => [check.id, computeNextRun(check, now)] as const),
   )
 
   // Uma escrita por valor distinto em vez de uma por check: cem checks do
@@ -126,7 +160,9 @@ export async function tick(options: SchedulerOptions): Promise<TickResult> {
       .where(inArray(schema.checkConfigs.id, ids))
   }
 
-  return { considered: checks.length, enqueued }
+  if (falhas.length > 0) throw new EnqueueFailures(falhas)
+
+  return { considered: checks.length, enqueued: enfileirados.length, failed: falhas.length }
 }
 
 export interface SchedulerLoop {
