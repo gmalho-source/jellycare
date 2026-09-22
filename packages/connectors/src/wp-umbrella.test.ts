@@ -173,6 +173,29 @@ describe('listBackups', () => {
   })
 })
 
+describe('listIssues', () => {
+  it('lê os erros e filtra por severidade quando pedido', async () => {
+    const registo: string[] = []
+    const erros = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeFetch(
+        { '/projects/1/issues': EXEMPLOS['/projects/{projectId}/issues'] },
+        registo,
+      ),
+    }).listIssues(1, { severity: 'FATAL', limit: 20 })
+
+    expect(registo).toEqual(['/projects/1/issues?page=1&per_page=20&severity=FATAL'])
+    expect(erros[0]).toMatchObject({
+      severity: 'FATAL',
+      sourceName: 'Contact Form 7',
+      sourceSlug: 'contact-form-7',
+      file: '/wp-content/plugins/contact-form-7/includes/mail.php',
+      line: 214,
+      occurrences: 37,
+    })
+  })
+})
+
 describe('ordenar atualizações', () => {
   function fakeWrite(registo: { path: string; body: unknown }[]) {
     return (async (input: RequestInfo | URL, init?: RequestInit) => {

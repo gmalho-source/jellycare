@@ -2,8 +2,8 @@ import { createDatabase, schema } from '@jellycare/db'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Site } from '@jellycare/core'
-import type { UmbrellaBackup } from '@jellycare/connectors'
-import { backupFinding, runWpInventory } from './wp-jobs.js'
+import type { UmbrellaBackup, UmbrellaIssue } from '@jellycare/connectors'
+import { backupFinding, phpFatalFindings, runWpInventory } from './wp-jobs.js'
 
 /**
  * Inventário WordPress pela API da WP Umbrella, contra Postgres real e uma
@@ -158,11 +158,37 @@ const COPIAS = {
   ],
 }
 
+/**
+ * Um erro fatal, no caminho de envio de um plugin de formulários.
+ *
+ * É o exemplo da própria documentação do fornecedor, e não por acaso: é o
+ * caso que explica, sozinho, porque é que um cliente deixou de receber
+ * notificações dos formulários.
+ */
+const ERROS = {
+  code: 'success',
+  data: [
+    {
+      id: 'i1',
+      severity: 'FATAL',
+      type_error: 'E_ERROR',
+      source_name: 'Contact Form 7',
+      source_slug: 'contact-form-7',
+      message: 'Uncaught Error: Call to a member function get() on null',
+      file: '/wp-content/plugins/contact-form-7/includes/mail.php',
+      line: 214,
+      occurrences: 37,
+      last_seen_at: '2026-09-22T08:00:00.000Z',
+    },
+  ],
+}
+
 const CAMINHOS = {
   '/projects/123/plugins': PLUGINS,
   '/projects/123/themes': TEMAS,
   '/projects/123/vulnerabilities': VULNS,
   '/projects/123/backups': COPIAS,
+  '/projects/123/issues': ERROS,
 }
 
 describe('site sem ligação', () => {
@@ -290,6 +316,7 @@ describe('atualizações pendentes', () => {
         '/projects/123/themes': { code: 'success', data: [] },
         '/projects/123/vulnerabilities': { code: 'success', data: {} },
         '/projects/123/backups': COPIAS,
+        '/projects/123/issues': { code: 'success', data: [] },
       }),
       site,
       {},
@@ -428,5 +455,62 @@ describe('backupFinding', () => {
     const finding = backupFinding([], AGORA)
     expect(finding?.code).toBe('wp_backup_missing')
     expect(finding?.detail).toContain('Não há registo')
+  })
+})
+
+describe('erros de PHP no inventário', () => {
+  it('traz os erros fatais do site para os problemas do painel', async () => {
+    await ligar()
+    const outcome = await runWpInventory(deps(CAMINHOS), site, {})
+
+    const finding = outcome.findings.find((f) => f.code === 'wp_php_fatal')
+    expect(finding?.severity).toBe('high')
+    expect(finding?.discriminator).toBe('contact-form-7')
+    expect(finding?.detail).toContain('includes/mail.php:214')
+  })
+})
+
+describe('phpFatalFindings', () => {
+  function erro(over: Partial<UmbrellaIssue> = {}): UmbrellaIssue {
+    return {
+      id: 'i1',
+      severity: 'FATAL',
+      typeError: 'E_ERROR',
+      sourceName: 'Contact Form 7',
+      sourceSlug: 'contact-form-7',
+      message: 'Uncaught Error: Call to a member function get() on null',
+      file: '/wp-content/plugins/contact-form-7/includes/mail.php',
+      line: 214,
+      occurrences: 37,
+      lastSeenAt: '2026-09-22T08:00:00.000Z',
+      ...over,
+    }
+  }
+
+  it('ignora o que não é fatal', () => {
+    // Avisos e depreciações contam-se aos milhares num site normal. Não são
+    // avaria, e transformá-los em findings enchia o painel de vermelho.
+    expect(phpFatalFindings([erro({ severity: 'MINOR' })])).toEqual([])
+  })
+
+  it('agrega por origem e não por erro', () => {
+    // Um plugin partido produz milhares de linhas e uma única avaria.
+    const findings = phpFatalFindings([
+      erro({ id: 'a' }),
+      erro({ id: 'b', message: 'Outro erro', line: 300 }),
+      erro({ id: 'c', sourceSlug: 'astra', sourceName: 'Astra', file: '/x.php' }),
+    ])
+
+    expect(findings).toHaveLength(2)
+    const cf7 = findings.find((f) => f.discriminator === 'contact-form-7')
+    expect(cf7?.severity).toBe('high')
+    expect(cf7?.title).toContain('Contact Form 7')
+    expect(cf7?.detail).toContain('2 erros fatais distintos')
+    expect(cf7?.detail).toContain('74 ocorrências')
+  })
+
+  it('nomeia o ficheiro, que é o que diz onde está partido', () => {
+    const [finding] = phpFatalFindings([erro()])
+    expect(finding?.detail).toContain('includes/mail.php:214')
   })
 })

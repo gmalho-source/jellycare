@@ -615,7 +615,7 @@ export async function runFormDelivery(
           // notificam» e ligar a dizer «não notificam, e o domínio perdeu os
           // MX ontem». A segunda resolve-se na mesma chamada.
           (emailDoDominio.length > 0
-            ? ` Ao mesmo tempo, o email do domínio tem problemas por resolver: ${emailDoDominio
+            ? ` Ao mesmo tempo, o site tem isto por resolver: ${emailDoDominio
                 .map((problema) => problema.title)
                 .join('; ')}. É o primeiro sítio onde procurar.`
             : ' O email do domínio não tem problemas conhecidos, por isso a causa está do lado ' +
@@ -687,6 +687,15 @@ export async function runFormDelivery(
  * resposta, mais devagar e com mais pedidos — e arriscava dizer uma coisa
  * diferente da que o painel mostra a dois centímetros de distância.
  */
+/**
+ * Um erro fatal de PHP é o outro sítio onde a entrega morre.
+ *
+ * O exemplo da própria documentação do fornecedor é um erro fatal no ficheiro
+ * de envio de um plugin de formulários. Se há um, é o primeiro sítio a olhar
+ * — antes de ir pedir ao cliente a password do SMTP.
+ */
+export const PHP_FATAL_CODE = 'wp_php_fatal'
+
 export const EMAIL_DOMAIN_CODES = [
   'mx_missing',
   'mx_unresolvable',
@@ -706,7 +715,7 @@ async function diagnosticoDeEmail(
     .where(
       and(
         eq(schema.findings.siteId, siteId),
-        inArray(schema.findings.code, [...EMAIL_DOMAIN_CODES]),
+        inArray(schema.findings.code, [...EMAIL_DOMAIN_CODES, PHP_FATAL_CODE]),
         inArray(schema.findings.state, ['open', 'acknowledged']),
       ),
     )

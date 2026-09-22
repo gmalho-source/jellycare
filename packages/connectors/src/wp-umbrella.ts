@@ -112,6 +112,21 @@ export interface UmbrellaProcess {
   entityVersion: string | null
 }
 
+/** Um erro de PHP que o site registou. */
+export interface UmbrellaIssue {
+  id: string
+  /** `FATAL` ou `MINOR`. */
+  severity: string
+  typeError: string | null
+  sourceName: string | null
+  sourceSlug: string | null
+  message: string
+  file: string | null
+  line: number | null
+  occurrences: number | null
+  lastSeenAt: string | null
+}
+
 export class WpUmbrellaError extends Error {
   constructor(
     message: string,
@@ -401,6 +416,42 @@ export class WpUmbrellaClient {
       wordpressVersion: str(row.wordpress_version),
       sizeBytes: num(row.size_bytes),
       errorCode: str(row.error_code),
+    }))
+  }
+
+  /**
+   * Erros de PHP registados no site.
+   *
+   * Vale por si — um site a dar erro fatal está partido para quem lá entra —
+   * e vale como diagnóstico: um erro fatal no ficheiro de envio de um plugin
+   * de formulários explica, sozinho, porque é que o cliente deixou de receber
+   * notificações.
+   */
+  async listIssues(
+    projectId: number,
+    options: { severity?: 'FATAL' | 'MINOR'; limit?: number } = {},
+  ): Promise<UmbrellaIssue[]> {
+    const parametros = new URLSearchParams({
+      page: '1',
+      per_page: String(options.limit ?? 50),
+    })
+    if (options.severity) parametros.set('severity', options.severity)
+
+    const payload = (await this.get(
+      `/projects/${projectId}/issues?${parametros.toString()}`,
+    )) as { data?: unknown }
+
+    return rows(payload?.data).map((row) => ({
+      id: str(row.id) ?? '',
+      severity: (str(row.severity) ?? 'MINOR').toUpperCase(),
+      typeError: str(row.type_error),
+      sourceName: str(row.source_name),
+      sourceSlug: str(row.source_slug),
+      message: str(row.message) ?? '',
+      file: str(row.file),
+      line: num(row.line),
+      occurrences: num(row.occurrences),
+      lastSeenAt: str(row.last_seen_at),
     }))
   }
 

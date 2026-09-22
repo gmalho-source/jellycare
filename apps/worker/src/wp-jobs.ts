@@ -8,6 +8,7 @@ import {
 import type {
   UmbrellaBackup,
   UmbrellaComponent,
+  UmbrellaIssue,
   UmbrellaVulnerability,
 } from '@jellycare/connectors'
 import { schema, type Database } from '@jellycare/db'
@@ -139,6 +140,7 @@ export async function runWpInventory(
   let themes: UmbrellaComponent[]
   let vulnerabilities: UmbrellaVulnerability[]
   let backups: UmbrellaBackup[]
+  let issues: UmbrellaIssue[]
 
   try {
     // Sequencial e não em paralelo: a API tem limite de pedidos e não o
@@ -148,6 +150,10 @@ export async function runWpInventory(
     themes = await client.listThemes(projectId)
     vulnerabilities = await client.listVulnerabilities(projectId)
     backups = await client.listBackups(projectId)
+    // Só os fatais. Os avisos e as depreciações contam-se aos milhares num
+    // site normal e não são avaria — transformá-los em findings era encher o
+    // painel de vermelho por coisa que não se corrige nem se deve corrigir.
+    issues = await client.listIssues(projectId, { severity: 'FATAL' })
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : String(error)
     await deps.db
@@ -176,6 +182,8 @@ export async function runWpInventory(
 
   const aviso = backupFinding(backups, now)
   if (aviso) findings.push(aviso)
+
+  findings.push(...phpFatalFindings(issues))
 
   const pluginsPorAtualizar = outdated(plugins)
   const temasPorAtualizar = outdated(themes)
@@ -354,5 +362,52 @@ async function replaceBackups(
   await db.transaction(async (tx) => {
     await tx.delete(schema.wpBackups).where(eq(schema.wpBackups.siteId, siteId))
     if (linhas.length > 0) await tx.insert(schema.wpBackups).values(linhas)
+  })
+}
+
+/**
+ * Um finding por origem, e não por erro.
+ *
+ * Um erro fatal repete-se a cada visita à página afetada: um plugin partido
+ * produz milhares de linhas e uma única avaria. Agregar pela origem dá uma
+ * entrada por plugin partido, que é o que alguém vai resolver.
+ */
+export function phpFatalFindings(issues: readonly UmbrellaIssue[]): ObservedFinding[] {
+  const fatais = issues.filter((issue) => issue.severity === 'FATAL')
+  if (fatais.length === 0) return []
+
+  const porOrigem = new Map<string, UmbrellaIssue[]>()
+  for (const issue of fatais) {
+    const chave = issue.sourceSlug ?? issue.sourceName ?? issue.file ?? 'desconhecida'
+    const lista = porOrigem.get(chave)
+    if (lista) lista.push(issue)
+    else porOrigem.set(chave, [issue])
+  }
+
+  return [...porOrigem.entries()].map(([chave, lista]) => {
+    const primeiro = lista[0]!
+    const nome = primeiro.sourceName ?? chave
+    const ocorrencias = lista.reduce((total, issue) => total + (issue.occurrences ?? 0), 0)
+
+    return {
+      code: 'wp_php_fatal',
+      discriminator: chave,
+      // Um erro fatal não é dívida técnica: é uma página que rebenta a quem
+      // lá entra, e pode ser o envio de email que deixou de funcionar.
+      severity: 'high' as const,
+      title: `Erros fatais de PHP em ${nome}`,
+      detail:
+        `${lista.length} ${lista.length === 1 ? 'erro fatal distinto' : 'erros fatais distintos'}` +
+        (ocorrencias > 0 ? `, ${ocorrencias} ocorrências` : '') +
+        `. O mais recente: ${primeiro.message}` +
+        (primeiro.file ? ` (${primeiro.file}:${primeiro.line ?? '?'})` : '') +
+        '.',
+      evidence: {
+        source: chave,
+        files: [...new Set(lista.map((issue) => issue.file).filter(Boolean))].slice(0, 5),
+        occurrences: ocorrencias,
+        lastSeenAt: primeiro.lastSeenAt,
+      },
+    }
   })
 }
