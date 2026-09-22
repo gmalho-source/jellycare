@@ -44,14 +44,17 @@ export const LEGAL_DOCUMENTS: readonly LegalDocumentSpec[] = [
   {
     kind: 'dpa',
     locale: 'pt',
-    version: 1,
+    // v2: acrescenta as cláusulas 4.ª-A e 4.ª-B. A plataforma deixou de só
+    // observar e passa a executar manutenção, o que é alteração material do
+    // corpo do acordo — logo, nova aceitação por todos os clientes.
+    version: 2,
     title: 'Acordo de Subcontratação de Tratamento de Dados Pessoais',
     file: 'dpa.pt.md',
   },
   {
     kind: 'dpa',
     locale: 'en',
-    version: 1,
+    version: 2,
     title: 'Data Processing Agreement',
     file: 'dpa.en.md',
   },

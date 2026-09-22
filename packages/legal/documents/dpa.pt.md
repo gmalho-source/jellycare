@@ -66,7 +66,7 @@ do RGPD.
    tratamento, salvo se essa informação for proibida por motivo de interesse
    público importante.
 
-## Cláusula 4.ª — Verificação de propriedade e limites da monitorização
+## Cláusula 4.ª — Verificação de propriedade e limites da observação
 
 1. O Cliente declara ser titular dos sítios indicados para monitorização ou
    dispor de autorização do respetivo titular.
@@ -74,12 +74,57 @@ do RGPD.
    comprovada a sua titularidade, por registo DNS TXT ou por ficheiro colocado
    no servidor. Até essa comprovação, o sítio é monitorizado apenas quanto à
    disponibilidade, por observação do que qualquer visitante veria.
-3. A Jelly não executa testes intrusivos, não tenta contornar mecanismos de
-   autenticação nem explora vulnerabilidades: a recolha é passiva.
+3. Na observação, a Jelly não executa testes intrusivos, não tenta contornar
+   mecanismos de autenticação nem explora vulnerabilidades. As operações de
+   manutenção previstas na Cláusula 4.ª-A são coisa distinta: não são
+   observação, são execução do serviço contratado, e regem-se por essa
+   cláusula.
 4. Formulários de autenticação, registo, pagamento, compra, subscrição ou
    pesquisa nunca são submetidos automaticamente. Só são submetidos os
    formulários que existam nas páginas expressamente declaradas pelo Cliente,
    até ao limite configurado na plataforma.
+
+## Cláusula 4.ª-A — Operações de manutenção
+
+1. O serviço contratado inclui manutenção preventiva. Para a executar, a Jelly
+   aplica atualizações de componentes nos sítios do Cliente através da
+   plataforma, nos termos desta cláusula.
+2. As operações de manutenção só são executadas quando estejam reunidas,
+   cumulativamente, as seguintes condições:
+   a) a titularidade do domínio estar comprovada;
+   b) o Cliente ter ativado a manutenção automática para o sítio em causa, o
+      que faz por ato próprio na plataforma e pode desativar a qualquer
+      momento com efeito imediato;
+   c) a operação decorrer dentro de uma janela de manutenção declarada para
+      esse sítio;
+   d) existir cópia de segurança concluída com sucesso dentro do prazo
+      definido na plataforma.
+3. Não estando reunida qualquer das condições, nada é alterado no sítio e o
+   facto é registado e comunicado ao Cliente.
+4. As atualizações são executadas em modo seguro: é criada cópia de segurança
+   antes da alteração, o sítio é verificado depois dela, e a alteração é
+   revertida automaticamente se a verificação falhar.
+5. A Jelly não altera conteúdos, dados nem configurações do sítio para além
+   das atualizações de componentes previstas nesta cláusula.
+6. Cada operação fica registada com o componente afetado, as versões de
+   origem e destino, o momento em que foi ordenada e o respetivo resultado. O
+   registo está acessível ao Cliente na plataforma e consta do relatório
+   periódico.
+7. O Cliente pode, a todo o tempo, desativar a manutenção automática de um ou
+   de todos os sítios. Fazendo-o, a Jelly passa a comunicar as atualizações
+   por aplicar em vez de as aplicar.
+
+## Cláusula 4.ª-B — Problemas que não podemos resolver
+
+1. Nem tudo o que é detetado é resolúvel pela Jelly. Sempre que a resolução
+   exija acesso, decisão ou intervenção que não estejam ao alcance do serviço
+   contratado, a Jelly comunica o problema ao Cliente, de forma que este o
+   possa encaminhar para quem o possa resolver.
+2. A comunicação identifica o problema, a sua gravidade e, quando conhecida, a
+   correção recomendada.
+3. A Jelly não responde pela resolução de problemas cuja correção não esteja
+   ao seu alcance nos termos do número 1, sem prejuízo do dever de os
+   comunicar em tempo útil.
 
 ## Cláusula 5.ª — Confidencialidade
 
@@ -262,6 +307,8 @@ os responsáveis por si designados e prestar contas do serviço.
 | Dados técnicos do sítio | URL, nome de anfitrião, plataforma, páginas declaradas, componentes e versões | `sites`, `wp_components` |
 | Resultados de verificação | Estado, duração, avisos, erros devolvidos por serviços externos | `check_runs`, `uptime_samples`, `findings` |
 | Testes de formulário | Token canário, endereço canário, tempos, resultado de autenticação SPF/DKIM/DMARC | `form_runs` |
+| Operações de manutenção | Componente, versões de origem e destino, momento e resultado | `wp_updates` |
+| Cópias de segurança | Data, estado, dimensão e versão do WordPress, tal como reportadas | `wp_backups` |
 
 **Não são tratadas** categorias especiais de dados na aceção do artigo 9.º do
 RGPD, nem dados relativos a condenações penais. A Jelly não recolhe dados de
@@ -285,6 +332,7 @@ Executados diariamente pelo processo automático de retenção
 | Relatórios mensais e problemas já resolvidos | 24 meses |
 | Tokens de entrada e sessões | Eliminados no momento em que caducam |
 | Problemas por resolver | Conservados enquanto o forem — não são eliminados por antiguidade |
+| Registo de operações de manutenção | Conservado enquanto durar o Contrato Principal e 24 meses após a operação — é o que responde a quem alterou o quê, e uma alteração a um sítio pode ser questionada muito depois |
 | Dados de conta e de configuração | Enquanto durar o Contrato Principal |
 
 ---
