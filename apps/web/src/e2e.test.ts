@@ -368,7 +368,7 @@ describeE2E('fluxo de entrada e painel', () => {
 
     const painel = await entrarComo(email)
     await painel.waitForURL(`${baseUrl}/`)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await painel.fill('#access-email', convidado)
     await painel.selectOption('#access-role', 'client')
     await painel.click('button:has-text("Dar acesso")')
@@ -386,7 +386,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // preparar" e não "enviado". Prometer o que ainda não aconteceu a quem
     // está a olhar para o ecrã era mentir-lhe.
     const painel = await entrarComo(email)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/relatorios`)
     await painel.waitForSelector('#report-recipient')
 
     await painel.fill('#report-recipient', 'reuniao@exemplo.pt')
@@ -414,7 +414,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Sem isto, uma mensagem apagada ou apanhada pelo spam obrigava a retirar
     // o acesso e a voltar a dá-lo só para o email sair outra vez.
     const painel = await entrarComo(email)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await painel.waitForSelector(`text=${emailCliente}`)
 
     const linha = painel.locator('li', { hasText: emailCliente })
@@ -433,7 +433,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // aparecer ao cliente, que não tem nada a ver com isso nem o pode
     // resolver.
     const equipa = await entrarComo(email)
-    await equipa.goto(`${baseUrl}/sites/${siteId}`)
+    await equipa.goto(`${baseUrl}/sites/${siteId}/seguranca`)
     await equipa.waitForSelector('h1')
     expect(await equipa.isVisible('text=Cobertura reduzida')).toBe(true)
     expect(await equipa.isVisible('text=safe_browsing')).toBe(true)
@@ -558,7 +558,7 @@ describeE2E('fluxo de entrada e painel', () => {
       // A equipa vê o estado no painel do site, que é onde vai antes de pôr
       // o cliente a correr.
       const painel = await entrarComo(email)
-      await painel.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await painel.goto(`${baseUrl}/sites/${siteDpaId}/definicoes`)
       await painel.waitForSelector('text=Tratamento de dados')
       expect(await painel.isVisible('text=O cliente ainda não aceitou o acordo')).toBe(true)
 
@@ -604,7 +604,7 @@ describeE2E('fluxo de entrada e painel', () => {
       await cliente.close()
 
       const depois = await entrarComo(email)
-      await depois.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await depois.goto(`${baseUrl}/sites/${siteDpaId}/definicoes`)
       await depois.waitForSelector('text=Acordo aceite')
       expect(await depois.isVisible('text=Diretor de Marketing')).toBe(true)
       await depois.close()
@@ -636,7 +636,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // vinte e quatro horas de pedidos perdidos antes de darmos por uma avaria
     // de entrega.
     const page = await entrarComo(email)
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/seguranca`)
     await page.waitForSelector('text=Verificações')
 
     const linha = page.locator('[data-check-row=uptime]')
@@ -673,7 +673,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Sem horário recorrente, «aplica sozinha» exigia alguém a declarar uma
     // data de cada vez — o contrário de automático.
     const page = await entrarComo(email)
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await page.waitForSelector('text=Horário recorrente')
     expect(await page.isVisible('text=Sem horário')).toBe(true)
 
@@ -727,7 +727,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(loginLink())
     await page.waitForURL(`${baseUrl}/`)
 
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await page.waitForSelector('text=Janelas de manutenção')
     expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
 
@@ -787,6 +787,11 @@ describeE2E('fluxo de entrada e painel', () => {
 
     expect(await page.isVisible('text=Falta provar a propriedade do domínio')).toBe(true)
     expect(await page.isVisible('text=jellycare-site-verification=')).toBe(true)
+
+    // A prova de propriedade fica na visão geral, porque é o que trava tudo
+    // o resto; a lista do que está bloqueado vive na secção das verificações.
+    await page.goto(`${baseUrl}/sites/${siteId}/seguranca`)
+    await page.waitForSelector('[data-check-row]')
 
     // Só a disponibilidade corre sem prova de propriedade; tudo o resto fica à
     // espera. Conta-se o que corre e não o que está bloqueado: o número de
@@ -957,7 +962,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(loginLink())
     await page.waitForURL(`${baseUrl}/`)
 
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/relatorios`)
     expect(await page.isVisible('text=Maio de 2026')).toBe(true)
 
     const response = await page.request.get(`${baseUrl}/api/reports/${reportId}`)

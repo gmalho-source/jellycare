@@ -89,6 +89,16 @@ function tamanho(bytes: number | null): string {
   return `${Math.round(bytes / 1024 ** 2)} MB`
 }
 
+/**
+ * O painel inteiro, numa página só.
+ *
+ * É o que o portal do cliente usa: ali não há navegação por secções, e
+ * partir isto em separadores obrigava um cliente com um site a andar aos
+ * cliques para ver o que cabe num ecrã.
+ *
+ * O painel interno compõe as mesmas peças à sua maneira, secção a secção —
+ * as peças são as mesmas, e é isso que impede as duas vistas de divergirem.
+ */
 export function SiteDashboard({
   data,
   audiencia = 'equipa',
@@ -96,7 +106,25 @@ export function SiteDashboard({
   data: DashboardData
   audiencia?: Audiencia
 }) {
-  const { report, daily, certDaysRemaining, wordpress, backups } = data
+  return (
+    <>
+      <DashboardOverview data={data} audiencia={audiencia} />
+      {data.backups ? <BackupMetrics snapshot={data.backups} /> : null}
+      {data.wordpress ? (
+        <WordPressMetrics snapshot={data.wordpress} interno={audiencia === 'equipa'} />
+      ) : null}
+    </>
+  )
+}
+
+export function DashboardOverview({
+  data,
+  audiencia = 'equipa',
+}: {
+  data: DashboardData
+  audiencia?: Audiencia
+}) {
+  const { report, daily, certDaysRemaining } = data
   const interno = audiencia === 'equipa' 
   const { uptime, findings, forms, activity } = report
 
@@ -231,9 +259,6 @@ export function SiteDashboard({
         </Card>
       </div>
 
-      {backups ? <BackupMetrics snapshot={backups} /> : null}
-
-      {wordpress ? <WordPressMetrics snapshot={wordpress} interno={interno} /> : null}
     </div>
   )
 }
@@ -247,7 +272,7 @@ export function SiteDashboard({
  * sempre — dados de ontem apresentados como se fossem de agora são pior do
  * que não os ter.
  */
-function WordPressMetrics({
+export function WordPressMetrics({
   snapshot,
   interno,
 }: {
@@ -363,7 +388,7 @@ function WordPressMetrics({
  * serviço; o fornecedor por detrás é uma escolha nossa, que pode mudar sem
  * que a promessa mude.
  */
-function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardData['backups']> }) {
+export function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardData['backups']> }) {
   const semCopia = snapshot.lastGoodAt === null
 
   return (
