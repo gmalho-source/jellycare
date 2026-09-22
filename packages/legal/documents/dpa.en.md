@@ -65,7 +65,7 @@ behalf of the Client under Article 28(2) GDPR.
    that law prohibits such information on important grounds of public
    interest.
 
-## 4. Ownership verification and limits of monitoring
+## 4. Ownership verification and limits of observation
 
 1. The Client warrants that it owns the nominated sites or is authorised by
    their owner.
@@ -73,13 +73,56 @@ behalf of the Client under Article 28(2) GDPR.
    proven, by DNS TXT record or by a file placed on the server. Until then,
    the site is monitored for availability only, by observing what any visitor
    would see.
-3. Jelly performs no intrusive testing, does not attempt to bypass
-   authentication, and does not exploit vulnerabilities: collection is
-   passive.
+3. In observing, Jelly performs no intrusive testing, does not attempt to
+   bypass authentication, and does not exploit vulnerabilities. The
+   maintenance operations in Clause 4A are a distinct matter: they are not
+   observation but performance of the contracted service, and are governed by
+   that clause.
 4. Login, registration, payment, checkout, subscription and search forms are
    never submitted automatically. Only forms located on pages expressly
    declared by the Client are submitted, up to the limit configured in the
    platform.
+
+## 4A. Maintenance operations
+
+1. The contracted service includes preventive maintenance. To perform it,
+   Jelly applies component updates to the Client's sites through the
+   platform, on the terms of this clause.
+2. Maintenance operations are performed only where all of the following are
+   satisfied:
+   a) domain ownership has been proven;
+   b) the Client has enabled automatic maintenance for the site in question,
+      which it does by its own act in the platform and may disable at any time
+      with immediate effect;
+   c) the operation falls within a maintenance window declared for that site;
+   d) a backup has completed successfully within the period set in the
+      platform.
+3. Where any condition is not satisfied, nothing on the site is changed, and
+   the fact is recorded and communicated to the Client.
+4. Updates are performed in safe mode: a backup is taken before the change,
+   the site is checked after it, and the change is rolled back automatically
+   if that check fails.
+5. Jelly does not alter the site's content, data or configuration beyond the
+   component updates provided for in this clause.
+6. Each operation is recorded with the component affected, the source and
+   target versions, when it was ordered and its outcome. The record is
+   available to the Client in the platform and appears in the periodic
+   report.
+7. The Client may at any time disable automatic maintenance for one or all
+   sites. On doing so, Jelly reports outstanding updates instead of applying
+   them.
+
+## 4B. Problems we cannot resolve
+
+1. Not everything detected can be resolved by Jelly. Where resolution
+   requires access, a decision or an intervention beyond the contracted
+   service, Jelly communicates the problem to the Client so that it can be
+   referred to whoever can resolve it.
+2. The communication identifies the problem, its severity and, where known,
+   the recommended fix.
+3. Jelly is not responsible for resolving problems whose correction is beyond
+   its reach under paragraph 1, without prejudice to its duty to communicate
+   them in good time.
 
 ## 5. Confidentiality
 
@@ -254,6 +297,8 @@ nominates, and accounting for the service delivered.
 | Site technical data | URL, hostname, platform, declared pages, components and versions | `sites`, `wp_components` |
 | Check results | Status, duration, warnings, errors returned by external services | `check_runs`, `uptime_samples`, `findings` |
 | Form tests | Canary token, canary address, timings, SPF/DKIM/DMARC results | `form_runs` |
+| Maintenance operations | Component, source and target versions, timing and outcome | `wp_updates` |
+| Backups | Date, status, size and WordPress version, as reported | `wp_backups` |
 
 **No special categories** of data within the meaning of Article 9 GDPR are
 processed, nor criminal conviction data. Jelly does not collect data about
@@ -276,6 +321,7 @@ Enforced daily by the automated retention process
 | Monthly reports and resolved findings | 24 months |
 | Sign-in tokens and sessions | Erased the moment they expire |
 | Open findings | Retained while open — never erased by age |
+| Maintenance operation records | Retained for the term of the Main Agreement and 24 months after the operation — this is what answers who changed what, and a change to a site may be questioned long afterwards |
 | Account and configuration data | For the term of the Main Agreement |
 
 ---

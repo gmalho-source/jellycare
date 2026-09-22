@@ -360,6 +360,39 @@ describe('runFormDelivery', () => {
     const finding = outcome.findings.find((f) => f.code === 'form_email_not_delivered')
     expect(finding?.severity).toBe('high')
     expect(outcome.metrics.missingDeliveries).toBe(1)
+    // Sem problemas no domínio, a falha aponta para o lado do envio — que é
+    // o que o cliente tem de ir verificar.
+    expect(finding?.detail).toContain('credenciais de SMTP')
+  }, 60_000)
+
+  it('aponta o problema do domínio quando existe um, em vez de dizer só que não chegou', async () => {
+    // A diferença entre «os formulários não notificam» e «não notificam, e o
+    // domínio perdeu os servidores de correio». A segunda resolve-se na mesma
+    // chamada ao cliente.
+    await db.insert(schema.findings).values({
+      siteId: site.id,
+      checkType: 'email_auth',
+      fingerprint: `mx-${Date.now()}`,
+      code: 'mx_missing',
+      severity: 'high',
+      state: 'open',
+      title: 'O domínio não tem servidores de correio configurados',
+      firstSeenAt: new Date(Date.now() - 86_400_000),
+      lastSeenAt: new Date(),
+    })
+
+    await submissionAt(new Date(Date.now() - 90 * 60_000), {
+      emailReceived: true,
+      emailReceivedAt: new Date(Date.now() - 89 * 60_000),
+    })
+    await submissionAt(new Date(Date.now() - 30 * 60_000))
+
+    const outcome = await runFormDelivery(deps(), site, { graceMinutes: 15 })
+
+    const finding = outcome.findings.find((f) => f.code === 'form_email_not_delivered')
+    expect(finding?.detail).toContain('servidores de correio')
+    expect(finding?.detail).toContain('primeiro sítio onde procurar')
+    expect(finding?.evidence).toMatchObject({ domainEmailIssues: ['mx_missing'] })
   }, 60_000)
 
   it('não reclama de uma submissão que já tinha falhado', async () => {

@@ -13,9 +13,11 @@ import {
   listMembers,
   organizationObjections,
   pruneEndedWindows,
+  schema,
   windowState,
   MAX_FORM_TEST_URLS,
 } from '@jellycare/db'
+import { desc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getSiteDashboard } from '@/lib/dashboard'
@@ -27,6 +29,8 @@ import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
 import { SiteDashboard } from '@/components/site-dashboard'
+import { AutoUpdatePanel } from './auto-update-panel'
+import { IntervalField } from './interval-field'
 import { LegalPanel } from './legal-panel'
 import { MaintenancePanel } from './maintenance-panel'
 import { SettingsPanel } from './settings-panel'
@@ -64,7 +68,18 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const lastRequest = await latestReportRequest(getDb(), detail.site.id)
   // Estado legal da organização, não do site. Fica ao lado dos acessos, que
   // são a outra coisa desta página que pertence à organização e não ao site.
+  const db = getDb()
   const legal = await getLegalState(detail.site.organizationId)
+  // Só para sites ligados a uma ferramenta de manutenção: sem ligação não há
+  // nada para atualizar, e o painel não deve oferecer o que não pode fazer.
+  const atualizacoes = detail.connector
+    ? await db
+        .select()
+        .from(schema.wpUpdates)
+        .where(eq(schema.wpUpdates.siteId, detail.site.id))
+        .orderBy(desc(schema.wpUpdates.orderedAt))
+        .limit(10)
+    : []
   const objecoes = await organizationObjections(getDb(), detail.site.organizationId)
   // A lista de projetos só é precisa para quem pode configurar. Quem não pode
   // não vê o seletor, e não vale um pedido a um terceiro por cada visita.
@@ -205,17 +220,29 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
                   data-check-row={check.checkType}
                   className="flex items-center justify-between px-5 py-3 text-sm"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-ink-900">{registered?.label ?? check.checkType}</span>
-                    <span className="mt-0.5 block text-xs text-ink-400">
-                      {blocked
-                        ? 'Aguarda verificação do domínio'
-                        : check.enabled
-                          ? `A cada ${formatInterval(check.intervalMinutes)}`
-                          : 'Desativada'}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">
+                      {blocked ? (
+                        'Aguarda verificação do domínio'
+                      ) : check.enabled ? (
+                        <>
+                          <span>A cada</span>
+                          {manageable ? (
+                            <IntervalField
+                              checkConfigId={check.id}
+                              intervalMinutes={check.intervalMinutes}
+                            />
+                          ) : (
+                            <span>{formatInterval(check.intervalMinutes)}</span>
+                          )}
+                        </>
+                      ) : (
+                        'Desativada'
+                      )}
                     </span>
                   </div>
-                  <span className="text-xs text-ink-400">
+                  <span className="shrink-0 pl-3 text-xs text-ink-400">
                     {check.lastRunAt ? formatRelative(check.lastRunAt) : '—'}
                   </span>
                 </li>
@@ -427,6 +454,31 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
         )}
       </Card>
 
+      {detail.connector ? (
+        <Card>
+          <CardHeader title="Atualizações automáticas" />
+          <AutoUpdatePanel
+            siteId={detail.site.id}
+            enabled={detail.site.autoUpdate}
+            hasWindow={
+              detail.site.maintenanceWindows.length > 0 ||
+              detail.site.maintenanceSchedule !== null
+            }
+            history={atualizacoes.map((registo) => ({
+              id: registo.id,
+              name: registo.name,
+              kind: registo.kind,
+              fromVersion: registo.fromVersion,
+              toVersion: registo.toVersion,
+              status: registo.status,
+              vulnerable: registo.vulnerable,
+              orderedAt: registo.orderedAt,
+            }))}
+            canManage={manageable}
+          />
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader title="Janelas de manutenção" />
         <MaintenancePanel
@@ -436,6 +488,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
             end: janela.end,
             estado: windowState(janela),
           }))}
+          schedule={detail.site.maintenanceSchedule}
           canManage={manageable}
         />
       </Card>

@@ -25,6 +25,21 @@ registo com uma data a 30 dias. A lista nova fica visível como pré-aviso, a
 antiga continua em vigor até lá, e o cliente vê a contagem e o botão de
 oposição no portal. É a Cláusula 7.ª a funcionar sozinha.
 
+## Histórico
+
+- **v1** — primeira publicação.
+- **v2** — cláusulas 4.ª-A (operações de manutenção) e 4.ª-B (problemas que
+  não podemos resolver). A plataforma deixou de só observar: aplica
+  atualizações dentro da janela de manutenção. A cláusula 4.ª dizia que a
+  recolha era passiva, e deixou de ser verdade — mudar o corpo do acordo
+  obriga a nova aceitação por todos os clientes, e é isso que a subida de
+  versão dispara.
+
+  As condições escritas na 4.ª-A não são promessas de intenção: cada uma
+  corresponde a uma trava no código, com teste que prova que trava
+  (`apps/worker/src/wp-update-jobs.ts`). Se uma delas for relaxada no código,
+  esta cláusula passa a estar errada.
+
 ## Por fazer
 
 - Confirmar, no acordo de cada fornecedor, a entidade contratante, a região

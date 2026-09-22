@@ -15,6 +15,25 @@ import { getDb } from './db'
 
 export const DASHBOARD_WINDOW_DAYS = 30
 
+export interface BackupSnapshot {
+  /** A mais recente que concluiu com sucesso. */
+  lastGoodAt: Date | null
+  /** A versão do WordPress na última cópia — a única via por onde a sabemos. */
+  wordpressVersion: string | null
+  /** Quantas correram e quantas falharam, no que temos guardado. */
+  total: number
+  failed: number
+  /** Tamanho da última cópia boa. */
+  sizeBytes: number | null
+  /** As últimas, para a lista. */
+  recent: {
+    startedAt: Date
+    status: string
+    sizeBytes: number | null
+    errorCode: string | null
+  }[]
+}
+
 export interface WordPressSnapshot {
   projectName: string | null
   lastSyncAt: Date | null
@@ -30,6 +49,8 @@ export interface WordPressSnapshot {
 
 export interface DashboardData {
   report: ReportData
+  /** Cópias de segurança, quando o site é WordPress e está ligado. */
+  backups: BackupSnapshot | null
   /** Disponibilidade dia a dia, para a série temporal. */
   daily: { day: string; up: number; total: number; percent: number | null }[]
   /** Dias até o certificado expirar, da execução mais recente do check de TLS. */
@@ -136,6 +157,7 @@ export async function getSiteDashboard(siteId: string): Promise<DashboardData | 
     daily: dailyUptime(samples, start, end),
     certDaysRemaining,
     wordpress: await wordpressSnapshot(siteId, findings),
+    backups: await backupSnapshot(siteId),
   }
 }
 
@@ -230,5 +252,44 @@ async function wordpressSnapshot(
     updatesPending: outdated.length,
     vulnerabilities,
     outdated,
+  }
+}
+
+/**
+ * As cópias de segurança recentes.
+ *
+ * Sai do que a recolha diária guardou, como o resto do retrato WordPress. O
+ * painel não nomeia a ferramenta que as faz: para quem lê, a cópia de
+ * segurança é parte do serviço, e o fornecedor por detrás é uma escolha
+ * nossa que pode mudar sem que a promessa ao cliente mude.
+ */
+async function backupSnapshot(siteId: string): Promise<BackupSnapshot | null> {
+  const db = getDb()
+
+  const linhas = await db
+    .select()
+    .from(schema.wpBackups)
+    .where(eq(schema.wpBackups.siteId, siteId))
+    .orderBy(desc(schema.wpBackups.startedAt))
+
+  if (linhas.length === 0) return null
+
+  const boas = linhas.filter(
+    (linha) => linha.status === 'FINISHED' && linha.finishedAt !== null,
+  )
+  const ultimaBoa = boas[0]
+
+  return {
+    lastGoodAt: ultimaBoa?.startedAt ?? null,
+    wordpressVersion: ultimaBoa?.wordpressVersion ?? linhas[0]?.wordpressVersion ?? null,
+    total: linhas.length,
+    failed: linhas.filter((linha) => linha.status === 'ERROR').length,
+    sizeBytes: ultimaBoa?.sizeBytes ?? null,
+    recent: linhas.slice(0, 7).map((linha) => ({
+      startedAt: linha.startedAt,
+      status: linha.status,
+      sizeBytes: linha.sizeBytes,
+      errorCode: linha.errorCode,
+    })),
   }
 }

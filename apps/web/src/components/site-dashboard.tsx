@@ -82,6 +82,13 @@ function Tile({
   )
 }
 
+function tamanho(bytes: number | null): string {
+  if (bytes === null || bytes <= 0) return '—'
+  const gb = bytes / 1024 ** 3
+  if (gb >= 1) return `${gb.toFixed(1).replace('.', ',')} GB`
+  return `${Math.round(bytes / 1024 ** 2)} MB`
+}
+
 export function SiteDashboard({
   data,
   audiencia = 'equipa',
@@ -89,7 +96,7 @@ export function SiteDashboard({
   data: DashboardData
   audiencia?: Audiencia
 }) {
-  const { report, daily, certDaysRemaining, wordpress } = data
+  const { report, daily, certDaysRemaining, wordpress, backups } = data
   const interno = audiencia === 'equipa' 
   const { uptime, findings, forms, activity } = report
 
@@ -224,6 +231,8 @@ export function SiteDashboard({
         </Card>
       </div>
 
+      {backups ? <BackupMetrics snapshot={backups} /> : null}
+
       {wordpress ? <WordPressMetrics snapshot={wordpress} interno={interno} /> : null}
     </div>
   )
@@ -338,6 +347,97 @@ function WordPressMetrics({
           ))}
         </ul>
       ) : null}
+    </Card>
+  )
+}
+
+/**
+ * As cópias de segurança.
+ *
+ * Cartão próprio e não uma linha dentro do WordPress: é a pergunta que se faz
+ * antes de tocar num site e no dia em que ele parte, e merece ser lida de
+ * relance. Vale igual para a equipa e para o cliente — não há aqui nada que
+ * seja informação sobre nós.
+ *
+ * A ferramenta que as executa não é nomeada. Para quem lê, a cópia é parte do
+ * serviço; o fornecedor por detrás é uma escolha nossa, que pode mudar sem
+ * que a promessa mude.
+ */
+function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardData['backups']> }) {
+  const semCopia = snapshot.lastGoodAt === null
+
+  return (
+    <Card>
+      <CardHeader title="Cópias de segurança" />
+
+      <div className="grid gap-4 border-b border-ink-200 px-5 py-4 sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-ink-500">Última cópia concluída</p>
+          <p
+            className={`mt-1 text-2xl font-semibold tracking-tight ${
+              semCopia ? 'text-[#a32233]' : 'text-[#15803d]'
+            }`}
+          >
+            {semCopia ? 'nenhuma' : formatRelative(snapshot.lastGoodAt)}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">
+            {semCopia
+              ? 'Não há por onde reverter uma avaria.'
+              : `${tamanho(snapshot.sizeBytes)} · ${formatDateTime(snapshot.lastGoodAt)}`}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-ink-500">Cópias registadas</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900">
+            {snapshot.total}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">
+            {snapshot.failed === 0
+              ? 'Nenhuma falhou'
+              : `${snapshot.failed} ${snapshot.failed === 1 ? 'falhou' : 'falharam'}`}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-ink-500">Versão do WordPress</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900">
+            {snapshot.wordpressVersion ?? '—'}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">na última cópia</p>
+        </div>
+      </div>
+
+      <ul className="divide-y divide-ink-100">
+        {snapshot.recent.map((copia) => (
+          <li
+            key={copia.startedAt.toISOString()}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:gap-4 sm:px-5"
+          >
+            <span className="min-w-0 text-ink-900">{formatDateTime(copia.startedAt)}</span>
+
+            <span className="justify-self-end text-xs tabular-nums text-ink-400 sm:justify-self-start">
+              {tamanho(copia.sizeBytes)}
+            </span>
+
+            <span
+              className={
+                copia.status === 'FINISHED'
+                  ? 'sev-ok col-span-2 justify-self-start whitespace-nowrap rounded-full px-2 py-0.5 text-xs sm:col-span-1 sm:justify-self-end'
+                  : copia.status === 'PENDING'
+                    ? 'sev-info col-span-2 justify-self-start whitespace-nowrap rounded-full px-2 py-0.5 text-xs sm:col-span-1 sm:justify-self-end'
+                    : 'sev-high col-span-2 justify-self-start whitespace-nowrap rounded-full px-2 py-0.5 text-xs sm:col-span-1 sm:justify-self-end'
+              }
+            >
+              {copia.status === 'FINISHED'
+                ? 'concluída'
+                : copia.status === 'PENDING'
+                  ? 'a decorrer'
+                  : `falhou${copia.errorCode ? ` · ${copia.errorCode}` : ''}`}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Card>
   )
 }

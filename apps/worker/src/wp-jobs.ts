@@ -5,7 +5,12 @@ import {
   WpUmbrellaClient,
   WpUmbrellaError,
 } from '@jellycare/connectors'
-import type { UmbrellaComponent, UmbrellaVulnerability } from '@jellycare/connectors'
+import type {
+  UmbrellaBackup,
+  UmbrellaComponent,
+  UmbrellaIssue,
+  UmbrellaVulnerability,
+} from '@jellycare/connectors'
 import { schema, type Database } from '@jellycare/db'
 import { and, eq } from 'drizzle-orm'
 
@@ -134,14 +139,21 @@ export async function runWpInventory(
   let plugins: UmbrellaComponent[]
   let themes: UmbrellaComponent[]
   let vulnerabilities: UmbrellaVulnerability[]
+  let backups: UmbrellaBackup[]
+  let issues: UmbrellaIssue[]
 
   try {
     // Sequencial e não em paralelo: a API tem limite de pedidos e não o
-    // documenta. Três pedidos por site, espaçados, é barato; um pico de
+    // documenta. Quatro pedidos por site, espaçados, é barato; um pico de
     // paralelismo sobre uma frota inteira não é.
     plugins = await client.listPlugins(projectId)
     themes = await client.listThemes(projectId)
     vulnerabilities = await client.listVulnerabilities(projectId)
+    backups = await client.listBackups(projectId)
+    // Só os fatais. Os avisos e as depreciações contam-se aos milhares num
+    // site normal e não são avaria — transformá-los em findings era encher o
+    // painel de vermelho por coisa que não se corrige nem se deve corrigir.
+    issues = await client.listIssues(projectId, { severity: 'FATAL' })
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : String(error)
     await deps.db
@@ -164,8 +176,14 @@ export async function runWpInventory(
   }
 
   await replaceInventory(deps.db, site.id, plugins, themes, now)
+  await replaceBackups(deps.db, site.id, backups)
 
   const findings: ObservedFinding[] = vulnerabilities.map(vulnerabilityFinding)
+
+  const aviso = backupFinding(backups, now)
+  if (aviso) findings.push(aviso)
+
+  findings.push(...phpFatalFindings(issues))
 
   const pluginsPorAtualizar = outdated(plugins)
   const temasPorAtualizar = outdated(themes)
@@ -253,5 +271,143 @@ async function replaceInventory(
   await db.transaction(async (tx) => {
     await tx.delete(schema.wpComponents).where(eq(schema.wpComponents.siteId, siteId))
     if (linhas.length > 0) await tx.insert(schema.wpComponents).values(linhas)
+  })
+}
+
+/**
+ * Quantos dias sem cópia de segurança boa antes de isto ser um problema.
+ *
+ * Sete e não um: uma cópia falhada numa noite é ruído, e o agendamento
+ * habitual é diário. Uma semana inteira sem cópia que tenha terminado é
+ * outra coisa — é descobrir, no dia em que o site parte, que não há por onde
+ * voltar atrás.
+ */
+export const BACKUP_STALE_DAYS = 7
+
+/**
+ * A cópia de segurança é o que nos permite mexer num site sem medo. Vigiá-la
+ * é tão parte do serviço como vigiar se o site responde — e é a única das
+ * duas coisas que ninguém repara que falhou até precisar dela.
+ */
+export function backupFinding(
+  backups: readonly UmbrellaBackup[],
+  now: Date,
+): ObservedFinding | null {
+  const concluidas = backups
+    .filter((backup) => backup.status === 'FINISHED' && backup.finishedAt !== null)
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+
+  const ultima = concluidas[0]
+  const limite = BACKUP_STALE_DAYS * 24 * 3600_000
+
+  if (!ultima) {
+    // Nenhuma cópia concluída de que tenhamos notícia. Se nem sequer há
+    // tentativas, não afirmamos que falharam — dizemos que não vemos
+    // nenhuma, que é o que sabemos.
+    return {
+      code: 'wp_backup_missing',
+      discriminator: 'wp_backup_missing',
+      severity: 'high',
+      title: 'Sem cópia de segurança concluída',
+      detail:
+        backups.length === 0
+          ? 'Não há registo de nenhuma cópia de segurança deste site.'
+          : `Há ${backups.length} ${backups.length === 1 ? 'tentativa registada' : 'tentativas registadas'}, nenhuma concluída com sucesso.`,
+      evidence: { attempts: backups.length },
+    }
+  }
+
+  const idadeMs = now.getTime() - Date.parse(ultima.startedAt)
+  if (idadeMs <= limite) return null
+
+  const dias = Math.floor(idadeMs / (24 * 3600_000))
+  return {
+    code: 'wp_backup_stale',
+    discriminator: 'wp_backup_stale',
+    severity: 'high',
+    title: `Sem cópia de segurança há ${dias} dias`,
+    detail:
+      `A cópia mais recente que concluiu é de ${ultima.startedAt}. ` +
+      'Enquanto isto durar, uma avaria no site não tem por onde ser revertida.',
+    evidence: { lastFinishedAt: ultima.startedAt, days: dias },
+  }
+}
+
+/**
+ * Grava as cópias recentes, apagando o que já não vem na resposta.
+ *
+ * Mesma escolha que o inventário: é um retrato. Uma cópia que saiu da janela
+ * de retenção do fornecedor deixou de existir, e mantê-la aqui era prometer
+ * um restauro que já não é possível.
+ */
+async function replaceBackups(
+  db: Database,
+  siteId: string,
+  backups: readonly UmbrellaBackup[],
+): Promise<void> {
+  const linhas = backups
+    .filter((backup) => backup.externalId.length > 0 && !Number.isNaN(Date.parse(backup.startedAt)))
+    .map((backup) => ({
+      siteId,
+      externalId: backup.externalId,
+      startedAt: new Date(backup.startedAt),
+      finishedAt: backup.finishedAt ? new Date(backup.finishedAt) : null,
+      status: backup.status,
+      triggerType: backup.triggerType,
+      wordpressVersion: backup.wordpressVersion,
+      sizeBytes: backup.sizeBytes,
+      errorCode: backup.errorCode,
+    }))
+
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.wpBackups).where(eq(schema.wpBackups.siteId, siteId))
+    if (linhas.length > 0) await tx.insert(schema.wpBackups).values(linhas)
+  })
+}
+
+/**
+ * Um finding por origem, e não por erro.
+ *
+ * Um erro fatal repete-se a cada visita à página afetada: um plugin partido
+ * produz milhares de linhas e uma única avaria. Agregar pela origem dá uma
+ * entrada por plugin partido, que é o que alguém vai resolver.
+ */
+export function phpFatalFindings(issues: readonly UmbrellaIssue[]): ObservedFinding[] {
+  const fatais = issues.filter((issue) => issue.severity === 'FATAL')
+  if (fatais.length === 0) return []
+
+  const porOrigem = new Map<string, UmbrellaIssue[]>()
+  for (const issue of fatais) {
+    const chave = issue.sourceSlug ?? issue.sourceName ?? issue.file ?? 'desconhecida'
+    const lista = porOrigem.get(chave)
+    if (lista) lista.push(issue)
+    else porOrigem.set(chave, [issue])
+  }
+
+  return [...porOrigem.entries()].map(([chave, lista]) => {
+    const primeiro = lista[0]!
+    const nome = primeiro.sourceName ?? chave
+    const ocorrencias = lista.reduce((total, issue) => total + (issue.occurrences ?? 0), 0)
+
+    return {
+      code: 'wp_php_fatal',
+      discriminator: chave,
+      // Um erro fatal não é dívida técnica: é uma página que rebenta a quem
+      // lá entra, e pode ser o envio de email que deixou de funcionar.
+      severity: 'high' as const,
+      title: `Erros fatais de PHP em ${nome}`,
+      detail:
+        `${lista.length} ${lista.length === 1 ? 'erro fatal distinto' : 'erros fatais distintos'}` +
+        (ocorrencias > 0 ? `, ${ocorrencias} ocorrências` : '') +
+        `. O mais recente: ${primeiro.message}` +
+        (primeiro.file ? ` (${primeiro.file}:${primeiro.line ?? '?'})` : '') +
+        '.',
+      evidence: {
+        source: chave,
+        files: [...new Set(lista.map((issue) => issue.file).filter(Boolean))].slice(0, 5),
+        occurrences: ocorrencias,
+        lastSeenAt: primeiro.lastSeenAt,
+      },
+    }
   })
 }

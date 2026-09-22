@@ -15,6 +15,8 @@ export interface ConnectorCheckMeta {
 
 export const WP_INVENTORY_CHECK = 'wp_inventory'
 
+export const WP_AUTO_UPDATE_CHECK = 'wp_auto_update'
+
 export const CONNECTOR_CHECKS: Record<string, ConnectorCheckMeta> = {
   [WP_INVENTORY_CHECK]: {
     type: WP_INVENTORY_CHECK,
@@ -24,6 +26,17 @@ export const CONNECTOR_CHECKS: Record<string, ConnectorCheckMeta> = {
     // hora e o que nos interessa é o intervalo entre ela existir e nós
     // sabermos — não entre o cliente instalar um plugin e nós darmos conta.
     defaultIntervalMinutes: 60 * 24,
+    confirmationsRequired: 1,
+  },
+  [WP_AUTO_UPDATE_CHECK]: {
+    type: WP_AUTO_UPDATE_CHECK,
+    label: 'Atualizações automáticas WordPress',
+    access: 'verified',
+    // De hora a hora. Não é a frequência com que se atualiza — é a
+    // frequência com que se pergunta «estamos dentro da janela?». Uma janela
+    // de duas horas de madrugada só é apanhada se alguém olhar lá dentro, e
+    // a maior parte destas execuções não faz rigorosamente nada.
+    defaultIntervalMinutes: 60,
     confirmationsRequired: 1,
   },
 }

@@ -544,6 +544,10 @@ export async function runFormDelivery(
     .orderBy(desc(schema.formRuns.startedAt))
     .limit(200)
 
+  // O estado do email do domínio, para quando for preciso explicar uma falha
+  // de entrega. Lido uma vez, e não por formulário.
+  const emailDoDominio = await diagnosticoDeEmail(deps.db, site.id)
+
   for (const form of forms) {
     // Só a submissão mais recente que já passou o período de graça: avaliar as
     // antigas repetiria findings de problemas entretanto resolvidos.
@@ -606,11 +610,21 @@ export async function runFormDelivery(
           'Este formulário já entregou notificações à caixa de verificação, e desta vez a ' +
           `submissão foi aceite mas não chegou nada em ${Math.round(graceMs / 60_000)} minutos. ` +
           'É o cenário em que o cliente pensa que não tem pedidos quando na verdade não os ' +
-          'está a receber.',
+          'está a receber.' +
+          // A diferença entre ligar ao cliente a dizer «os formulários não
+          // notificam» e ligar a dizer «não notificam, e o domínio perdeu os
+          // MX ontem». A segunda resolve-se na mesma chamada.
+          (emailDoDominio.length > 0
+            ? ` Ao mesmo tempo, o site tem isto por resolver: ${emailDoDominio
+                .map((problema) => problema.title)
+                .join('; ')}. É o primeiro sítio onde procurar.`
+            : ' O email do domínio não tem problemas conhecidos, por isso a causa está do lado ' +
+              'do envio: credenciais de SMTP alteradas, plugin de envio desativado ou a falhar.'),
         evidence: {
           formId: form.id,
           canaryAddress: latest.canaryAddress,
           submittedAt: latest.startedAt.toISOString(),
+          domainEmailIssues: emailDoDominio.map((problema) => problema.code),
         },
       })
       continue
@@ -663,4 +677,48 @@ export async function runFormDelivery(
     metrics: { runsEvaluated: evaluated, missingDeliveries: missing },
     durationMs: Date.now() - startedAt,
   }
+}
+
+/**
+ * Os problemas de email do domínio que estão em aberto agora.
+ *
+ * Não repete consultas de DNS: lê o que o check de autenticação de email já
+ * apurou e guardou. Correr tudo outra vez no momento da falha dava a mesma
+ * resposta, mais devagar e com mais pedidos — e arriscava dizer uma coisa
+ * diferente da que o painel mostra a dois centímetros de distância.
+ */
+/**
+ * Um erro fatal de PHP é o outro sítio onde a entrega morre.
+ *
+ * O exemplo da própria documentação do fornecedor é um erro fatal no ficheiro
+ * de envio de um plugin de formulários. Se há um, é o primeiro sítio a olhar
+ * — antes de ir pedir ao cliente a password do SMTP.
+ */
+export const PHP_FATAL_CODE = 'wp_php_fatal'
+
+export const EMAIL_DOMAIN_CODES = [
+  'mx_missing',
+  'mx_unresolvable',
+  'spf_missing',
+  'spf_duplicated',
+  'spf_permissive',
+  'dmarc_missing',
+] as const
+
+async function diagnosticoDeEmail(
+  db: Database,
+  siteId: string,
+): Promise<{ code: string; title: string }[]> {
+  const linhas = await db
+    .select({ code: schema.findings.code, title: schema.findings.title })
+    .from(schema.findings)
+    .where(
+      and(
+        eq(schema.findings.siteId, siteId),
+        inArray(schema.findings.code, [...EMAIL_DOMAIN_CODES, PHP_FATAL_CODE]),
+        inArray(schema.findings.state, ['open', 'acknowledged']),
+      ),
+    )
+
+  return linhas
 }

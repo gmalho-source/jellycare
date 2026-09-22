@@ -2,7 +2,8 @@ import { createDatabase, schema } from '@jellycare/db'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Site } from '@jellycare/core'
-import { runWpInventory } from './wp-jobs.js'
+import type { UmbrellaBackup, UmbrellaIssue } from '@jellycare/connectors'
+import { backupFinding, phpFatalFindings, runWpInventory } from './wp-jobs.js'
 
 /**
  * Inventário WordPress pela API da WP Umbrella, contra Postgres real e uma
@@ -133,10 +134,61 @@ function deps(porCaminho: Record<string, unknown>) {
   }
 }
 
+/**
+ * Uma cópia de segurança concluída esta madrugada.
+ *
+ * Fica na base partilhada dos testes porque a ausência de cópias passou a
+ * ser, por si só, um problema reportado — e é: um site sem cópia recente é
+ * um site que não se pode reverter. Sem isto, todos os testes deste ficheiro
+ * passariam a ver um finding que não é o que estão a medir.
+ */
+const COPIAS = {
+  code: 'success',
+  data: [
+    {
+      id: 'bk-1',
+      date: new Date(Date.now() - 6 * 3600_000).toISOString(),
+      date_finished: new Date(Date.now() - 6 * 3600_000 + 300_000).toISOString(),
+      status: 'FINISHED',
+      trigger_type: 'AUTOMATIC',
+      wordpress_version: '6.7.1',
+      size_bytes: 524_288_000,
+      error_code: null,
+    },
+  ],
+}
+
+/**
+ * Um erro fatal, no caminho de envio de um plugin de formulários.
+ *
+ * É o exemplo da própria documentação do fornecedor, e não por acaso: é o
+ * caso que explica, sozinho, porque é que um cliente deixou de receber
+ * notificações dos formulários.
+ */
+const ERROS = {
+  code: 'success',
+  data: [
+    {
+      id: 'i1',
+      severity: 'FATAL',
+      type_error: 'E_ERROR',
+      source_name: 'Contact Form 7',
+      source_slug: 'contact-form-7',
+      message: 'Uncaught Error: Call to a member function get() on null',
+      file: '/wp-content/plugins/contact-form-7/includes/mail.php',
+      line: 214,
+      occurrences: 37,
+      last_seen_at: '2026-09-22T08:00:00.000Z',
+    },
+  ],
+}
+
 const CAMINHOS = {
   '/projects/123/plugins': PLUGINS,
   '/projects/123/themes': TEMAS,
   '/projects/123/vulnerabilities': VULNS,
+  '/projects/123/backups': COPIAS,
+  '/projects/123/issues': ERROS,
 }
 
 describe('site sem ligação', () => {
@@ -263,6 +315,8 @@ describe('atualizações pendentes', () => {
         '/projects/123/plugins': { code: 'success', data: [PLUGINS.data[1]] },
         '/projects/123/themes': { code: 'success', data: [] },
         '/projects/123/vulnerabilities': { code: 'success', data: {} },
+        '/projects/123/backups': COPIAS,
+        '/projects/123/issues': { code: 'success', data: [] },
       }),
       site,
       {},
@@ -336,5 +390,127 @@ describe('falhas da API', () => {
       .where(eq(schema.wpComponents.siteId, site.id))
 
     expect(componentes.length).toBeGreaterThan(0)
+  })
+})
+
+describe('backupFinding', () => {
+  const AGORA = new Date('2026-09-22T10:00:00Z')
+
+  function copia(over: Partial<UmbrellaBackup> = {}): UmbrellaBackup {
+    return {
+      externalId: 'b1',
+      startedAt: '2026-09-22T03:00:00.000Z',
+      finishedAt: '2026-09-22T03:05:00.000Z',
+      status: 'FINISHED',
+      triggerType: 'AUTOMATIC',
+      wordpressVersion: '6.7.1',
+      sizeBytes: 1024,
+      errorCode: null,
+      ...over,
+    }
+  }
+
+  it('cala-se quando há cópia recente concluída', () => {
+    expect(backupFinding([copia()], AGORA)).toBeNull()
+  })
+
+  it('não conta uma cópia que falhou como cópia', () => {
+    // O caso que interessa: o agendamento corre todas as noites e falha
+    // todas as noites. Contar a tentativa como cópia era dar por vigiado o
+    // que está exatamente ao contrário.
+    const finding = backupFinding(
+      [copia({ status: 'ERROR', finishedAt: null, errorCode: 'TIMEOUT' })],
+      AGORA,
+    )
+    expect(finding?.code).toBe('wp_backup_missing')
+    expect(finding?.detail).toContain('nenhuma concluída')
+  })
+
+  it('não conta uma cópia ainda a decorrer', () => {
+    const finding = backupFinding([copia({ status: 'PENDING', finishedAt: null })], AGORA)
+    expect(finding?.code).toBe('wp_backup_missing')
+  })
+
+  it('avisa quando a mais recente concluída passou do limite', () => {
+    const velha = copia({ startedAt: '2026-09-10T03:00:00.000Z' })
+    const finding = backupFinding([velha], AGORA)
+    expect(finding?.code).toBe('wp_backup_stale')
+    expect(finding?.title).toContain('12 dias')
+    expect(finding?.severity).toBe('high')
+  })
+
+  it('usa a concluída mais recente e não a mais recente de todas', () => {
+    // Uma falha de ontem não invalida a cópia boa de anteontem.
+    const finding = backupFinding(
+      [
+        copia({ externalId: 'ontem', startedAt: '2026-09-21T03:00:00.000Z', status: 'ERROR', finishedAt: null }),
+        copia({ externalId: 'anteontem', startedAt: '2026-09-20T03:00:00.000Z' }),
+      ],
+      AGORA,
+    )
+    expect(finding).toBeNull()
+  })
+
+  it('diz que não há registo nenhum quando a lista vem vazia', () => {
+    const finding = backupFinding([], AGORA)
+    expect(finding?.code).toBe('wp_backup_missing')
+    expect(finding?.detail).toContain('Não há registo')
+  })
+})
+
+describe('erros de PHP no inventário', () => {
+  it('traz os erros fatais do site para os problemas do painel', async () => {
+    await ligar()
+    const outcome = await runWpInventory(deps(CAMINHOS), site, {})
+
+    const finding = outcome.findings.find((f) => f.code === 'wp_php_fatal')
+    expect(finding?.severity).toBe('high')
+    expect(finding?.discriminator).toBe('contact-form-7')
+    expect(finding?.detail).toContain('includes/mail.php:214')
+  })
+})
+
+describe('phpFatalFindings', () => {
+  function erro(over: Partial<UmbrellaIssue> = {}): UmbrellaIssue {
+    return {
+      id: 'i1',
+      severity: 'FATAL',
+      typeError: 'E_ERROR',
+      sourceName: 'Contact Form 7',
+      sourceSlug: 'contact-form-7',
+      message: 'Uncaught Error: Call to a member function get() on null',
+      file: '/wp-content/plugins/contact-form-7/includes/mail.php',
+      line: 214,
+      occurrences: 37,
+      lastSeenAt: '2026-09-22T08:00:00.000Z',
+      ...over,
+    }
+  }
+
+  it('ignora o que não é fatal', () => {
+    // Avisos e depreciações contam-se aos milhares num site normal. Não são
+    // avaria, e transformá-los em findings enchia o painel de vermelho.
+    expect(phpFatalFindings([erro({ severity: 'MINOR' })])).toEqual([])
+  })
+
+  it('agrega por origem e não por erro', () => {
+    // Um plugin partido produz milhares de linhas e uma única avaria.
+    const findings = phpFatalFindings([
+      erro({ id: 'a' }),
+      erro({ id: 'b', message: 'Outro erro', line: 300 }),
+      erro({ id: 'c', sourceSlug: 'astra', sourceName: 'Astra', file: '/x.php' }),
+    ])
+
+    expect(findings).toHaveLength(2)
+    const cf7 = findings.find((f) => f.discriminator === 'contact-form-7')
+    expect(cf7?.severity).toBe('high')
+    expect(cf7?.title).toContain('Contact Form 7')
+    expect(cf7?.detail).toContain('2 erros fatais distintos')
+    expect(cf7?.detail).toContain('74 ocorrências')
+  })
+
+  it('nomeia o ficheiro, que é o que diz onde está partido', () => {
+    const [finding] = phpFatalFindings([erro()])
+    expect(finding?.detail).toContain('includes/mail.php:214')
   })
 })

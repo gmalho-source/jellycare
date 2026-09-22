@@ -1,6 +1,7 @@
 import type { FindingNotification, Severity } from '@jellycare/core'
 import { deliveryFor, severityRank } from '@jellycare/core'
-import { isInMaintenanceWindow, type MaintenanceWindow } from './schedule.js'
+import { type MaintenanceWindow } from './schedule.js'
+import { isInAnyMaintenanceWindow, type MaintenanceSchedule } from '@jellycare/db'
 
 export type NotificationChannel = 'email' | 'slack' | 'webhook'
 
@@ -20,6 +21,8 @@ export interface RoutingContext {
   siteId: string
   siteLabel: string
   maintenanceWindows: readonly MaintenanceWindow[]
+  /** O horário que se repete, quando o site tem um. */
+  maintenanceSchedule?: MaintenanceSchedule | null
   now: Date
 }
 
@@ -39,7 +42,14 @@ export function routeNotification(
   targets: readonly NotificationTarget[],
   context: RoutingContext,
 ): RoutingDecision[] {
-  const inMaintenance = isInMaintenanceWindow(context.maintenanceWindows, context.now)
+  // As duas vias valem: a janela avulsa do trabalho planeado e o horário
+  // recorrente. Um alerta de madrugada durante a manutenção semanal é tão
+  // inútil como durante a avulsa.
+  const inMaintenance = isInAnyMaintenanceWindow(
+    context.maintenanceWindows,
+    context.maintenanceSchedule ?? null,
+    context.now,
+  )
 
   return targets.map((target): RoutingDecision => {
     if (!target.enabled) return { deliver: false, target, reason: 'canal desativado' }

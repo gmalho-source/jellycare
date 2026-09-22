@@ -1,5 +1,6 @@
 import { applyRetention, createDatabase, DEFAULT_RETENTION } from '@jellycare/db'
 import { syncLegalDocuments } from '@jellycare/legal'
+import { ensureCheckConfigs } from './check-configs.js'
 import { createBrowserPool } from './browser-pool.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
 import { createCheckQueue, createCheckWorker } from './queues.js'
@@ -29,6 +30,14 @@ async function main(): Promise<void> {
   // Se falhar, o arranque falha. Um conflito de versão significa que alguém
   // alterou um texto já aceite por um cliente, e continuar a correr com isso
   // por resolver é pior do que não arrancar.
+  // Verificações acrescentadas depois de um site ser criado nunca lhe
+  // chegavam: sem linha de configuração, o agendador não as vê e elas nunca
+  // correm — em silêncio. Aconteceu com o inventário WordPress.
+  const configuracoes = await ensureCheckConfigs(db)
+  if (configuracoes.created > 0) {
+    console.info(`[checks] ${configuracoes.created} configurações em falta criadas`)
+  }
+
   const documentos = await syncLegalDocuments(db)
   if (documentos.inserted.length > 0) {
     for (const documento of documentos.inserted) {

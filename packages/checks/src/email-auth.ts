@@ -3,10 +3,20 @@ import { getDomain } from 'tldts'
 
 export type TxtResolver = (hostname: string) => Promise<string[][]>
 
+export interface MxRecord {
+  exchange: string
+  priority: number
+}
+
+export type MxResolver = (hostname: string) => Promise<MxRecord[]>
+export type HostResolver = (hostname: string) => Promise<string[]>
+
 export interface EmailAuthConfig {
   /** Seletores DKIM a testar. Não há forma de os enumerar por DNS. */
   dkimSelectors?: string[]
   resolver?: TxtResolver
+  mxResolver?: MxResolver
+  hostResolver?: HostResolver
 }
 
 /**
@@ -79,6 +89,46 @@ export function analyzeDmarc(records: string[][]): DmarcAnalysis {
   return analysis
 }
 
+export interface MxAnalysis {
+  /** Nenhum MX: o domínio não recebe correio. */
+  found: boolean
+  records: MxRecord[]
+  /** `MX .` — o domínio declara expressamente que não recebe correio. */
+  nullMx: boolean
+  /** Hosts de MX que não resolvem para endereço nenhum. */
+  unresolved: string[]
+}
+
+/**
+ * Para onde vai o correio deste domínio, e se esse destino existe.
+ *
+ * É a única parte do caminho do correio que conseguimos verificar de fora.
+ * **Não testamos ligação SMTP**, e não é por falta de vontade: a porta 25 de
+ * saída é bloqueada por praticamente todos os alojamentos, o nosso incluído.
+ *
+ * E mesmo sem bloqueio não serviria para o que interessa aqui. O servidor que
+ * um formulário WordPress usa para *enviar* não é o MX do domínio — é um
+ * servidor de submissão configurado dentro do WordPress do cliente, com
+ * credenciais que não temos e não devemos ter. Quem prova que esse caminho
+ * funciona é a mensagem que chega à caixa canária, no teste de formulários.
+ *
+ * O que isto apanha é a outra ponta, e é bem real: um domínio que perdeu os
+ * MX, ou cujos MX apontam para um host que já não existe. Nesse estado o
+ * cliente não recebe nada, de lado nenhum, e ninguém dá por isso até alguém
+ * se queixar.
+ */
+export function analyzeMx(records: readonly MxRecord[], unresolved: readonly string[]): MxAnalysis {
+  const limpos = records.filter((record) => record.exchange.trim().length > 0)
+  const nullMx = limpos.length === 1 && limpos[0]!.exchange.trim() === '.'
+
+  return {
+    found: limpos.length > 0 && !nullMx,
+    records: [...limpos].sort((a, b) => a.priority - b.priority),
+    nullMx,
+    unresolved: [...unresolved],
+  }
+}
+
 async function resolveQuietly(resolver: TxtResolver, hostname: string): Promise<string[][]> {
   try {
     return await resolver(hostname)
@@ -113,10 +163,71 @@ export const emailAuthCheck: CheckDefinition<EmailAuthConfig> = {
     // www.cliente.pt envia a partir de cliente.pt.
     const domain = getDomain(context.site.hostname) ?? context.site.hostname
 
-    const [txt, dmarcTxt] = await Promise.all([
+    const mxResolver =
+      config.mxResolver ??
+      (async (hostname: string) => {
+        const { resolveMx } = await import('node:dns/promises')
+        return resolveMx(hostname)
+      })
+    const hostResolver =
+      config.hostResolver ??
+      (async (hostname: string) => {
+        const { resolve4, resolve6 } = await import('node:dns/promises')
+        const [v4, v6] = await Promise.all([
+          resolve4(hostname).catch(() => [] as string[]),
+          resolve6(hostname).catch(() => [] as string[]),
+        ])
+        return [...v4, ...v6]
+      })
+
+    const [txt, dmarcTxt, mxRecords] = await Promise.all([
       resolveQuietly(resolver, domain),
       resolveQuietly(resolver, `_dmarc.${domain}`),
+      mxResolver(domain).catch(() => [] as MxRecord[]),
     ])
+
+    // Só os dois de maior prioridade: se esses não resolverem, o correio já
+    // está em apuros, e percorrer uma lista inteira de reservas é gastar
+    // consultas para dizer o mesmo.
+    const principais = [...mxRecords]
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, 2)
+      .filter((record) => record.exchange.trim() !== '.')
+
+    const porResolver = await Promise.all(
+      principais.map(async (record) => {
+        const enderecos = await hostResolver(record.exchange).catch(() => [] as string[])
+        return enderecos.length === 0 ? record.exchange : null
+      }),
+    )
+
+    const mx = analyzeMx(mxRecords, porResolver.filter((host): host is string => host !== null))
+
+    if (!mx.found && !mx.nullMx) {
+      findings.push({
+        code: 'mx_missing',
+        severity: 'high',
+        title: 'O domínio não tem servidores de correio configurados',
+        detail:
+          'Sem registos MX, este domínio não recebe email — incluindo as notificações dos ' +
+          'formulários do site, se forem enviadas para um endereço deste domínio. É um estado ' +
+          'em que ninguém dá por nada até alguém se queixar de não ter recebido resposta.',
+        evidence: { domain },
+      })
+    } else if (mx.unresolved.length > 0) {
+      findings.push({
+        code: 'mx_unresolvable',
+        severity: 'high',
+        title:
+          mx.unresolved.length === 1
+            ? 'O servidor de correio do domínio não resolve'
+            : 'Os servidores de correio do domínio não resolvem',
+        detail:
+          `Os registos MX apontam para ${mx.unresolved.join(', ')}, que não resolve para ` +
+          'endereço nenhum. O correio dirigido a este domínio não tem para onde ir.',
+        evidence: { domain, unresolved: mx.unresolved },
+      })
+    }
 
     const spf = analyzeSpf(txt)
     if (!spf.found) {

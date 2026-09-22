@@ -4,6 +4,7 @@ import { buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
 import {
   addMaintenanceWindow,
   grantAccess,
+  parseMaintenanceSchedule,
   parseFormTestUrls,
   parseSiteSettings,
   requestReport,
@@ -19,7 +20,11 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { appOrigin } from '@/lib/app-url'
-import { ALL_CHECKS } from '@/lib/checks'
+import {
+  ALL_CHECKS,
+  MAX_CHECK_INTERVAL_MINUTES,
+  MIN_CHECK_INTERVAL_MINUTES,
+} from '@/lib/checks'
 import { getDb } from '@/lib/db'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import {
@@ -910,4 +915,185 @@ export async function setMaintenanceWindowAction(
 
   revalidatePath(`/sites/${parsed.data.siteId}`)
   return { message: 'Janela declarada. Os alertas ficam suspensos nesse período.' }
+}
+
+/**
+ * Ligar ou desligar a atualização automática de um site.
+ *
+ * É a única definição desta plataforma que a faz escrever no site de um
+ * cliente, por isso é por site e só por quem gere. A janela de manutenção
+ * continua a ser condição: ligada sem janela, não corre nada — e o painel
+ * diz isso em vez de deixar a pessoa a achar que ficou tratado.
+ */
+export async function setAutoUpdateAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({ siteId: z.string().uuid(), enabled: z.enum(['on', 'off']) })
+    .safeParse({ siteId: formData.get('siteId'), enabled: formData.get('enabled') })
+  if (!parsed.success) return { error: 'Dados inválidos.' }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      organizationId: schema.sites.organizationId,
+      maintenanceWindows: schema.sites.maintenanceWindows,
+    })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, parsed.data.siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  const ligar = parsed.data.enabled === 'on'
+  await db
+    .update(schema.sites)
+    .set({ autoUpdate: ligar })
+    .where(eq(schema.sites.id, parsed.data.siteId))
+
+  revalidatePath(`/sites/${parsed.data.siteId}`)
+
+  if (!ligar) return { message: 'Atualização automática desligada.' }
+
+  return {
+    message:
+      site.maintenanceWindows.length === 0
+        ? 'Ligada — mas sem janela de manutenção declarada nada será atualizado. Declare uma acima.'
+        : 'Ligada. As atualizações são aplicadas dentro da janela de manutenção.',
+  }
+}
+
+/**
+ * Mudar a periodicidade de uma verificação num site.
+ *
+ * Existe por causa de um caso concreto: o teste de formulários corre uma vez
+ * por dia, e num cliente cujo funil de contactos é o negócio isso são até
+ * vinte e quatro horas de pedidos perdidos antes de darmos por uma avaria de
+ * entrega. Quem responde pelo site é que sabe se vale o custo.
+ *
+ * Os limites são largos mas existem: abaixo de cinco minutos é um pedido a
+ * cada cinco minutos ao site de um cliente, e acima de um mês a verificação
+ * está ligada só no papel.
+ */
+export async function setCheckIntervalAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({
+      checkConfigId: z.string().uuid(),
+      intervalMinutes: z.coerce
+        .number()
+        .int()
+        .min(MIN_CHECK_INTERVAL_MINUTES, `Mínimo ${MIN_CHECK_INTERVAL_MINUTES} minutos.`)
+        .max(MAX_CHECK_INTERVAL_MINUTES, 'Máximo 30 dias.'),
+    })
+    .safeParse({
+      checkConfigId: formData.get('checkConfigId'),
+      intervalMinutes: formData.get('intervalMinutes'),
+    })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Periodicidade inválida.' }
+  }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      siteId: schema.checkConfigs.siteId,
+      organizationId: schema.sites.organizationId,
+    })
+    .from(schema.checkConfigs)
+    .innerJoin(schema.sites, eq(schema.sites.id, schema.checkConfigs.siteId))
+    .where(eq(schema.checkConfigs.id, parsed.data.checkConfigId))
+    .limit(1)
+
+  const config = rows[0]
+  if (!config) return { error: 'Verificação não encontrada.' }
+
+  assertMembership(user, config.organizationId)
+  if (!canManage(user, config.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  // `nextRunAt` a nulo para a nova periodicidade valer já. Sem isto, baixar
+  // de um dia para uma hora só tinha efeito depois de passar o dia inteiro
+  // que já estava agendado — exatamente quando alguém a baixa por urgência.
+  await db
+    .update(schema.checkConfigs)
+    .set({ intervalMinutes: parsed.data.intervalMinutes, nextRunAt: null })
+    .where(eq(schema.checkConfigs.id, parsed.data.checkConfigId))
+
+  revalidatePath(`/sites/${config.siteId}`)
+  return { message: 'Periodicidade alterada. A próxima execução fica para já.' }
+}
+
+/**
+ * Definir — ou limpar — o horário de manutenção recorrente.
+ *
+ * O horário é guardado com o nome do fuso e não com a diferença horária: «três
+ * da manhã em Lisboa» tem de continuar a ser três da manhã depois da mudança
+ * da hora, e uma diferença fixa não continuava.
+ */
+export async function setMaintenanceScheduleAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const siteId = z.string().uuid().safeParse(formData.get('siteId'))
+  if (!siteId.success) return { error: 'Dados inválidos.' }
+
+  const db = getDb()
+  const rows = await db
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId.data))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  if (formData.get('operacao') === 'limpar') {
+    await db
+      .update(schema.sites)
+      .set({ maintenanceSchedule: null })
+      .where(eq(schema.sites.id, siteId.data))
+    revalidatePath(`/sites/${siteId.data}`)
+    return { message: 'Horário removido.' }
+  }
+
+  const resultado = parseMaintenanceSchedule({
+    weekdays: formData.getAll('weekday').map(Number),
+    hour: Number(formData.get('hour')),
+    minute: Number(formData.get('minute') ?? 0),
+    durationMinutes: Number(formData.get('durationMinutes')),
+    timezone: formData.get('timezone'),
+  })
+  if (resultado.error || !resultado.schedule) {
+    return { error: resultado.error ?? 'Horário inválido.' }
+  }
+
+  await db
+    .update(schema.sites)
+    .set({ maintenanceSchedule: resultado.schedule })
+    .where(eq(schema.sites.id, siteId.data))
+
+  revalidatePath(`/sites/${siteId.data}`)
+  return { message: 'Horário guardado.' }
 }

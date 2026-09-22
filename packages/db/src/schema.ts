@@ -170,6 +170,31 @@ export const sites = pgTable(
      * preferimos não testar nada a testar o que ninguém mandou.
      */
     formTestUrls: jsonb('form_test_urls').$type<string[]>().notNull().default([]),
+    /**
+     * Aplicar sozinho as atualizações, dentro da janela de manutenção.
+     *
+     * Desligado por omissão, e por site. É a única definição desta plataforma
+     * que a faz escrever no site de um cliente, por isso não se liga em massa
+     * nem por omissão: liga-se site a site, por quem responde por ele.
+     *
+     * Sem janela de manutenção declarada não corre nada, mesmo ligado — a
+     * janela é a autorização, não só o silêncio dos alertas.
+     */
+    autoUpdate: boolean('auto_update').notNull().default(false),
+    /**
+     * Horário de manutenção que se repete todas as semanas.
+     *
+     * As janelas avulsas continuam a existir para o trabalho planeado; esta é
+     * a que faz a manutenção automática ser automática, em vez de exigir uma
+     * autorização pontual de cada vez.
+     */
+    maintenanceSchedule: jsonb('maintenance_schedule').$type<{
+      weekdays: number[]
+      hour: number
+      minute: number
+      durationMinutes: number
+      timezone: string
+    } | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],
@@ -628,6 +653,90 @@ export const reportRequests = pgTable(
     uniqueIndex('report_requests_pending_idx')
       .on(table.siteId)
       .where(sql`completed_at is null`),
+  ],
+)
+
+/**
+ * As cópias de segurança de um site, tal como a ferramenta de manutenção as
+ * reporta.
+ *
+ * Substituídas por inteiro a cada recolha, como o inventário: é um retrato
+ * das últimas semanas e não um arquivo. Quem quiser restaurar uma cópia
+ * antiga vai à ferramenta; o que aqui interessa é responder a «há cópia
+ * recente e está boa?», que é a pergunta que se faz antes de tocar num site
+ * e depois de ele partir.
+ */
+export const wpBackups = pgTable(
+  'wp_backups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Identificador do lado da ferramenta, para não duplicar entre recolhas. */
+    externalId: text('external_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    /** Nulo enquanto decorre — e também quando falha. */
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** `FINISHED`, `ERROR` ou `PENDING`. */
+    status: text('status').notNull(),
+    /** `AUTOMATIC` quando saiu do agendamento. */
+    triggerType: text('trigger_type'),
+    /**
+     * A versão do WordPress no momento da cópia.
+     *
+     * É a única via pela qual a conhecemos: a API não expõe a versão do core
+     * em mais lado nenhum, e sem ela não se sabe se o core está atrasado.
+     */
+    wordpressVersion: text('wordpress_version'),
+    sizeBytes: integer('size_bytes'),
+    errorCode: text('error_code'),
+  },
+  (table) => [
+    uniqueIndex('wp_backups_site_external_idx').on(table.siteId, table.externalId),
+    index('wp_backups_site_idx').on(table.siteId, table.startedAt),
+  ],
+)
+
+/**
+ * Cada componente que mandámos atualizar, e o que lhe aconteceu.
+ *
+ * Ao contrário do inventário e das cópias, isto **não** é um retrato: é o
+ * registo do que a plataforma fez ao site de um cliente. Nunca é apagado por
+ * uma recolha. É o que responde a «quem mandou atualizar isto, quando, e de
+ * que versão para que versão» — a pergunta que se faz no dia em que um site
+ * parte, e a que um contrato de serviço gerido obriga a saber responder.
+ *
+ * O `processId` é o do lote enviado à ferramenta. Várias linhas partilham-no
+ * quando foram atualizadas juntas, e é por ele que o resultado é reconciliado
+ * mais tarde: a chamada devolve antes de a atualização acabar.
+ */
+export const wpUpdates = pgTable(
+  'wp_updates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** `plugin` ou `theme`. O core não é atualizável pela API. */
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    fromVersion: text('from_version'),
+    toVersion: text('to_version'),
+    /** Tinha vulnerabilidade conhecida à data em que foi atualizado. */
+    vulnerable: boolean('vulnerable').notNull().default(false),
+    /** O lote a que pertence, do lado da ferramenta. */
+    processId: text('process_id').notNull(),
+    /** `pending`, `succeeded`, `failed` ou `unknown`. */
+    status: text('status').notNull().default('pending'),
+    orderedAt: timestamp('ordered_at', { withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (table) => [
+    index('wp_updates_site_idx').on(table.siteId, table.orderedAt),
+    index('wp_updates_process_idx').on(table.processId),
   ],
 )
 

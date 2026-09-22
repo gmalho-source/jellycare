@@ -1,5 +1,9 @@
 import { getCheck, uptimeCheck } from '@jellycare/checks'
-import { CONNECTOR_CHECKS, WP_INVENTORY_CHECK } from '@jellycare/connectors'
+import {
+  CONNECTOR_CHECKS,
+  WP_AUTO_UPDATE_CHECK,
+  WP_INVENTORY_CHECK,
+} from '@jellycare/connectors'
 import {
   runCheck,
   type CheckContext,
@@ -7,7 +11,12 @@ import {
   type FindingNotification,
   type Site,
 } from '@jellycare/core'
-import { recordCheckRun, schema, type Database } from '@jellycare/db'
+import {
+  recordCheckRun,
+  schema,
+  type Database,
+  type MaintenanceSchedule,
+} from '@jellycare/db'
 import {
   FORM_CHECKS,
   FORM_DELIVERY_CHECK,
@@ -18,6 +27,7 @@ import type { Browser } from 'playwright'
 import { and, desc, eq, gte, isNull, ne, or } from 'drizzle-orm'
 import { runFormDelivery, runFormDiscovery, runFormTest } from './form-jobs.js'
 import { runWpInventory } from './wp-jobs.js'
+import { runWpAutoUpdate } from './wp-update-jobs.js'
 import { applyRegionCorroboration, toUptimeSample } from './uptime-region.js'
 import type { Notifier } from './channels.js'
 import {
@@ -215,6 +225,7 @@ export async function executeCheckJob(
     notifications,
     site,
     maintenanceWindows: siteRow.maintenanceWindows,
+    maintenanceSchedule: siteRow.maintenanceSchedule,
     now,
   })
 
@@ -281,6 +292,16 @@ async function execute(
             now,
             ...(deps.umbrellaToken ? { umbrellaToken: deps.umbrellaToken } : {}),
             ...(deps.fetch ? { fetch: deps.fetch } : {}),
+          },
+          site,
+          config,
+        )
+      case WP_AUTO_UPDATE_CHECK:
+        return await runWpAutoUpdate(
+          {
+            db: deps.db,
+            now,
+            ...(deps.umbrellaToken ? { umbrellaToken: deps.umbrellaToken } : {}),
           },
           site,
           config,
@@ -371,6 +392,7 @@ interface DispatchInput {
   notifications: FindingNotification[]
   site: Site
   maintenanceWindows: { start: string; end: string }[]
+  maintenanceSchedule: MaintenanceSchedule | null
   now: Date
 }
 
@@ -412,6 +434,7 @@ async function dispatchNotifications(
       siteId: input.site.id,
       siteLabel: input.site.label,
       maintenanceWindows: input.maintenanceWindows,
+      maintenanceSchedule: input.maintenanceSchedule,
       now: input.now,
     })
 

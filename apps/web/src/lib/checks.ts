@@ -43,3 +43,17 @@ const BY_TYPE = new Map(ALL_CHECKS.map((check) => [check.type, check]))
 export function checkMeta(type: string): CheckMeta | undefined {
   return BY_TYPE.get(type)
 }
+
+/**
+ * Limites da periodicidade de uma verificação.
+ *
+ * Largos, mas existem: abaixo de cinco minutos é um pedido a cada cinco
+ * minutos ao site de um cliente, e acima de um mês a verificação está ligada
+ * só no papel.
+ *
+ * Vivem aqui e não no ficheiro de ações porque um módulo `'use server'` só
+ * pode exportar funções assíncronas — o `tsc` aceita a constante lá, o
+ * `next build` é que não, e só se descobre no build.
+ */
+export const MIN_CHECK_INTERVAL_MINUTES = 5
+export const MAX_CHECK_INTERVAL_MINUTES = 60 * 24 * 30
