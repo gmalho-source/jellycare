@@ -55,8 +55,72 @@ const PUBLIC_CHECK_TYPES = Object.values(CHECK_REGISTRY)
   .filter((check) => check.access === 'public')
   .map((check) => check.definition.type)
 
+export const SCHEDULER_ID = 'checks'
+
+/**
+ * Regista que o agendador passou por aqui.
+ *
+ * Escrito em todas as passagens, com sucesso ou sem ele. A pergunta que isto
+ * responde não é «correu trabalho?» — é «o ciclo está vivo?». Numa noite sem
+ * nada vencido, um agendador saudável não enfileira nada; um agendador morto
+ * também não. Só a batida os distingue.
+ */
+async function recordHeartbeat(
+  db: Database,
+  now: Date,
+  outcome: { result?: TickResult; error?: unknown },
+): Promise<void> {
+  const saudavel = outcome.error === undefined
+  const mensagem =
+    outcome.error === undefined
+      ? null
+      : outcome.error instanceof Error
+        ? outcome.error.message
+        : String(outcome.error)
+
+  const valores = {
+    lastTickAt: now,
+    ...(saudavel ? { lastHealthyTickAt: now } : {}),
+    ...(outcome.result && outcome.result.enqueued > 0 ? { lastEnqueueAt: now } : {}),
+    considered: outcome.result?.considered ?? 0,
+    enqueued: outcome.result?.enqueued ?? 0,
+    failed: outcome.result?.failed ?? 0,
+    ...(saudavel
+      ? { lastError: null, lastErrorAt: null }
+      : { lastError: mensagem, lastErrorAt: now }),
+  }
+
+  await db
+    .insert(schema.schedulerHeartbeats)
+    .values({ id: SCHEDULER_ID, ...valores })
+    .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: valores })
+}
+
+/**
+ * Um ciclo, com a batida gravada aconteça o que acontecer.
+ *
+ * A gravação é o que sobrevive à falha: se o `tick` rebentar, o erro fica
+ * guardado e depois é relançado. Foi a ausência disto que deixou uma avaria
+ * de dezoito horas visível só nos registos, catorze mil vezes por minuto,
+ * sem nenhum sítio onde uma pessoa a pudesse encontrar.
+ */
 export async function tick(options: SchedulerOptions): Promise<TickResult> {
-  const now = options.now?.() ?? new Date()
+  const agora = options.now?.() ?? new Date()
+  try {
+    const result = await runTick(options, agora)
+    await recordHeartbeat(options.db, agora, { result })
+    return result
+  } catch (error) {
+    // A batida primeiro. Se esta escrita também falhar, aí sim não há nada a
+    // fazer — mas o Postgres e o Redis falham por razões diferentes, e foi
+    // justamente por isso que a batida não vive no Redis.
+    await recordHeartbeat(options.db, agora, { error }).catch(() => {})
+    throw error
+  }
+}
+
+async function runTick(options: SchedulerOptions, agora: Date): Promise<TickResult> {
+  const now = agora
   const batchSize = options.batchSize ?? 100
   const spreadMs = options.spreadMs ?? 30_000
 
