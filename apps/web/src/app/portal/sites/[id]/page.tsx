@@ -8,7 +8,9 @@ import {
   formatRelative,
   formatUptime,
 } from '@/components/ui'
+import { SiteDashboard } from '@/components/site-dashboard'
 import { checkMeta } from '@/lib/checks'
+import { getSiteDashboard } from '@/lib/dashboard'
 import { getSiteDetail, getUptime } from '@/lib/queries'
 import { assertMembership, requireUser } from '@/lib/session'
 
@@ -35,6 +37,11 @@ const MONTHS = [
  * As mesmas verdades do painel interno, ditas de outra maneira e sem o que só
  * interessa a quem opera: configuração, periodicidades, tokens, seletores.
  * Nada aqui é escrita — o cliente lê e descarrega, não altera.
+ *
+ * O painel de métricas é literalmente o mesmo componente do lado interno, com
+ * a audiência em `cliente`. É o que se paga: a disponibilidade dia a dia, as
+ * interrupções, o que foi feito no período e o estado do WordPress. Escondê-lo
+ * de quem paga a avença, e mostrá-lo só a quem a cobra, era ao contrário.
  */
 export default async function PortalSitePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -46,7 +53,13 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
   // mostrar o que quer que seja.
   assertMembership(user, detail.site.organizationId)
 
-  const uptime = await getUptime(id, 30)
+  // Só depois de verificado, tal como no painel interno: antes disso não há
+  // verificações de segurança nem inventário, e um painel a zeros diria menos
+  // do que a frase que fica no lugar.
+  const dashboard = detail.verified ? await getSiteDashboard(id) : null
+  // Sem painel, ainda assim há disponibilidade para mostrar — é o que
+  // monitorizamos desde o primeiro dia.
+  const uptime = dashboard ? null : await getUptime(id, 30)
 
   const abertos = detail.findings
   const pior = abertos[0]?.severity ?? null
@@ -77,6 +90,11 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
         </p>
       </div>
 
+      {dashboard ? <SiteDashboard data={dashboard} audiencia="cliente" /> : null}
+
+      {/* Exatamente um dos dois existe: ou há painel, ou há a leitura simples
+          de disponibilidade que o antecede. */}
+      {uptime ? (
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="p-5">
           <p className="text-xs text-ink-400">Disponível (30 dias)</p>
@@ -114,6 +132,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
           </p>
         </Card>
       </div>
+      ) : null}
 
       <Card>
         <CardHeader title="O que encontrámos" />

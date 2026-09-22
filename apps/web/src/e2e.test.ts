@@ -50,6 +50,7 @@ describeE2E('fluxo de entrada e painel', () => {
   const email = `e2e-${Date.now()}@jelly.pt`
   const emailCliente = `cliente-${Date.now()}@exemplo.pt`
   let siteDeOutroCliente: string
+  let siteVerificado: string
 
   beforeAll(async () => {
     const seeded = await seed({
@@ -152,6 +153,71 @@ describeE2E('fluxo de entrada e painel', () => {
           })
           .returning({ id: schema.sites.id })
         siteDeOutroCliente = outroSite!.id
+
+        // Um segundo site na organização do cliente, este já com a
+        // propriedade provada: é a condição para o painel de métricas
+        // aparecer, no interno e no portal.
+        const [verificado] = await db
+          .insert(schema.sites)
+          .values({
+            organizationId: site!.organizationId,
+            label: 'Site verificado',
+            url: `https://verificado-${Date.now()}.exemplo.pt`,
+            hostname: `verificado-${Date.now()}.exemplo.pt`,
+            state: 'active',
+          })
+          .returning({ id: schema.sites.id })
+        siteVerificado = verificado!.id
+
+        await db.insert(schema.siteVerifications).values({
+          siteId: siteVerificado,
+          method: 'dns_txt',
+          token: `token-${Date.now()}`,
+          state: 'verified',
+          verifiedAt: new Date(),
+        })
+
+        // Uma verificação falhada e uma amostra em baixo: a falha é nossa e
+        // só a equipa a vê; a indisponibilidade é do site e o cliente vê-a.
+        await db.insert(schema.checkRuns).values([
+          {
+            siteId: siteVerificado,
+            checkType: 'uptime',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 5 * 60_000),
+            durationMs: 180,
+            metrics: { up: 1, statusCode: 200, responseTimeMs: 180 },
+          },
+          {
+            siteId: siteVerificado,
+            checkType: 'security_headers',
+            status: 'failed',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 6 * 60_000),
+            durationMs: 90,
+            error: 'ligação recusada',
+            metrics: {},
+          },
+        ])
+        await db.insert(schema.uptimeSamples).values([
+          {
+            siteId: siteVerificado,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 5 * 60_000),
+            up: true,
+            statusCode: 200,
+            responseTimeMs: 180,
+          },
+          {
+            siteId: siteVerificado,
+            region: 'eu-west',
+            observedAt: new Date(Date.now() - 50 * 60_000),
+            up: false,
+            statusCode: 503,
+            failureReason: 'HTTP 503',
+          },
+        ])
       } finally {
         await close()
       }
@@ -380,6 +446,249 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
     expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
     await cliente.close()
+  }, 120_000)
+
+  it('dá ao cliente o mesmo painel de métricas, sem o que é falha nossa', async () => {
+    // O painel a 30 dias é o que justifica a avença: o cliente tem de o ver.
+    // O que não pode ver é a contabilidade das nossas próprias falhas — uma
+    // verificação que rebentou do nosso lado não é informação sobre o site
+    // dele, é sobre nós, e é a mesma regra que já esconde a cobertura
+    // reduzida do portal.
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}`)
+    await equipa.waitForSelector('h1')
+    expect(await equipa.isVisible('text=Disponibilidade dia a dia')).toBe(true)
+    expect(await equipa.isVisible('text=Verificações falhadas')).toBe(true)
+    await equipa.close()
+
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    await cliente.goto(`${baseUrl}/portal/sites/${siteVerificado}`)
+    await cliente.waitForSelector('h1')
+
+    // O que é dele, vê.
+    expect(await cliente.isVisible('text=Disponibilidade dia a dia')).toBe(true)
+    expect(await cliente.isVisible('text=Disponibilidade, 30 dias')).toBe(true)
+    expect(await cliente.isVisible('text=Interrupções')).toBe(true)
+    expect(await cliente.isVisible('text=O que foi feito')).toBe(true)
+    expect(await cliente.isVisible('text=Verificações corridas')).toBe(true)
+
+    // O que é nosso, não.
+    expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
+    await cliente.close()
+  }, 120_000)
+
+  it('trava o portal até o cliente aceitar o acordo, e guarda a prova', async () => {
+    // O acordo do artigo 28.º é entre o cliente, que é o responsável pelo
+    // tratamento, e a Jelly, que é a subcontratante. Quem aceita é o cliente:
+    // um acordo que nós aceitássemos em nome dele não provava nada.
+    //
+    // Organização e utilizador próprios deste teste. `legal_documents` é
+    // global — publicar um DPA passa a exigi-lo a toda a gente, que é
+    // precisamente o comportamento pretendido — e por isso o que este teste
+    // publica tem de sair no fim, senão contamina os outros ficheiros que
+    // correm contra a mesma base de dados.
+    const marca = Date.now()
+    const emailDpa = `dpa-${marca}@exemplo.pt`
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let documentoId = ''
+    let organizationId = ''
+    try {
+      const [org] = await db
+        .insert(schema.organizations)
+        .values({ name: `DPA ${marca}`, slug: `dpa-${marca}` })
+        .returning({ id: schema.organizations.id })
+      organizationId = org!.id
+
+      const [utilizador] = await db
+        .insert(schema.users)
+        .values({ email: emailDpa })
+        .returning({ id: schema.users.id })
+      await db.insert(schema.memberships).values({
+        organizationId,
+        userId: utilizador!.id,
+        role: 'client',
+      })
+
+      // A equipa também pertence a esta organização: o estado legal aparece
+      // no painel do site, e é preciso um site para o painel existir.
+      const [daEquipa] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.email, email))
+        .limit(1)
+      await db.insert(schema.memberships).values({
+        organizationId,
+        userId: daEquipa!.id,
+        role: 'owner',
+      })
+      const [siteDpa] = await db
+        .insert(schema.sites)
+        .values({
+          organizationId,
+          label: `Site DPA ${marca}`,
+          url: `https://dpa-${marca}.exemplo.pt`,
+          hostname: `dpa-${marca}.exemplo.pt`,
+          state: 'active',
+        })
+        .returning({ id: schema.sites.id })
+      const siteDpaId = siteDpa!.id
+
+      // A publicação é normalmente feita pela sincronização do worker; aqui
+      // insere-se diretamente, que é o que ela faz.
+      const [documento] = await db
+        .insert(schema.legalDocuments)
+        .values({
+          kind: 'dpa',
+          locale: 'pt',
+          version: 800_000 + Math.floor(Math.random() * 90_000),
+          title: `Acordo de teste ${marca}`,
+          body: `# Acordo de teste\n\nCláusula única ${marca} para efeitos de teste.`,
+          contentHash: 'a'.repeat(64),
+        })
+        .returning({ id: schema.legalDocuments.id })
+      documentoId = documento!.id
+
+      // Público: o jurídico do cliente tem de poder ler antes de haver conta.
+      const anonimo = await browser.newPage()
+      await anonimo.goto(`${baseUrl}/legal/dpa`)
+      expect(await anonimo.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+      await anonimo.close()
+
+      // A equipa vê o estado no painel do site, que é onde vai antes de pôr
+      // o cliente a correr.
+      const painel = await entrarComo(email)
+      await painel.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await painel.waitForSelector('text=Tratamento de dados')
+      expect(await painel.isVisible('text=O cliente ainda não aceitou o acordo')).toBe(true)
+
+      // E pode registar que o cliente impôs o contrato dele, o que desliga o
+      // pedido de aceitação. Era a metade que faltava: a coluna existia sem
+      // nada que a escrevesse.
+      await painel.fill('input[name=ref]', 'DPA em papel, assinado a 12/03')
+      await painel.click('form:has(input[name=ref]) button[type=submit]')
+      await painel.waitForSelector('text=Referência guardada')
+
+      const semTrava = await entrarComo(emailDpa)
+      await semTrava.waitForURL(`${baseUrl}/portal`)
+      await semTrava.close()
+
+      // Retirada a referência pela mesma via, volta a travar.
+      await painel.fill('input[name=ref]', '')
+      await painel.click('form:has(input[name=ref]) button[type=submit]')
+      await painel.waitForSelector('text=Referência removida')
+      await painel.close()
+
+      // Com documento publicado e por aceitar, a entrada no portal abre no
+      // acordo — inclusive vinda do link de entrada, que aponta para `/portal`.
+      const cliente = await entrarComo(emailDpa)
+      await cliente.waitForURL(`${baseUrl}/legal/aceitar`)
+      expect(await cliente.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+
+      await cliente.fill('input[name=representedBy]', 'Diretor de Marketing')
+      await cliente.check('input[name=confirma]')
+      await cliente.click('button[type=submit]')
+      // Aceite, o formulário deixa de existir — não há nada por aceitar — e
+      // o registo aparece no lugar dele, com o cargo declarado.
+      await cliente.waitForSelector('text=Diretor de Marketing')
+      expect(await cliente.isVisible('input[name=representedBy]')).toBe(false)
+
+      // Aceite, o portal abre.
+      await cliente.goto(`${baseUrl}/portal`)
+      await cliente.waitForURL(`${baseUrl}/portal`)
+
+      // E o comprovativo diz quem aceitou, com que cargo e quando.
+      await cliente.goto(`${baseUrl}/legal/comprovativo`)
+      expect(await cliente.isVisible('text=Diretor de Marketing')).toBe(true)
+      expect(await cliente.isVisible(`text=Cláusula única ${marca}`)).toBe(true)
+      await cliente.close()
+
+      const depois = await entrarComo(email)
+      await depois.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await depois.waitForSelector('text=Acordo aceite')
+      expect(await depois.isVisible('text=Diretor de Marketing')).toBe(true)
+      await depois.close()
+
+      const linhas = await db
+        .select({
+          representedBy: schema.legalAcceptances.representedBy,
+          documentId: schema.legalAcceptances.documentId,
+        })
+        .from(schema.legalAcceptances)
+        .where(eq(schema.legalAcceptances.organizationId, organizationId))
+      expect(linhas).toHaveLength(1)
+      expect(linhas[0]?.representedBy).toBe('Diretor de Marketing')
+      expect(linhas[0]?.documentId).toBe(documentoId)
+    } finally {
+      if (documentoId) {
+        await db
+          .delete(schema.legalAcceptances)
+          .where(eq(schema.legalAcceptances.documentId, documentoId))
+        await db.delete(schema.legalDocuments).where(eq(schema.legalDocuments.id, documentoId))
+      }
+      await close()
+    }
+  }, 120_000)
+
+  it('declara e remove uma janela de manutenção', async () => {
+    // O worker respeita as janelas desde o início; o que não havia era como
+    // declarar uma sem um `update` à mão na base de dados.
+    // O browser vai para o Dubai, de propósito.
+    //
+    // O contentor de testes corre em UTC. Com o browser também em UTC, uma
+    // conversão de fuso partida dá exatamente o mesmo resultado que uma
+    // conversão correta, e o teste passava a dizer nada. Num fuso com
+    // desfasamento — e é o caso real de quem trabalha entre Lisboa e o
+    // Dubai — a diferença aparece: 22:00 escritas ali são 18:00Z.
+    const contexto = await browser.newContext({ timezoneId: 'Asia/Dubai' })
+    const page = await contexto.newPage()
+    await page.goto(`${baseUrl}/login`)
+    await page.fill('#email', email)
+    await page.click('button[type=submit]')
+    await page.waitForSelector('text=Se este email tiver conta')
+    await page.goto(loginLink())
+    await page.waitForURL(`${baseUrl}/`)
+
+    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.waitForSelector('text=Janelas de manutenção')
+    expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
+
+    // Amanhã à noite, escrito como quem escreve no formulário.
+    const amanha = new Date(Date.now() + 24 * 3600_000)
+    const dia = amanha.toISOString().slice(0, 10)
+    await page.fill('input[aria-label="Início da janela"]', `${dia}T22:00`)
+    await page.fill('input[aria-label="Fim da janela"]', `${dia}T23:30`)
+    await page.click('form:has(input[name=operacao][value=adicionar]) button[type=submit]')
+    // A mensagem da ação, e não o texto de ajuda da página — a primeira
+    // versão deste teste esperava por uma frase que já lá estava, e por isso
+    // passava a espera com o formulário por submeter.
+    await page.waitForSelector('text=Janela declarada')
+
+    await page.waitForSelector('text=agendada')
+
+    // O que ficou guardado é ISO em UTC, e corresponde à hora escrita no
+    // fuso do browser — não à hora do servidor.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [site] = await db
+        .select({ maintenanceWindows: schema.sites.maintenanceWindows })
+        .from(schema.sites)
+        .where(eq(schema.sites.id, siteId))
+        .limit(1)
+      expect(site?.maintenanceWindows).toHaveLength(1)
+      const janela = site!.maintenanceWindows[0]!
+      // 22:00 no Dubai são 18:00 em UTC. Guardar `${dia}T22:00Z` seria o
+      // defeito que esta asserção existe para apanhar.
+      expect(janela.start).toBe(`${dia}T18:00:00.000Z`)
+      expect(janela.end).toBe(`${dia}T19:30:00.000Z`)
+    } finally {
+      await close()
+    }
+
+    await page.click('text=Remover >> nth=0')
+    await page.waitForSelector('text=Janela removida')
+    expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
+    await contexto.close()
   }, 120_000)
 
   it('mostra as verificações de segurança bloqueadas até o domínio estar provado', async () => {

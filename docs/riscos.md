@@ -74,8 +74,38 @@ Mitigação:
   Screenshots: a política prevê 30 dias e não há nada a apagar, porque as
   capturas do submissor não são guardadas em lado nenhum. Há um teste que
   falha no dia em que alguém as começar a guardar sem acrescentar a limpeza.
-- DPA com cada cliente, a identificar a Jelly como subcontratante
-- servidores e fornecedores na UE sempre que possível
+- DPA com cada cliente, a identificar a Jelly como subcontratante.
+  **Implementado**: o texto está em `packages/legal/documents/`, é publicado
+  pela sincronização do worker e aceite pelo cliente no produto, em
+  `/legal/aceitar`. O artigo 28.º, n.º 9 admite a forma eletrónica de forma
+  expressa.
+
+  Quem aceita é o cliente e não a Jelly — é ele o responsável pelo
+  tratamento, e um acordo que nós aceitássemos em nome dele não provava
+  nada. Fica registada a pessoa, o cargo declarado, a data, o endereço de
+  origem e o resumo SHA-256 da versão exata, e o cliente tem comprovativo
+  imprimível. Uma versão publicada é imutável: a sincronização recusa-se a
+  arrancar se um texto já aceite mudar sem mudar de versão.
+
+  Os anexos vivem no repositório de propósito. O Anexo I copia os prazos que
+  `retention.ts` executa e o Anexo III é a lista dos serviços que a
+  plataforma contacta — se ficassem numa pasta de contratos, a primeira
+  mudança de fornecedor tornava-os falsos sem ninguém dar por isso. Trocar de
+  alojamento, de base de dados ou de fonte de vulnerabilidades é subir a
+  versão do Anexo III no mesmo commit, com data a 30 dias: o pré-aviso da
+  cláusula 7.ª e o botão de oposição no portal saem daí sozinhos.
+
+  Um cliente com jurídico próprio não aceita o nosso modelo num ecrã.
+  `organizations.negotiated_dpa_ref` desliga o fluxo online para essa
+  organização e guarda a referência ao contrato que vale.
+
+  Por fazer, e não é trabalho de engenharia: confirmar no acordo de cada
+  fornecedor a entidade contratante, a região de tratamento e o mecanismo de
+  transferência — estão marcados `[a confirmar]` — e validação por advogado
+  antes da primeira assinatura.
+- servidores e fornecedores na UE sempre que possível. Aplicação e worker em
+  `fra` (Frankfurt); as regiões dos restantes fornecedores estão por
+  confirmar no Anexo III
 
 ## Falsos positivos
 
