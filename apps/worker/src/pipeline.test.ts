@@ -10,7 +10,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { RecordingNotifier } from './channels.js'
 import { createCheckQueue, checkJobId } from './queues.js'
 import { executeCheckJob } from './runner.js'
-import { tick } from './scheduler.js'
+import type { CheckJobData } from './runner.js'
+import { SCHEDULER_ID, tick } from './scheduler.js'
 
 /**
  * Ciclo completo com Postgres e Redis reais: agendar, executar, persistir,
@@ -496,6 +497,50 @@ describe('agendador', () => {
     expect(await queuedForSite()).toHaveLength(0)
   })
 
+  it('um check que não entra na fila não leva os outros atrás', async () => {
+    // O defeito que deixou a monitorização parada uma noite inteira: o `add`
+    // de um check rebentava, a passagem morria antes de gravar as datas, e
+    // nenhum dos outros checks ficava adiado. À tick seguinte repetia-se
+    // tudo, de trinta em trinta segundos, sem nada correr e sem ninguém saber.
+    const vencido = new Date(Date.now() - 60_000)
+    await addCheck('uptime', 5, vencido)
+    await addCheck('tls', 1440, vencido)
+
+    const filaComFalha = {
+      ...queue,
+      add: (async (name: string, data: CheckJobData, opts: unknown) => {
+        if (data.checkType === 'tls' && data.siteId === siteId) {
+          throw new Error('Redis recusou o comando')
+        }
+        return queue.add(name, data as never, opts as never)
+      }) as unknown as typeof queue.add,
+    } as unknown as typeof queue
+
+    await expect(
+      tick({ db, queue: filaComFalha, spreadMs: 0, batchSize: LOTE }),
+    ).rejects.toThrow('não entraram na fila')
+
+    // O saudável entrou.
+    const tipos = (await queuedForSite()).map((job) => job.data.checkType)
+    expect(tipos).toContain('uptime')
+    expect(tipos).not.toContain('tls')
+
+    const configs = await db
+      .select()
+      .from(schema.checkConfigs)
+      .where(eq(schema.checkConfigs.siteId, siteId))
+
+    // O que entrou fica adiado.
+    const uptime = configs.find((c) => c.checkType === 'uptime')
+    expect(uptime?.nextRunAt?.getTime()).toBeGreaterThan(vencido.getTime())
+
+    // O que não entrou continua vencido, para ser tentado outra vez já a
+    // seguir. Adiá-lo era dizer que correu, e esperar um intervalo inteiro
+    // por uma falha momentânea de fila.
+    const tls = configs.find((c) => c.checkType === 'tls')
+    expect(tls?.nextRunAt?.getTime()).toBe(vencido.getTime())
+  })
+
   it('espalha o lote no tempo em vez de o despejar de uma vez', async () => {
     await addCheck('uptime', 5, null)
     await addCheck('tls', 1440, null)
@@ -506,6 +551,98 @@ describe('agendador', () => {
     const jobs = await queuedForSite()
     const delayed = await Promise.all(jobs.map((job) => job.getState()))
     expect(delayed.filter((state) => state === 'delayed').length).toBeGreaterThan(0)
+  })
+})
+
+describe('sinal de vida do agendador', () => {
+  /** Ver a nota do `LOTE` no bloco do agendador: a base é partilhada. */
+  const LOTE = 10_000
+
+  /**
+   * A batida é o que distingue «nada vencido» de «agendador morto».
+   *
+   * Foi a ausência dela que deixou uma paragem de dezoito horas visível só
+   * nos registos. Estes testes existem para ela não voltar a desaparecer.
+   */
+  async function batida() {
+    const linhas = await db
+      .select()
+      .from(schema.schedulerHeartbeats)
+      .where(eq(schema.schedulerHeartbeats.id, SCHEDULER_ID))
+    return linhas[0]
+  }
+
+  it('grava a passagem mesmo quando não há nada vencido', async () => {
+    const antes = new Date()
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+
+    const linha = await batida()
+    expect(linha?.lastTickAt.getTime()).toBeGreaterThanOrEqual(antes.getTime() - 1000)
+    // Uma passagem sem trabalho é uma passagem saudável, não uma ausência.
+    expect(linha?.lastHealthyTickAt).not.toBeNull()
+    expect(linha?.lastError).toBeNull()
+  })
+
+  it('guarda o erro quando a passagem falha, e volta a lançá-lo', async () => {
+    await addCheck('uptime', 5, new Date(Date.now() - 60_000))
+
+    const filaPartida = {
+      ...queue,
+      add: (async () => {
+        throw new Error('ERR max requests limit exceeded')
+      }) as unknown as typeof queue.add,
+    } as unknown as typeof queue
+
+    await expect(
+      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+    ).rejects.toThrow()
+
+    const linha = await batida()
+    // A mensagem tem de sobreviver à falha e ficar num sítio onde uma pessoa
+    // a encontre sem ir aos registos. Era exatamente isto que faltava.
+    expect(linha?.lastError).toContain('max requests limit exceeded')
+    expect(linha?.lastErrorAt).not.toBeNull()
+  })
+
+  it('a falha não apaga a última passagem saudável', async () => {
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    const saudavel = (await batida())?.lastHealthyTickAt
+
+    await addCheck('uptime', 5, new Date(Date.now() - 60_000))
+    const filaPartida = {
+      ...queue,
+      add: (async () => {
+        throw new Error('partida')
+      }) as unknown as typeof queue.add,
+    } as unknown as typeof queue
+    await expect(
+      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+    ).rejects.toThrow()
+
+    // Saber há quanto tempo é que a última passagem correu bem é a diferença
+    // entre «falhou agora» e «está partido desde ontem à noite».
+    expect((await batida())?.lastHealthyTickAt?.getTime()).toBe(saudavel?.getTime())
+  })
+
+  it('a passagem seguinte limpa o erro', async () => {
+    await addCheck('uptime', 5, new Date(Date.now() - 60_000))
+    const filaPartida = {
+      ...queue,
+      add: (async () => {
+        throw new Error('partida')
+      }) as unknown as typeof queue.add,
+    } as unknown as typeof queue
+    await expect(
+      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+    ).rejects.toThrow()
+    expect((await batida())?.lastError).not.toBeNull()
+
+    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+
+    // Um erro que ficasse colado mantinha o alarme a tocar depois de a avaria
+    // estar resolvida, e um alarme que toca sem razão é um alarme que se
+    // aprende a ignorar.
+    expect((await batida())?.lastError).toBeNull()
   })
 })
 

@@ -502,6 +502,78 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 120_000)
 
+  it('não consegue dizer que está tudo bem com a monitorização parada', async () => {
+    // O painel manteve-se verde durante dezoito horas a mostrar os números da
+    // véspera. Um painel que consegue esconder que está parado é pior do que
+    // não ter painel: dá confiança a quem não devia tê-la.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const parado = {
+        lastTickAt: new Date(Date.now() - 6 * 3600_000),
+        lastHealthyTickAt: new Date(Date.now() - 6 * 3600_000),
+        lastError: 'ERR max requests limit exceeded. Limit: 500000, Usage: 500011',
+        lastErrorAt: new Date(Date.now() - 6 * 3600_000),
+        considered: 0,
+        enqueued: 0,
+        failed: 0,
+      }
+      await db
+        .insert(schema.schedulerHeartbeats)
+        .values({ id: 'checks', ...parado })
+        .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: parado })
+    } finally {
+      await close()
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.waitForSelector('h1')
+
+    expect(await equipa.isVisible('text=A monitorização está parada há 6 horas')).toBe(true)
+    // A mensagem exata do fornecedor, no painel. Da última vez existia só nos
+    // registos, catorze mil vezes por minuto, e quem podia agir não a via.
+    expect(await equipa.isVisible('text=max requests limit exceeded')).toBe(true)
+    // E a frase tranquilizadora desaparece.
+    expect(await equipa.isVisible('text=nenhum com problemas abertos')).toBe(false)
+    await equipa.close()
+
+    // O vigia externo vê o mesmo, sem sessão nenhuma.
+    const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
+    expect(resposta.status).toBe(503)
+    expect((await resposta.json()).status).toBe('stale')
+  }, 120_000)
+
+  it('volta a dar o painel por bom quando o agendador está vivo', async () => {
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const vivo = {
+        lastTickAt: new Date(),
+        lastHealthyTickAt: new Date(),
+        lastError: null,
+        lastErrorAt: null,
+        considered: 12,
+        enqueued: 3,
+        failed: 0,
+      }
+      await db
+        .insert(schema.schedulerHeartbeats)
+        .values({ id: 'checks', ...vivo })
+        .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: vivo })
+    } finally {
+      await close()
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.waitForSelector('h1')
+
+    // Um aviso que não se cala depois de a avaria passar é um aviso que se
+    // aprende a ignorar.
+    expect(await equipa.isVisible('text=A monitorização está parada')).toBe(false)
+    await equipa.close()
+
+    const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
+    expect(resposta.status).toBe(200)
+  }, 120_000)
+
   it('mostra a velocidade das páginas com a pontuação e os vitals', async () => {
     const equipa = await entrarComo(email)
     await equipa.goto(`${baseUrl}/sites/${siteId}/desempenho`)

@@ -1,0 +1,47 @@
+# O vigia do agendador.
+#
+# Corre fora do Fly, fora do Redis e fora do worker — de propósito. Um alarme
+# que vive dentro da coisa que vigia cala-se ao mesmo tempo que ela. Foi assim
+# que uma paragem de dezoito horas passou sem ninguém saber: a plataforma
+# tinha a mensagem de erro, repetida catorze mil vezes por minuto, e nenhum
+# caminho que a levasse a uma pessoa.
+#
+# Um job falhado manda email a quem tem o repositório em watch. Não é
+# sofisticado e não precisa de ser: precisa de ser independente.
+name: Vigia
+
+on:
+  schedule:
+    # De dez em dez minutos. O ciclo corre de 30 em 30 segundos e o endpoint
+    # dá-o por parado aos cinco minutos, por isso isto deteta uma paragem em
+    # menos de um quarto de hora. O GitHub não garante o minuto exato dos
+    # agendamentos, e para esta pergunta não faz diferença.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  agendador:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: O agendador está vivo?
+        run: |
+          set -o pipefail
+          corpo=$(mktemp)
+          codigo=$(curl -sS --max-time 30 -o "$corpo" -w '%{http_code}' \
+            https://jellycare.pt/api/health/scheduler) || {
+              echo "::error::Não foi possível falar com o dashboard."
+              exit 1
+            }
+
+          echo "Resposta ($codigo):"
+          cat "$corpo"
+          echo
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::O agendador não está saudável (HTTP $codigo). Ver o corpo acima."
+            exit 1
+          fi
+
+          echo "Agendador vivo."

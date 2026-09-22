@@ -844,3 +844,43 @@ export const legalObjections = pgTable(
   },
   (table) => [index('legal_objections_org_idx').on(table.organizationId, table.createdAt)],
 )
+
+/* -------------------------------------------------------------------------- */
+/* Sinal de vida                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A batida do agendador.
+ *
+ * Uma linha por ciclo — hoje só o de verificações. Gravada a cada passagem,
+ * tenha ela enfileirado alguma coisa ou não, porque a pergunta que interessa
+ * não é «correu trabalho?» mas «o agendador está vivo?». Um agendador vivo
+ * numa noite sem nada vencido não enfileira nada e está bem; um agendador
+ * morto também não enfileira nada e não está.
+ *
+ * **Vive no Postgres de propósito.** O que falhou foi o Redis, e um sinal de
+ * vida guardado na coisa que pode falhar não é sinal de vida nenhum. Pela
+ * mesma razão é lido de fora: ver docs/operacao.md.
+ */
+export const schedulerHeartbeats = pgTable('scheduler_heartbeats', {
+  /** `checks`. Texto e não enum: há de haver outro ciclo. */
+  id: text('id').primaryKey(),
+  /** Última passagem, com ou sem sucesso. É isto que prova que está vivo. */
+  lastTickAt: timestamp('last_tick_at', { withTimezone: true }).notNull(),
+  /** Última passagem que correu do princípio ao fim sem erro. */
+  lastHealthyTickAt: timestamp('last_healthy_tick_at', { withTimezone: true }),
+  /** Última vez que alguma coisa foi mesmo posta na fila. */
+  lastEnqueueAt: timestamp('last_enqueue_at', { withTimezone: true }),
+  considered: integer('considered').notNull().default(0),
+  enqueued: integer('enqueued').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  /**
+   * O que correu mal na última passagem falhada, e quando.
+   *
+   * Guardado aqui e não só nos registos porque foi exatamente isto que se
+   * perdeu: a mensagem existia, catorze mil vezes por minuto, e não havia
+   * um sítio onde uma pessoa a pudesse encontrar sem ir aos logs.
+   */
+  lastError: text('last_error'),
+  lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
+})
