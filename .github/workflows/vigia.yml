@@ -8,15 +8,27 @@
 #
 # Um job falhado manda email a quem tem o repositório em watch. Não é
 # sofisticado e não precisa de ser: precisa de ser independente.
+#
+# **Não é o alarme principal.** Ver a nota do `schedule` abaixo.
 name: Vigia
 
 on:
   schedule:
-    # De dez em dez minutos. O ciclo corre de 30 em 30 segundos e o endpoint
-    # dá-o por parado aos cinco minutos, por isso isto deteta uma paragem em
-    # menos de um quarto de hora. O GitHub não garante o minuto exato dos
-    # agendamentos, e para esta pergunta não faz diferença.
-    - cron: '*/10 * * * *'
+    # De dez em dez minutos, mas a minutos desencontrados e não a `*/10`.
+    #
+    # Os agendamentos do Actions são best-effort e a fila é partilhada por
+    # toda a plataforma. Os minutos redondos — :00, :10, :20 — são os mais
+    # disputados, porque é onde quase toda a gente põe os seus crons. Quando
+    # este vigia entrou, não correu uma única vez em mais de setenta minutos
+    # com `*/10`; os minutos ímpares e desalinhados caem em fatias mais
+    # calmas.
+    #
+    # Isto reduz o problema, não o resolve. Um alarme cuja própria execução
+    # depende de uma fila best-effort tem a propriedade que existe para
+    # evitar: se não correr, ninguém sabe. O alarme principal deve ser um
+    # serviço de uptime a bater no mesmo endpoint — este workflow é a
+    # redundância. Ver docs/operacao.md.
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 
 jobs:

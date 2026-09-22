@@ -101,7 +101,36 @@ inteira, que é o que o vigia externo precisa de saber.
   worker. Um alarme que vive dentro da coisa que vigia cala-se com ela.
 
 **O vigia só serve se alguém receber o email.** Confirmar em *Settings →
-Notifications* do GitHub que as falhas de workflows estão ativas.
+Notifications* do GitHub, **na conta e não no repositório**, que a secção
+*Actions* está em «Email» e «Only notify for failed workflows». Sem a segunda
+opção chegam seis emails por hora de execuções bem-sucedidas, e em dois dias
+aprende-se a filtrar tudo para uma pasta que nunca se abre — que é a mesma
+forma de ficar sem alarme.
+
+### O workflow não é o alarme principal
+
+Quando o vigia entrou em produção, **não correu uma única vez por agendamento
+próprio em mais de setenta minutos.** O workflow estava registado e ativo, o
+cron era válido, e o disparo manual funcionava. Simplesmente não foi executado.
+
+Os agendamentos do GitHub Actions são *best-effort* e a fila é partilhada por
+toda a plataforma; os minutos redondos são os mais disputados. O cron passou a
+`7,17,27,37,47,57` por isso mesmo. **Reduz o problema, não o resolve.**
+
+O ponto que interessa é outro: um alarme cuja própria execução depende de uma
+fila best-effort tem exatamente a propriedade que existe para evitar — se não
+correr, ninguém sabe. É o mesmo defeito, um nível acima.
+
+**O alarme principal deve ser um serviço de uptime** — UptimeRobot, Better
+Stack ou equivalente, todos com plano gratuito suficiente — a bater em
+`https://jellycare.pt/api/health/scheduler` de 5 em 5 minutos. São ferramentas
+feitas para isto: avisam também quando *elas* não conseguem chegar, e o
+histórico de execuções está à vista sem ser preciso ir procurá-lo. O workflow
+fica como redundância.
+
+Há ironia em recomendar um monitor de terceiros para um produto de
+monitorização, e não é contradição: é o princípio de que nada se vigia a si
+próprio. É a mesma razão pela qual a batida não vive no Redis.
 
 ---
 
