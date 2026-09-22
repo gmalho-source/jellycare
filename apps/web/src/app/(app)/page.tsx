@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { HealthBadge, formatRelative, formatUptime } from '@/components/ui'
 import { SchedulerBanner } from '@/components/scheduler-banner'
 import { listSites } from '@/lib/queries'
-import { getSchedulerHealth } from '@/lib/scheduler-health'
+import { getCheckLiveness, getSchedulerHealth } from '@/lib/scheduler-health'
 import { requireUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -16,15 +16,19 @@ const STATE_LABEL: Record<string, string> = {
 
 export default async function SitesPage() {
   const user = await requireUser()
-  const [sites, agendador] = await Promise.all([
-    listSites(user.memberships.map((membership) => membership.organizationId)),
+  const organizacoes = user.memberships.map((membership) => membership.organizationId)
+  const [sites, agendador, checks] = await Promise.all([
+    listSites(organizacoes),
     getSchedulerHealth(),
+    // Só os sites deste utilizador: dizer-lhe que o `uptime` está atrasado em
+    // três sites quando ele só tem um é um aviso que ele não pode verificar.
+    getCheckLiveness(new Date(), organizacoes),
   ])
 
   // Com a monitorização parada, os números são os da última passagem. Dizer
   // «nenhum com problemas abertos» em cima disso é a afirmação que o painel
   // manteve durante dezoito horas enquanto não verificava nada.
-  const aVigiar = agendador.status === 'ok'
+  const aVigiar = agendador.status === 'ok' && checks.every((check) => check.late === 0)
 
   // Primeiro o que precisa de atenção. Quem abre o painel de manhã quer ver o
   // que arde, não a lista por ordem alfabética.
@@ -38,7 +42,7 @@ export default async function SitesPage() {
 
   return (
     <div className="space-y-6">
-      <SchedulerBanner health={agendador} />
+      <SchedulerBanner health={agendador} checks={checks} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
