@@ -1,4 +1,4 @@
-import type { SchedulerHealth } from '@/lib/scheduler-health'
+import type { CheckLiveness, SchedulerHealth } from '@/lib/scheduler-health'
 
 /**
  * O aviso de que a monitorização parou.
@@ -20,8 +20,45 @@ function duracao(segundos: number): string {
   return horas < 48 ? `${horas} horas` : `${Math.round(horas / 24)} dias`
 }
 
-export function SchedulerBanner({ health }: { health: SchedulerHealth }) {
-  if (health.status === 'ok') return null
+export function SchedulerBanner({
+  health,
+  checks = [],
+}: {
+  health: SchedulerHealth
+  checks?: readonly CheckLiveness[]
+}) {
+  const atrasados = checks.filter((check) => check.late > 0)
+
+  // O agendador vivo não chega. Um worker que enfileira e falha todos os jobs
+  // deixava esta faixa calada enquanto a plataforma não olhava para nada.
+  if (health.status === 'ok' && atrasados.length === 0) return null
+
+  // Verificações paradas com o agendador vivo é uma avaria diferente, e a
+  // faixa tem de a nomear em vez de dizer «o agendador parou», que seria falso.
+  if (health.status === 'ok') {
+    return (
+      <div className="rounded-xl border border-[#a32233]/30 bg-[#a32233]/5 px-5 py-4">
+        <p className="text-sm font-semibold text-[#a32233]">
+          {atrasados.length === 1
+            ? 'Uma verificação deixou de concluir'
+            : `${atrasados.length} verificações deixaram de concluir`}
+        </p>
+        <p className="mt-1 text-sm text-ink-700">
+          O agendador está a funcionar, mas estas não terminam com sucesso há mais tempo do
+          que deviam. Os números dos sites afetados não descrevem o estado atual.
+        </p>
+        <ul className="mt-2 space-y-1">
+          {atrasados.map((check) => (
+            <li key={check.checkType} className="text-xs text-ink-700">
+              <span className="font-medium">{check.checkType}</span> — {check.late} de{' '}
+              {check.tracked} {check.tracked === 1 ? 'site' : 'sites'}, o pior sem sucesso há{' '}
+              {duracao((check.worstLateMinutes ?? 0) * 60)}
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 
   const titulo =
     health.status === 'stale'

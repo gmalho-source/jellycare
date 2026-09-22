@@ -1,35 +1,56 @@
 import { NextResponse } from 'next/server'
-import { getSchedulerHealth } from '@/lib/scheduler-health'
+import { getCheckLiveness, getSchedulerHealth } from '@/lib/scheduler-health'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * O sinal de vida do agendador, para quem vigia de fora.
+ * O sinal de vida da plataforma, para quem vigia de fora.
  *
  * Público e sem sessão, de propósito. Quem tem de fazer esta pergunta é um
  * vigia externo — um workflow agendado, um serviço de uptime — e obrigá-lo a
  * autenticar-se era pôr mais uma peça entre a avaria e o aviso. Não devolve
- * nada sobre sites nem clientes: só instantes e o erro da própria plataforma.
+ * nada sobre sites nem clientes: só instantes, contagens e o erro da própria
+ * plataforma.
  *
  * Servido pelo dashboard e não pelo worker. Um sinal de vida respondido pelo
  * processo que ele vigia cala-se ao mesmo tempo que ele, e a pergunta fica
  * sem resposta exatamente quando a resposta importa.
+ *
+ * Responde a **duas** perguntas, porque a primeira sozinha não chega: «o
+ * agendador está a enfileirar?» e «o trabalho está a terminar?». Um worker que
+ * enfileira alegremente e falha todos os jobs passava na primeira sem tocar
+ * na segunda.
  */
 export async function GET(): Promise<NextResponse> {
-  const saude = await getSchedulerHealth()
+  const [agendador, checks] = await Promise.all([getSchedulerHealth(), getCheckLiveness()])
 
-  // O código HTTP é a parte que interessa ao vigia: um workflow agendado
-  // falha com um 503 e não precisa de saber ler JSON para dar o alarme.
+  const atrasados = checks.filter((check) => check.late > 0)
+
+  // O estado do agendador tem precedência: se o ciclo parou, os checks
+  // atrasados são consequência disso e não uma avaria à parte.
+  const status =
+    agendador.status !== 'ok' ? agendador.status : atrasados.length > 0 ? 'checks_late' : 'ok'
+
   return NextResponse.json(
     {
-      status: saude.status,
-      ageSeconds: saude.ageSeconds,
-      lastTickAt: saude.lastTickAt?.toISOString() ?? null,
-      lastHealthyTickAt: saude.lastHealthyTickAt?.toISOString() ?? null,
-      lastEnqueueAt: saude.lastEnqueueAt?.toISOString() ?? null,
-      lastError: saude.lastError,
-      lastErrorAt: saude.lastErrorAt?.toISOString() ?? null,
+      status,
+      // Mantido no topo por compatibilidade com quem já lê `ageSeconds`.
+      ageSeconds: agendador.ageSeconds,
+      lastTickAt: agendador.lastTickAt?.toISOString() ?? null,
+      lastHealthyTickAt: agendador.lastHealthyTickAt?.toISOString() ?? null,
+      lastEnqueueAt: agendador.lastEnqueueAt?.toISOString() ?? null,
+      lastError: agendador.lastError,
+      lastErrorAt: agendador.lastErrorAt?.toISOString() ?? null,
+      checks: checks.map((check) => ({
+        checkType: check.checkType,
+        tracked: check.tracked,
+        late: check.late,
+        lastSuccessAt: check.lastSuccessAt?.toISOString() ?? null,
+        worstLateMinutes: check.worstLateMinutes,
+      })),
     },
-    { status: saude.status === 'ok' ? 200 : 503 },
+    // O código HTTP é a parte que interessa ao vigia: falha com um 503 e não
+    // precisa de saber ler JSON para dar o alarme.
+    { status: status === 'ok' ? 200 : 503 },
   )
 }

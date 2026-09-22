@@ -48,17 +48,46 @@ agendador morto também não, e não está.
 A batida vive no **Postgres**, não no Redis. Um sinal de vida guardado na
 coisa que pode falhar não é sinal de vida nenhum.
 
-Três estados, e não dois:
+Quatro estados:
 
 | Estado | O que significa |
 |---|---|
-| `ok` | Passou há menos de 5 minutos, sem erro. |
+| `ok` | Passou há menos de 5 minutos, sem erro, e as verificações concluem. |
+| `checks_late` | O agendador está bom, mas há verificações que não concluem. |
 | `failing` | Continua a passar, mas a última passagem falhou. |
 | `stale` | Não há passagem há mais de 5 minutos. |
 
 O `failing` existe por causa desta avaria em concreto: o ciclo esteve vivo as
 dezoito horas todas. Um sinal de vida que só perguntasse «passou?» teria
 respondido «sim» o tempo inteiro.
+
+O `checks_late` cobre a falha seguinte, que esta avaria não chegou a mostrar:
+um worker que enfileira alegremente e falha todos os jobs. O agendador passaria
+no primeiro sinal sem tocar no segundo.
+
+### Vivacidade por tipo de verificação
+
+Derivada de `check_runs`, sem tabela nova: um segundo sítio a gravar estado é
+mais uma coisa que pode parar em silêncio, e o remédio não pode ter a doença.
+
+Um par site/verificação está **atrasado** quando não tem um sucesso há mais de
+`intervalo × 2 + 10 minutos`. Um check de 5 em 5 minutos tem 20 minutos de
+folga — chega para um deploy ou uma rajada de recuperação, não chega para uma
+avaria passar a noite.
+
+Duas regras que evitam alarmes falsos:
+
+- **Só conta o que já teve sucesso alguma vez.** Um tipo novo — o `page_speed`
+  esteve assim um dia inteiro — é configuração por fazer, não avaria. Sem esta
+  regra, cada verificação acrescentada tocava o alarme no dia em que nascesse.
+- **Conta sucessos, não execuções.** Um check que corre e falha sempre está tão
+  partido como um que não corre.
+
+Sites pausados e arquivados ficam de fora: não correm nada por decisão nossa, e
+marcá-los era inventar uma avaria.
+
+O painel mostra só os sites do utilizador; o endpoint olha para a plataforma
+inteira, que é o que o vigia externo precisa de saber.
 
 ### Onde se lê
 

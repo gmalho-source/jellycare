@@ -542,6 +542,62 @@ describeE2E('fluxo de entrada e painel', () => {
     expect((await resposta.json()).status).toBe('stale')
   }, 120_000)
 
+  it('avisa quando o agendador está vivo mas um check deixou de concluir', async () => {
+    // A classe de falha a seguir à que nos apanhou: o ciclo enfileira, os jobs
+    // falham todos, e o primeiro sinal de vida dá a plataforma por saudável.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const vivo = {
+        lastTickAt: new Date(),
+        lastHealthyTickAt: new Date(),
+        lastError: null,
+        lastErrorAt: null,
+        considered: 12,
+        enqueued: 3,
+        failed: 0,
+      }
+      await db
+        .insert(schema.schedulerHeartbeats)
+        .values({ id: 'checks', ...vivo })
+        .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: vivo })
+
+      // O uptime deste site teve sucesso há muito tempo e nada desde então.
+      // A tolerância de um check de 5 minutos é 20; seis horas é atraso a sério.
+      await db
+        .update(schema.checkRuns)
+        .set({ startedAt: new Date(Date.now() - 6 * 3600_000) })
+        .where(
+          and(eq(schema.checkRuns.siteId, siteId), eq(schema.checkRuns.checkType, 'uptime')),
+        )
+    } finally {
+      await close()
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.waitForSelector('h1')
+
+    // «de concluir» e não «deixou de concluir»: com mais do que um tipo
+    // atrasado o título passa ao plural, «deixaram», e a asserção mais
+    // específica passava a depender do número de avarias simultâneas.
+    expect(await equipa.isVisible('text=de concluir')).toBe(true)
+    expect(await equipa.isVisible('text=uptime')).toBe(true)
+    expect(await equipa.isVisible('text=A monitorização está parada')).toBe(false)
+    expect(await equipa.isVisible('text=nenhum com problemas abertos')).toBe(false)
+    await equipa.close()
+
+    // O endpoint olha para a plataforma inteira, que é o que o vigia externo
+    // quer saber. Na base de testes, partilhada e acumulada, há sempre sites
+    // de execuções antigas por aí — por isso a asserção é sobre o que este
+    // teste controla e não sobre o total.
+    const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
+    expect(resposta.status).toBe(503)
+    const corpo = await resposta.json()
+    expect(corpo.status).toBe('checks_late')
+    expect(
+      corpo.checks.find((c: { checkType: string }) => c.checkType === 'uptime').late,
+    ).toBeGreaterThan(0)
+  }, 120_000)
+
   it('volta a dar o painel por bom quando o agendador está vivo', async () => {
     const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
     try {
@@ -558,6 +614,14 @@ describeE2E('fluxo de entrada e painel', () => {
         .insert(schema.schedulerHeartbeats)
         .values({ id: 'checks', ...vivo })
         .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: vivo })
+
+      // O teste anterior empurrou estes runs seis horas para trás. Repô-los é
+      // parte do que este teste mede: o aviso tem de se calar quando a avaria
+      // passa, e não só aparecer quando ela chega.
+      await db
+        .update(schema.checkRuns)
+        .set({ startedAt: new Date() })
+        .where(eq(schema.checkRuns.siteId, siteId))
     } finally {
       await close()
     }
@@ -566,12 +630,19 @@ describeE2E('fluxo de entrada e painel', () => {
     await equipa.waitForSelector('h1')
 
     // Um aviso que não se cala depois de a avaria passar é um aviso que se
-    // aprende a ignorar.
+    // aprende a ignorar. A faixa é por organização, por isso esta asserção
+    // mede mesmo os sites deste utilizador e não o ruído da base partilhada.
     expect(await equipa.isVisible('text=A monitorização está parada')).toBe(false)
+    expect(await equipa.isVisible('text=de concluir')).toBe(false)
     await equipa.close()
 
-    const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
-    expect(resposta.status).toBe(200)
+    // O endpoint é global e a base de testes acumula sites de execuções
+    // antigas, por isso o total de atrasados nunca volta a zero aqui. O que
+    // este teste controla — e verifica — é o agendador: sem erro guardado e
+    // fora dos estados de paragem.
+    const corpo = await (await fetch(`${baseUrl}/api/health/scheduler`)).json()
+    expect(corpo.lastError).toBeNull()
+    expect(['ok', 'checks_late']).toContain(corpo.status)
   }, 120_000)
 
   it('mostra a velocidade das páginas com a pontuação e os vitals', async () => {
