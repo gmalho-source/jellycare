@@ -510,38 +510,34 @@ describe('agendador', () => {
 })
 
 describe('configuração da plataforma', () => {
-  it('passa a chave do Safe Browsing ao check de reputação', async () => {
-    // A chave é da Jellycare, não do cliente. Se não chegar ao check, o check
-    // corre à mesma — só com o URLhaus — e a perda de cobertura passa
-    // despercebida, que é a pior forma de uma credencial estar mal ligada.
+  it('passa a chave do URLhaus ao check de reputação', async () => {
+    // A chave é da Jellycare, não do cliente. Se não chegar ao check, ele não
+    // tem fonte nenhuma e falha — o que é melhor do que correr às cegas, mas
+    // só se a chave chegar quando existe.
     await addCheck('reputation', 1440, null)
     await verifySite()
 
-    const pedidos: string[] = []
-    const fetchStub = (async (input: RequestInfo | URL) => {
-      pedidos.push(typeof input === 'string' ? input : String(input))
-      return new Response('{}', {
+    const chaves: (string | null)[] = []
+    const fetchStub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      chaves.push(new Headers(init?.headers).get('Auth-Key'))
+      return new Response(JSON.stringify({ query_status: 'no_results' }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
     }) as typeof globalThis.fetch
 
-    await executeCheckJob(
+    const outcome = await executeCheckJob(
       {
         db,
         notifier: new RecordingNotifier(),
         fetch: fetchStub,
-        safeBrowsingApiKey: 'chave-da-plataforma',
+        urlhausAuthKey: 'chave-da-plataforma',
       },
       { siteId, checkType: 'reputation' },
     )
 
-    expect(
-      pedidos.some(
-        (url) =>
-          url.includes('safebrowsing.googleapis.com') && url.includes('chave-da-plataforma'),
-      ),
-    ).toBe(true)
+    expect(outcome.status).toBe('completed')
+    expect(chaves).toContain('chave-da-plataforma')
   })
 
   it('não inventa uma chave quando ela não está definida', async () => {
@@ -562,7 +558,36 @@ describe('configuração da plataforma', () => {
       { siteId, checkType: 'reputation' },
     )
 
-    expect(pedidos.some((url) => url.includes('safebrowsing.googleapis.com'))).toBe(false)
+    // Sem chave, a fonte é saltada e não chamada às cegas.
+    expect(pedidos).toEqual([])
+  })
+
+  it('nunca chama a Safe Browsing da Google', async () => {
+    // Foi retirada por licença: a API v4 é "for non-commercial use only" e o
+    // Jellycare é vendido. O teste está aqui para a remoção não ser desfeita.
+    await addCheck('reputation', 1440, null)
+    await verifySite()
+
+    const pedidos: string[] = []
+    const fetchStub = (async (input: RequestInfo | URL) => {
+      pedidos.push(typeof input === 'string' ? input : String(input))
+      return new Response(JSON.stringify({ query_status: 'no_results' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof globalThis.fetch
+
+    await executeCheckJob(
+      {
+        db,
+        notifier: new RecordingNotifier(),
+        fetch: fetchStub,
+        urlhausAuthKey: 'chave-da-plataforma',
+      },
+      { siteId, checkType: 'reputation' },
+    )
+
+    expect(pedidos.some((url) => url.includes('googleapis.com'))).toBe(false)
   })
 
   it('passa a chave da PageSpeed ao check de velocidade', async () => {

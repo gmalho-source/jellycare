@@ -202,17 +202,17 @@ describe('recordCheckRun', () => {
 
 describe('avisos de cobertura reduzida', () => {
   it('guarda os avisos na execução sem os transformar em problemas', async () => {
-    // Uma fonte de reputação em baixo não é um problema do site do cliente:
-    // fica registada na execução, para quem opera a plataforma, e não entra
-    // na lista de problemas que o cliente vê.
+    // Uma página declarada que o rastreio não chegou a pedir não é um problema
+    // do site do cliente: fica registada na execução, para quem opera a
+    // plataforma, e não entra na lista de problemas que o cliente vê.
     const result = await recordCheckRun(db, {
       siteId,
-      checkType: 'reputation',
+      checkType: 'form_test',
       outcome: {
         status: 'ok',
         findings: [],
-        metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
-        warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
+        metrics: { submitted: 1, delivered: 1 },
+        warnings: ['Páginas declaradas que o rastreio não chegou a pedir: /contactos.'],
         durationMs: 12,
       },
       confirmationsRequired: 1,
@@ -223,7 +223,7 @@ describe('avisos de cobertura reduzida', () => {
 
     expect(run?.status).toBe('ok')
     expect(run?.warnings).toHaveLength(1)
-    expect(run?.warnings[0]).toContain('safe_browsing')
+    expect(run?.warnings[0]).toContain('/contactos')
     expect(run?.error).toBeNull()
 
     const problemas = await db

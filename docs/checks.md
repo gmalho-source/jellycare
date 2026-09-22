@@ -8,8 +8,11 @@ acesso interno ao site.
 ## 1. Malware e reputação
 
 ### 1.1 Blacklists e reputação de domínio — agentless
-Consulta diária a Google Safe Browsing API, URLhaus (abuse.ch), PhishTank,
-Spamhaus DBL e VirusTotal URL report. Se o domínio ou qualquer URL do site
+Consulta diária ao URLhaus (abuse.ch). Por aqui hão de vir também PhishTank,
+Spamhaus DBL e VirusTotal URL report. A Google Safe Browsing esteve aqui e foi
+retirada: a API v4 é «for non-commercial use only» e o Jellycare é vendido — a
+alternativa com licença comercial é a Web Risk, paga por consulta.
+Se o domínio ou qualquer URL do site
 aparece marcado, é incidente crítico imediato — perder o ranking no Google por
 "este site pode ser perigoso" custa mais ao cliente do que o próprio malware.
 

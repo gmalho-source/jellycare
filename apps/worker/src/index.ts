@@ -76,9 +76,6 @@ async function main(): Promise<void> {
           ...(process.env.CANARY_EMAIL_DOMAIN
             ? { canaryDomain: process.env.CANARY_EMAIL_DOMAIN }
             : {}),
-          ...(process.env.GOOGLE_SAFE_BROWSING_API_KEY
-            ? { safeBrowsingApiKey: process.env.GOOGLE_SAFE_BROWSING_API_KEY }
-            : {}),
           ...(process.env.URLHAUS_AUTH_KEY
             ? { urlhausAuthKey: process.env.URLHAUS_AUTH_KEY }
             : {}),

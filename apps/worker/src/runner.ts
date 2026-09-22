@@ -51,12 +51,10 @@ export interface RunnerDeps {
   browser?: () => Promise<Browser>
   canaryDomain?: string
   /**
-   * Chave da Safe Browsing da Google. É da plataforma, não do cliente, por
+   * Chave da abuse.ch para o URLhaus. É da plataforma, não do cliente, por
    * isso entra aqui e não na config de cada site — guardá-la por site seria
    * duplicar a mesma credencial por cada linha da tabela.
    */
-  safeBrowsingApiKey?: string
-  /** Chave da abuse.ch para o URLhaus. Também da plataforma. */
   urlhausAuthKey?: string
   /** Token da conta Jelly na WP Umbrella, para o inventário WordPress. */
   umbrellaToken?: string
@@ -261,7 +259,6 @@ async function execute(
       checkType === 'reputation'
         ? {
             ...config,
-            ...(deps.safeBrowsingApiKey ? { safeBrowsingApiKey: deps.safeBrowsingApiKey } : {}),
             ...(deps.urlhausAuthKey ? { urlhausAuthKey: deps.urlhausAuthKey } : {}),
           }
         : checkType === 'page_speed'

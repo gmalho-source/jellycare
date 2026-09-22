@@ -1,18 +1,19 @@
-import { runCheck, type CheckContext } from '@jellycare/core'
+import { runCheck, type CheckContext, type ObservedFinding } from '@jellycare/core'
 import { describe, expect, it } from 'vitest'
-import { reputationCheck, type ReputationConfig } from './reputation.js'
+import {
+  aggregateProviders,
+  reputationCheck,
+  type ReputationConfig,
+  type ReputationProvider,
+} from './reputation.js'
 import { mockFetch, testSite, type MockRoutes } from './test-utils.js'
 
-const SAFE_BROWSING = 'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=chave-teste'
 const URLHAUS = 'https://urlhaus-api.abuse.ch/v1/host/'
 
-/** As duas fontes configuradas: é o cenário normal em produção. */
-const AMBAS: ReputationConfig = {
-  safeBrowsingApiKey: 'chave-teste',
-  urlhausAuthKey: 'chave-urlhaus',
-}
+/** A fonte configurada: é o cenário normal em produção. */
+const CONFIG: ReputationConfig = { urlhausAuthKey: 'chave-urlhaus' }
 
-async function run(routes: MockRoutes, config: ReputationConfig = AMBAS) {
+async function run(routes: MockRoutes, config: ReputationConfig = CONFIG) {
   const context: CheckContext = {
     site: testSite,
     now: new Date(),
@@ -22,43 +23,16 @@ async function run(routes: MockRoutes, config: ReputationConfig = AMBAS) {
 }
 
 const CLEAN = {
-  [SAFE_BROWSING]: { body: '{}' },
   [URLHAUS]: { body: JSON.stringify({ query_status: 'no_results' }) },
 }
 
 describe('reputationCheck', () => {
   it('não reporta nada com o domínio limpo', async () => {
-    const outcome = await run(CLEAN, AMBAS)
+    const outcome = await run(CLEAN)
 
     expect(outcome.status).toBe('ok')
     expect(outcome.findings).toEqual([])
-    expect(outcome.metrics.providersSucceeded).toBe(2)
-  })
-
-  it('reporta uma marcação do Safe Browsing como crítica', async () => {
-    const outcome = await run(
-      {
-        ...CLEAN,
-        [SAFE_BROWSING]: {
-          body: JSON.stringify({
-            matches: [
-              {
-                threatType: 'SOCIAL_ENGINEERING',
-                platformType: 'ANY_PLATFORM',
-                threat: { url: 'https://cliente.pt/login' },
-              },
-            ],
-          }),
-        },
-      },
-      AMBAS,
-    )
-
-    expect(outcome.findings).toHaveLength(1)
-    expect(outcome.findings[0]?.code).toBe('blacklisted_safe_browsing')
-    expect(outcome.findings[0]?.severity).toBe('critical')
-    expect(outcome.findings[0]?.title).toContain('phishing')
-    expect(outcome.findings[0]?.discriminator).toBe('https://cliente.pt/login')
+    expect(outcome.metrics.providersSucceeded).toBe(1)
   })
 
   it('reporta URLs ativos do URLhaus', async () => {
@@ -93,29 +67,39 @@ describe('reputationCheck', () => {
     expect(outcome.findings).toEqual([])
   })
 
-  it('funciona sem chave do Safe Browsing, com cobertura reduzida', async () => {
-    const outcome = await run(CLEAN, { urlhausAuthKey: 'chave-urlhaus' })
+  it('não vai à Safe Browsing da Google', async () => {
+    // Foi implementada e retirada: os termos da API v4 dizem "for
+    // non-commercial use only" e o Jellycare é vendido. Este teste existe
+    // para a remoção não ser desfeita sem querer.
+    const fetch = mockFetch(CLEAN)
+    const context: CheckContext = { site: testSite, now: new Date(), fetch }
+    await runCheck(reputationCheck, context, {
+      ...CONFIG,
+      // Uma config antiga, com a chave que já não existe, não pode fazer o
+      // check voltar a chamar a Google.
+      ...({ safeBrowsingApiKey: 'chave-antiga' } as Record<string, string>),
+    })
 
-    expect(outcome.status).toBe('ok')
-    expect(outcome.metrics.providersQueried).toBe(1)
+    expect(fetch.calls.some((url) => url.includes('safebrowsing'))).toBe(false)
+    expect(fetch.calls.some((url) => url.includes('googleapis'))).toBe(false)
   })
 
   it('salta a fonte sem credenciais em vez de a dar por falhada', async () => {
     // O URLhaus passou a exigir autenticação. Chamá-lo sem chave devolvia 401
-    // e contava como falha, o que arrastava o check inteiro para failed mesmo
-    // com o Safe Browsing a responder bem.
-    const outcome = await run(CLEAN, { safeBrowsingApiKey: 'chave-teste' })
+    // e contava como falha, o que arrastava o check inteiro para failed.
+    const fetch = mockFetch(CLEAN)
+    const context: CheckContext = { site: testSite, now: new Date(), fetch }
+    const outcome = await runCheck(reputationCheck, context, {})
 
-    expect(outcome.status).toBe('ok')
-    expect(outcome.metrics.providersQueried).toBe(1)
-    expect(outcome.metrics.providersSucceeded).toBe(1)
+    expect(fetch.calls).toEqual([])
+    expect(outcome.status).toBe('failed')
   })
 
   it('falha, dizendo o que configurar, quando não há fonte nenhuma', async () => {
     const outcome = await run(CLEAN, {})
 
     expect(outcome.status).toBe('failed')
-    expect(outcome.error).toContain('GOOGLE_SAFE_BROWSING_API_KEY')
+    expect(outcome.error).toContain('URLHAUS_AUTH_KEY')
   })
 
   it('autentica no URLhaus com a chave da abuse.ch', async () => {
@@ -133,23 +117,9 @@ describe('reputationCheck', () => {
       }) as typeof globalThis.fetch,
     }
 
-    await runCheck(reputationCheck, context, { urlhausAuthKey: 'chave-urlhaus' })
+    await runCheck(reputationCheck, context, CONFIG)
 
     expect(pedidos.some((p) => p.authKey === 'chave-urlhaus')).toBe(true)
-  })
-
-  it('avisa quando uma fonte falha e a outra responde', async () => {
-    // O caso que estava a passar em silêncio: o check diz `ok`, metade da
-    // cobertura desapareceu, e ninguém fica a saber. Não é um problema do
-    // site do cliente — não vira finding — mas é um defeito da plataforma
-    // que alguém tem de corrigir.
-    const outcome = await run({ ...CLEAN, [SAFE_BROWSING]: { status: 400 } })
-
-    expect(outcome.status).toBe('ok')
-    expect(outcome.findings).toEqual([])
-    expect(outcome.warnings?.length).toBe(1)
-    expect(outcome.warnings?.[0]).toContain('safe_browsing')
-    expect(outcome.metrics.providersFailed).toBe(1)
   })
 
   it('não inventa avisos quando corre tudo bem', async () => {
@@ -159,35 +129,11 @@ describe('reputationCheck', () => {
     expect(outcome.metrics.providersFailed).toBe(0)
   })
 
-  it('o aviso diz o que a fonte respondeu', async () => {
-    // Sem isto o aviso era "uma fonte falhou" e obrigava a ir ao painel da
-    // Google adivinhar qual e porquê.
-    const outcome = await run({
-      ...CLEAN,
-      [SAFE_BROWSING]: { status: 400, body: '{"error":{"message":"API key not valid"}}' },
-    })
-
-    expect(outcome.warnings?.[0]).toContain('API key not valid')
-  })
-
-  it('sobrevive à falha de um provider desde que outro responda', async () => {
-    const outcome = await run(
-      { ...CLEAN, [SAFE_BROWSING]: { status: 503 } },
-      AMBAS,
-    )
-
-    expect(outcome.status).toBe('ok')
-    expect(outcome.metrics.providersSucceeded).toBe(1)
-  })
-
-  it('falha o run quando nenhuma fonte responde', async () => {
-    const outcome = await run(
-      { [SAFE_BROWSING]: { status: 503 }, [URLHAUS]: { status: 500 } },
-      AMBAS,
-    )
+  it('falha o run quando a fonte não responde', async () => {
+    const outcome = await run({ [URLHAUS]: { status: 500 } })
 
     // Sem isto, a reconciliação marcaria uma blacklistagem real como resolvida
-    // só porque as APIs estiveram em baixo.
+    // só porque a API esteve em baixo.
     expect(outcome.status).toBe('failed')
     expect(outcome.error).toContain('Nenhuma fonte de reputação respondeu')
   })
@@ -195,5 +141,68 @@ describe('reputationCheck', () => {
   it('não confunde resposta malformada com domínio limpo', async () => {
     const outcome = await run({ [URLHAUS]: { body: 'isto não é JSON' } })
     expect(outcome.status).toBe('failed')
+  })
+})
+
+/**
+ * A regra que hoje tem uma fonte só para a exercitar.
+ *
+ * Com o Safe Browsing removido sobrou um provider, e por um provider a
+ * diferença entre «falhou uma» e «falharam todas» desaparece. Estes testes
+ * usam fontes de mentira para a regra ficar escrita e verificada antes de a
+ * próxima fonte real chegar — foi a ausência dela que deixou passar, em
+ * silêncio, meia cobertura perdida.
+ */
+describe('aggregateProviders', () => {
+  const listagem: ObservedFinding = {
+    code: 'blacklisted_urlhaus',
+    discriminator: 'https://cliente.pt/x.exe',
+    severity: 'critical',
+    title: 'Listado',
+    detail: '',
+    evidence: {},
+  }
+
+  const boa = (findings: ObservedFinding[] = []): ReputationProvider => ({
+    name: 'boa',
+    query: async () => findings,
+  })
+
+  const ma = (mensagem = 'respondeu 400'): ReputationProvider => ({
+    name: 'ma',
+    query: async () => {
+      throw new Error(mensagem)
+    },
+  })
+
+  it('avisa quando uma fonte falha e a outra responde', async () => {
+    const resultado = await aggregateProviders([boa(), ma()])
+
+    expect(resultado.warnings).toHaveLength(1)
+    expect(resultado.warnings?.[0]).toContain('ma')
+    expect(resultado.metrics?.providersFailed).toBe(1)
+    expect(resultado.metrics?.providersSucceeded).toBe(1)
+  })
+
+  it('o aviso diz o que a fonte respondeu', async () => {
+    // Sem isto o aviso era "uma fonte falhou" e obrigava a ir ao painel do
+    // fornecedor adivinhar qual e porquê.
+    const resultado = await aggregateProviders([boa(), ma('API key not valid')])
+
+    expect(resultado.warnings?.[0]).toContain('API key not valid')
+  })
+
+  it('não deita fora o que a fonte que respondeu encontrou', async () => {
+    // O caso que justifica a regra: uma chave mal configurada numa fonte não
+    // pode apagar uma blacklistagem verdadeira que a outra viu.
+    const resultado = await aggregateProviders([boa([listagem]), ma()])
+
+    expect(resultado.findings).toEqual([listagem])
+  })
+
+  it('falha quando nenhuma responde, em vez de dar o domínio por limpo', async () => {
+    await expect(aggregateProviders([ma('503'), ma('500')])).rejects.toThrow(
+      'Nenhuma fonte de reputação respondeu',
+    )
   })
 })

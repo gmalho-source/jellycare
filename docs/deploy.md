@@ -10,7 +10,7 @@
 | Email de saída | **Resend** |
 | Email de entrada (caixa de verificação) | **Cloudflare Email Routing** + Worker |
 | DNS | **Cloudflare** |
-| Reputação (opcional) | Google Safe Browsing API |
+| Reputação (opcional) | URLhaus (abuse.ch) |
 
 ### Porquê
 
@@ -264,7 +264,8 @@ fly secrets set -a jellycare-worker \
   ALERT_FROM_EMAIL="Jellycare <alertas@jellycare.pt>" \
   REPORT_FROM_EMAIL="Jellycare <relatorios@jellycare.pt>" \
   CANARY_EMAIL_DOMAIN="check.jellycare.pt" \
-  GOOGLE_SAFE_BROWSING_API_KEY="<opcional>"
+  URLHAUS_AUTH_KEY="<opcional>" \
+  GOOGLE_PAGESPEED_API_KEY="<opcional>"
 ```
 
 Deploy:
@@ -371,16 +372,30 @@ Sem nenhuma configurada, o check falha e diz o que falta.
 `URLHAUS_AUTH_KEY` nos segredos do worker. A autenticação passou a ser
 obrigatória; sem o header a API responde 401.
 
-**Google Safe Browsing**
-
-— projeto no Google Cloud, ativar a Safe Browsing API, criar uma chave, e
-defini-la como `GOOGLE_SAFE_BROWSING_API_KEY`. Uma chave inválida, ou a API por
-ativar, dá **400** e não 401; a mensagem de erro do check inclui o que a Google
-respondeu, que é onde isso vem explicado.
-
 A chave é da plataforma e não do cliente: entra uma vez no ambiente do worker e
 serve todos os sites. Não se guarda na configuração de cada check, que seria
 duplicar a mesma credencial por cada linha da tabela.
+
+**Google Safe Browsing — não usar.**
+
+Esteve implementada e foi retirada. Os termos da API v4 dizem *"for
+non-commercial use only"* e o Jellycare é vendido: usá-la era violar a licença
+de um fornecedor para vender um serviço de segurança. A alternativa com licença
+comercial é a **Web Risk**, paga por consulta, e não se justifica enquanto o
+URLhaus cobrir a parte do malware.
+
+Se algum dia voltar, volta pela Web Risk e com a fatura pensada primeiro.
+
+### 10. Velocidade das páginas
+
+A PageSpeed Insights precisa de uma chave da Google (uma chave de API simples,
+com a *PageSpeed Insights API* ativada no projeto). Vai em
+`GOOGLE_PAGESPEED_API_KEY` nos segredos do worker. Sem ela o check falha a
+dizer o nome exato da variável — um segredo com o nome errado é indistinguível
+de um em falta, e ambos de um check partido, a não ser que o erro diga qual é
+o nome que ele procurou.
+
+Ao contrário da Safe Browsing, esta API não tem restrição de uso comercial.
 
 ---
 

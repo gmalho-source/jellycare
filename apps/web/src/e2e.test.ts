@@ -82,13 +82,13 @@ describeE2E('fluxo de entrada e painel', () => {
         // interno e nunca no portal do cliente.
         await db.insert(schema.checkRuns).values({
           siteId,
-          checkType: 'reputation',
+          checkType: 'form_test',
           status: 'ok',
           region: 'eu-west',
           startedAt: new Date(Date.now() - 3 * 60_000),
           durationMs: 340,
-          warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
-          metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
+          warnings: ['Páginas declaradas que o rastreio não chegou a pedir: /contactos.'],
+          metrics: { submitted: 1, delivered: 1 },
         })
         // Duas medições de velocidade, para o painel ter uma pontuação atual
         // e uma tendência. Uma só não prova nada: a tendência não aparece, e
@@ -490,7 +490,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await equipa.goto(`${baseUrl}/sites/${siteId}/seguranca`)
     await equipa.waitForSelector('h1')
     expect(await equipa.isVisible('text=Cobertura reduzida')).toBe(true)
-    expect(await equipa.isVisible('text=safe_browsing')).toBe(true)
+    expect(await equipa.isVisible('text=/contactos')).toBe(true)
     await equipa.close()
 
     const cliente = await entrarComo(emailCliente)
@@ -498,7 +498,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.goto(`${baseUrl}/portal/sites/${siteId}`)
     await cliente.waitForSelector('h1')
     expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
-    expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
+    expect(await cliente.isVisible('text=/contactos')).toBe(false)
     await cliente.close()
   }, 120_000)
 
