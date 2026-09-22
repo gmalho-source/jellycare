@@ -1,5 +1,6 @@
 import type { CheckOutcome, ObservedFinding, Site } from '@jellycare/core'
 import {
+  isOutdated,
   severityFromCvss,
   WP_INVENTORY_CHECK,
   WpUmbrellaClient,
@@ -8,6 +9,7 @@ import {
 import type {
   UmbrellaBackup,
   UmbrellaComponent,
+  UmbrellaCore,
   UmbrellaIssue,
   UmbrellaVulnerability,
 } from '@jellycare/connectors'
@@ -138,6 +140,7 @@ export async function runWpInventory(
 
   let plugins: UmbrellaComponent[]
   let themes: UmbrellaComponent[]
+  let core: UmbrellaCore
   let vulnerabilities: UmbrellaVulnerability[]
   let backups: UmbrellaBackup[]
   let issues: UmbrellaIssue[]
@@ -148,7 +151,9 @@ export async function runWpInventory(
     // paralelismo sobre uma frota inteira não é.
     plugins = await client.listPlugins(projectId)
     themes = await client.listThemes(projectId)
-    vulnerabilities = await client.listVulnerabilities(projectId)
+    const relatorio = await client.listVulnerabilities(projectId)
+    core = relatorio.core
+    vulnerabilities = relatorio.vulnerabilities
     backups = await client.listBackups(projectId)
     // Só os fatais. Os avisos e as depreciações contam-se aos milhares num
     // site normal e não são avaria — transformá-los em findings era encher o
@@ -175,10 +180,13 @@ export async function runWpInventory(
     throw error
   }
 
-  await replaceInventory(deps.db, site.id, plugins, themes, now)
+  await replaceInventory(deps.db, site.id, plugins, themes, core, now)
   await replaceBackups(deps.db, site.id, backups)
 
   const findings: ObservedFinding[] = vulnerabilities.map(vulnerabilityFinding)
+
+  const desatualizado = coreFinding(core)
+  if (desatualizado) findings.push(desatualizado)
 
   const aviso = backupFinding(backups, now)
   if (aviso) findings.push(aviso)
@@ -232,6 +240,10 @@ export async function runWpInventory(
       plugins: plugins.length,
       themes: themes.length,
       updatesPending: total,
+      // Separado da contagem de plugins e temas: o core é um só, e somá-lo
+      // ao agregado fazia «3 atualizações por aplicar» querer dizer coisas
+      // diferentes consoante uma delas fosse o WordPress.
+      coreOutdated: isOutdated(core.version, core.latestVersion) ? 1 : 0,
       vulnerabilities: vulnerabilities.length,
     },
     durationMs: Date.now() - startedAt,
@@ -250,9 +262,32 @@ async function replaceInventory(
   siteId: string,
   plugins: readonly UmbrellaComponent[],
   themes: readonly UmbrellaComponent[],
+  core: UmbrellaCore,
   now: Date,
 ): Promise<void> {
+  // O core entra como um componente de tipo `core`, que é o que o esquema já
+  // previa. Uma tabela só para uma linha por site era o mesmo dado escrito
+  // noutro sítio, e o painel passava a ter de o ir buscar a dois lados.
+  const nucleo: UmbrellaComponent[] =
+    core.version === null
+      ? []
+      : [
+          {
+            key: 'wordpress',
+            name: 'WordPress',
+            version: core.version,
+            // `newVersion` é, no resto do inventário, «há uma por aplicar».
+            // Só a preenchemos quando é mesmo o caso, para o core se ler
+            // pelas mesmas regras que tudo o resto.
+            newVersion: isOutdated(core.version, core.latestVersion)
+              ? core.latestVersion
+              : null,
+            active: true,
+          },
+        ]
+
   const linhas = [
+    ...nucleo.map((c) => ({ kind: 'core' as const, component: c })),
     ...plugins.map((c) => ({ kind: 'plugin' as const, component: c })),
     ...themes.map((c) => ({ kind: 'theme' as const, component: c })),
   ]
@@ -272,6 +307,35 @@ async function replaceInventory(
     await tx.delete(schema.wpComponents).where(eq(schema.wpComponents.siteId, siteId))
     if (linhas.length > 0) await tx.insert(schema.wpComponents).values(linhas)
   })
+}
+
+/**
+ * O WordPress desatualizado.
+ *
+ * Vai à parte do agregado de plugins e temas porque não é a mesma coisa: uma
+ * versão do core atrasada é a porta por onde entram as explorações em massa,
+ * e as que existem são sempre contra versões conhecidas. Desaparecer dentro
+ * de «14 atualizações por aplicar» era enterrar a única que tem alguém à
+ * procura dela de forma automática, hoje, em todo o lado.
+ *
+ * Elevada e não crítica: crítica fica para o que já está a ser explorado
+ * neste site, e isso vem das vulnerabilidades com o CVSS delas. Um core
+ * atrasado é urgente, não é um incidente em curso.
+ */
+export function coreFinding(core: UmbrellaCore): ObservedFinding | null {
+  if (!isOutdated(core.version, core.latestVersion)) return null
+
+  return {
+    code: 'wp_core_outdated',
+    discriminator: 'wp_core_outdated',
+    severity: 'high',
+    title: `WordPress desatualizado (${core.version} → ${core.latestVersion})`,
+    detail:
+      `O site corre o WordPress ${core.version} e a versão atual é a ${core.latestVersion}. ` +
+      'As explorações automáticas procuram versões conhecidas do core em massa, e é por ' +
+      'isso que esta atualização não espera pelo mesmo ciclo das outras.',
+    evidence: { installed: core.version, latest: core.latestVersion },
+  }
 }
 
 /**

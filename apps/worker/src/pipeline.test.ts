@@ -5,7 +5,7 @@ import { createDatabase, schema, type Database } from '@jellycare/db'
 import type { Queue } from 'bullmq'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { RecordingNotifier } from './channels.js'
 import { createCheckQueue, checkJobId } from './queues.js'
@@ -510,38 +510,34 @@ describe('agendador', () => {
 })
 
 describe('configuração da plataforma', () => {
-  it('passa a chave do Safe Browsing ao check de reputação', async () => {
-    // A chave é da Jellycare, não do cliente. Se não chegar ao check, o check
-    // corre à mesma — só com o URLhaus — e a perda de cobertura passa
-    // despercebida, que é a pior forma de uma credencial estar mal ligada.
+  it('passa a chave do URLhaus ao check de reputação', async () => {
+    // A chave é da Jellycare, não do cliente. Se não chegar ao check, ele não
+    // tem fonte nenhuma e falha — o que é melhor do que correr às cegas, mas
+    // só se a chave chegar quando existe.
     await addCheck('reputation', 1440, null)
     await verifySite()
 
-    const pedidos: string[] = []
-    const fetchStub = (async (input: RequestInfo | URL) => {
-      pedidos.push(typeof input === 'string' ? input : String(input))
-      return new Response('{}', {
+    const chaves: (string | null)[] = []
+    const fetchStub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      chaves.push(new Headers(init?.headers).get('Auth-Key'))
+      return new Response(JSON.stringify({ query_status: 'no_results' }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
     }) as typeof globalThis.fetch
 
-    await executeCheckJob(
+    const outcome = await executeCheckJob(
       {
         db,
         notifier: new RecordingNotifier(),
         fetch: fetchStub,
-        safeBrowsingApiKey: 'chave-da-plataforma',
+        urlhausAuthKey: 'chave-da-plataforma',
       },
       { siteId, checkType: 'reputation' },
     )
 
-    expect(
-      pedidos.some(
-        (url) =>
-          url.includes('safebrowsing.googleapis.com') && url.includes('chave-da-plataforma'),
-      ),
-    ).toBe(true)
+    expect(outcome.status).toBe('completed')
+    expect(chaves).toContain('chave-da-plataforma')
   })
 
   it('não inventa uma chave quando ela não está definida', async () => {
@@ -562,7 +558,93 @@ describe('configuração da plataforma', () => {
       { siteId, checkType: 'reputation' },
     )
 
-    expect(pedidos.some((url) => url.includes('safebrowsing.googleapis.com'))).toBe(false)
+    // Sem chave, a fonte é saltada e não chamada às cegas.
+    expect(pedidos).toEqual([])
+  })
+
+  it('nunca chama a Safe Browsing da Google', async () => {
+    // Foi retirada por licença: a API v4 é "for non-commercial use only" e o
+    // Jellycare é vendido. O teste está aqui para a remoção não ser desfeita.
+    await addCheck('reputation', 1440, null)
+    await verifySite()
+
+    const pedidos: string[] = []
+    const fetchStub = (async (input: RequestInfo | URL) => {
+      pedidos.push(typeof input === 'string' ? input : String(input))
+      return new Response(JSON.stringify({ query_status: 'no_results' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof globalThis.fetch
+
+    await executeCheckJob(
+      {
+        db,
+        notifier: new RecordingNotifier(),
+        fetch: fetchStub,
+        urlhausAuthKey: 'chave-da-plataforma',
+      },
+      { siteId, checkType: 'reputation' },
+    )
+
+    expect(pedidos.some((url) => url.includes('googleapis.com'))).toBe(false)
+  })
+
+  it('passa a chave da PageSpeed ao check de velocidade', async () => {
+    await addCheck('page_speed', 1440, null)
+    await verifySite()
+
+    const pedidos: string[] = []
+    const fetchStub = (async (input: RequestInfo | URL) => {
+      pedidos.push(typeof input === 'string' ? input : String(input))
+      return new Response(
+        JSON.stringify({
+          lighthouseResult: { categories: { performance: { score: 0.93 } }, audits: {} },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as typeof globalThis.fetch
+
+    const outcome = await executeCheckJob(
+      {
+        db,
+        notifier: new RecordingNotifier(),
+        fetch: fetchStub,
+        pageSpeedApiKey: 'chave-pagespeed',
+      },
+      { siteId, checkType: 'page_speed' },
+    )
+
+    expect(outcome.status).toBe('completed')
+    expect(
+      pedidos.some(
+        (url) => url.includes('pagespeedonline') && url.includes('chave-pagespeed'),
+      ),
+    ).toBe(true)
+  })
+
+  it('diz o nome da variável em falta em vez de falhar em silêncio', async () => {
+    await addCheck('page_speed', 1440, null)
+    await verifySite()
+
+    await executeCheckJob(
+      { db, notifier: new RecordingNotifier() },
+      { siteId, checkType: 'page_speed' },
+    )
+
+    const runs = await db
+      .select()
+      .from(schema.checkRuns)
+      .where(
+        and(eq(schema.checkRuns.siteId, siteId), eq(schema.checkRuns.checkType, 'page_speed')),
+      )
+
+    // Um segredo com o nome errado é indistinguível de um segredo em falta, e
+    // ambos são indistinguíveis de um check partido — a não ser que o erro
+    // guardado diga qual é o nome que ele procurou.
+    expect(runs).toHaveLength(1)
+    expect(runs[0]?.status).toBe('failed')
+    expect(runs[0]?.error).toContain('GOOGLE_PAGESPEED_API_KEY')
   })
 })
 

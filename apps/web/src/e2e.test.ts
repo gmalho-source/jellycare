@@ -82,14 +82,37 @@ describeE2E('fluxo de entrada e painel', () => {
         // interno e nunca no portal do cliente.
         await db.insert(schema.checkRuns).values({
           siteId,
-          checkType: 'reputation',
+          checkType: 'form_test',
           status: 'ok',
           region: 'eu-west',
           startedAt: new Date(Date.now() - 3 * 60_000),
           durationMs: 340,
-          warnings: ['Fonte de reputação indisponível — safe_browsing: respondeu 400'],
-          metrics: { providersQueried: 2, providersSucceeded: 1, providersFailed: 1 },
+          warnings: ['Páginas declaradas que o rastreio não chegou a pedir: /contactos.'],
+          metrics: { submitted: 1, delivered: 1 },
         })
+        // Duas medições de velocidade, para o painel ter uma pontuação atual
+        // e uma tendência. Uma só não prova nada: a tendência não aparece, e
+        // um erro na diferença entre a primeira e a última passava.
+        await db.insert(schema.checkRuns).values([
+          {
+            siteId,
+            checkType: 'page_speed',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 8 * 24 * 3600_000),
+            durationMs: 21_000,
+            metrics: { performanceScore: 51, lcpMs: 4100, cls: 0.19, tbtMs: 410 },
+          },
+          {
+            siteId,
+            checkType: 'page_speed',
+            status: 'ok',
+            region: 'eu-west',
+            startedAt: new Date(Date.now() - 2 * 3600_000),
+            durationMs: 19_400,
+            metrics: { performanceScore: 63, lcpMs: 3200, cls: 0.06, tbtMs: 150 },
+          },
+        ])
         await db.insert(schema.uptimeSamples).values([
           {
             siteId,
@@ -216,6 +239,37 @@ describeE2E('fluxo de entrada e painel', () => {
             up: false,
             statusCode: 503,
             failureReason: 'HTTP 503',
+          },
+        ])
+
+        // Um site WordPress ligado, com o core atrasado e um plugin por
+        // atualizar. O core e os plugins são contas separadas no painel, e é
+        // exatamente isso que este retrato serve para provar.
+        await db.insert(schema.connectors).values({
+          siteId: siteVerificado,
+          type: 'wp_umbrella',
+          externalId: '123',
+          externalName: 'Site verificado',
+          lastSyncAt: new Date(Date.now() - 2 * 3600_000),
+        })
+        await db.insert(schema.wpComponents).values([
+          {
+            siteId: siteVerificado,
+            kind: 'core',
+            key: 'wordpress',
+            name: 'WordPress',
+            version: '6.4.3',
+            latestVersion: '6.7.1',
+            active: true,
+          },
+          {
+            siteId: siteVerificado,
+            kind: 'plugin',
+            key: 'contact-form-7/wp-contact-form-7.php',
+            name: 'contact-form-7',
+            version: '5.7.0',
+            latestVersion: '5.9.0',
+            active: true,
           },
         ])
       } finally {
@@ -368,7 +422,7 @@ describeE2E('fluxo de entrada e painel', () => {
 
     const painel = await entrarComo(email)
     await painel.waitForURL(`${baseUrl}/`)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await painel.fill('#access-email', convidado)
     await painel.selectOption('#access-role', 'client')
     await painel.click('button:has-text("Dar acesso")')
@@ -386,7 +440,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // preparar" e não "enviado". Prometer o que ainda não aconteceu a quem
     // está a olhar para o ecrã era mentir-lhe.
     const painel = await entrarComo(email)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/relatorios`)
     await painel.waitForSelector('#report-recipient')
 
     await painel.fill('#report-recipient', 'reuniao@exemplo.pt')
@@ -414,7 +468,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Sem isto, uma mensagem apagada ou apanhada pelo spam obrigava a retirar
     // o acesso e a voltar a dá-lo só para o email sair outra vez.
     const painel = await entrarComo(email)
-    await painel.goto(`${baseUrl}/sites/${siteId}`)
+    await painel.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await painel.waitForSelector(`text=${emailCliente}`)
 
     const linha = painel.locator('li', { hasText: emailCliente })
@@ -433,10 +487,10 @@ describeE2E('fluxo de entrada e painel', () => {
     // aparecer ao cliente, que não tem nada a ver com isso nem o pode
     // resolver.
     const equipa = await entrarComo(email)
-    await equipa.goto(`${baseUrl}/sites/${siteId}`)
+    await equipa.goto(`${baseUrl}/sites/${siteId}/seguranca`)
     await equipa.waitForSelector('h1')
     expect(await equipa.isVisible('text=Cobertura reduzida')).toBe(true)
-    expect(await equipa.isVisible('text=safe_browsing')).toBe(true)
+    expect(await equipa.isVisible('text=/contactos')).toBe(true)
     await equipa.close()
 
     const cliente = await entrarComo(emailCliente)
@@ -444,8 +498,61 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.goto(`${baseUrl}/portal/sites/${siteId}`)
     await cliente.waitForSelector('h1')
     expect(await cliente.isVisible('text=Cobertura reduzida')).toBe(false)
-    expect(await cliente.isVisible('text=safe_browsing')).toBe(false)
+    expect(await cliente.isVisible('text=/contactos')).toBe(false)
     await cliente.close()
+  }, 120_000)
+
+  it('mostra a velocidade das páginas com a pontuação e os vitals', async () => {
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteId}/desempenho`)
+    await equipa.waitForSelector('h1')
+
+    // A pontuação da última medição, em 0–100. Pelo rótulo do mostrador e não
+    // por «63» em texto: «63» aparece dentro de qualquer número maior, e um
+    // teste que passa com «163» na página não está a provar nada.
+    expect(await equipa.isVisible('[aria-label="63 em 100"]')).toBe(true)
+
+    // A tendência face à primeira medição do período: 63 menos 51.
+    expect(await equipa.isVisible('text=+12 pontos')).toBe(true)
+
+    // Os três vitals, com os valores convertidos para as unidades que se lêem.
+    expect(await equipa.isVisible('text=3.2 s')).toBe(true)
+    expect(await equipa.isVisible('text=0.06')).toBe(true)
+    expect(await equipa.isVisible('text=150 ms')).toBe(true)
+
+    // A cor não anda sozinha: o estado em palavras ao lado de cada métrica.
+    expect(await equipa.isVisible('text=a melhorar')).toBe(true)
+
+    // O tempo de resposta do servidor é outra coisa e fica na mesma secção.
+    expect(await equipa.isVisible('text=Tempo de resposta do servidor')).toBe(true)
+    await equipa.close()
+  }, 120_000)
+
+  it('conta o core do WordPress à parte das atualizações de plugins', async () => {
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/wordpress`)
+    await equipa.waitForSelector('h1')
+
+    expect(await equipa.isVisible('text=6.4.3')).toBe(true)
+    expect(await equipa.isVisible('text=Desatualizado — a atual é a 6.7.1')).toBe(true)
+
+    // Uma atualização pendente e não duas. O core tem lugar e finding
+    // próprios, e somá-lo ao agregado fazia «2 atualizações por aplicar»
+    // querer dizer coisas diferentes consoante uma delas fosse o WordPress.
+    const pendentes = equipa.locator('div:has-text("Atualizações pendentes")').last()
+    expect((await pendentes.innerText()).replace(/\s+/g, ' ')).toBe(
+      'Atualizações pendentes 1 em 1 plugins e 0 temas',
+    )
+
+    // No inventário completo o core aparece — é o inventário — mas marcado
+    // como core, e não como se fosse mais um plugin chamado «WordPress».
+    // O «core» cola-se ao nome no innerText porque a separação é uma margem
+    // e não um espaço; no ecrã lê-se «WordPress core».
+    const inventario = equipa.locator('li:has-text("WordPress")').last()
+    expect((await inventario.innerText()).replace(/\s+/g, ' ')).toBe(
+      'WordPresscore 6.4.3 → 6.7.1',
+    )
+    await equipa.close()
   }, 120_000)
 
   it('dá ao cliente o mesmo painel de métricas, sem o que é falha nossa', async () => {
@@ -558,7 +665,7 @@ describeE2E('fluxo de entrada e painel', () => {
       // A equipa vê o estado no painel do site, que é onde vai antes de pôr
       // o cliente a correr.
       const painel = await entrarComo(email)
-      await painel.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await painel.goto(`${baseUrl}/sites/${siteDpaId}/definicoes`)
       await painel.waitForSelector('text=Tratamento de dados')
       expect(await painel.isVisible('text=O cliente ainda não aceitou o acordo')).toBe(true)
 
@@ -604,7 +711,7 @@ describeE2E('fluxo de entrada e painel', () => {
       await cliente.close()
 
       const depois = await entrarComo(email)
-      await depois.goto(`${baseUrl}/sites/${siteDpaId}`)
+      await depois.goto(`${baseUrl}/sites/${siteDpaId}/definicoes`)
       await depois.waitForSelector('text=Acordo aceite')
       expect(await depois.isVisible('text=Diretor de Marketing')).toBe(true)
       await depois.close()
@@ -636,7 +743,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // vinte e quatro horas de pedidos perdidos antes de darmos por uma avaria
     // de entrega.
     const page = await entrarComo(email)
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/seguranca`)
     await page.waitForSelector('text=Verificações')
 
     const linha = page.locator('[data-check-row=uptime]')
@@ -673,7 +780,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Sem horário recorrente, «aplica sozinha» exigia alguém a declarar uma
     // data de cada vez — o contrário de automático.
     const page = await entrarComo(email)
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await page.waitForSelector('text=Horário recorrente')
     expect(await page.isVisible('text=Sem horário')).toBe(true)
 
@@ -727,7 +834,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(loginLink())
     await page.waitForURL(`${baseUrl}/`)
 
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
     await page.waitForSelector('text=Janelas de manutenção')
     expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
 
@@ -787,6 +894,11 @@ describeE2E('fluxo de entrada e painel', () => {
 
     expect(await page.isVisible('text=Falta provar a propriedade do domínio')).toBe(true)
     expect(await page.isVisible('text=jellycare-site-verification=')).toBe(true)
+
+    // A prova de propriedade fica na visão geral, porque é o que trava tudo
+    // o resto; a lista do que está bloqueado vive na secção das verificações.
+    await page.goto(`${baseUrl}/sites/${siteId}/seguranca`)
+    await page.waitForSelector('[data-check-row]')
 
     // Só a disponibilidade corre sem prova de propriedade; tudo o resto fica à
     // espera. Conta-se o que corre e não o que está bloqueado: o número de
@@ -957,7 +1069,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(loginLink())
     await page.waitForURL(`${baseUrl}/`)
 
-    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.goto(`${baseUrl}/sites/${siteId}/relatorios`)
     expect(await page.isVisible('text=Maio de 2026')).toBe(true)
 
     const response = await page.request.get(`${baseUrl}/api/reports/${reportId}`)

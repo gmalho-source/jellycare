@@ -147,6 +147,245 @@ export interface SiteDetail {
   wpComponents: (typeof schema.wpComponents.$inferSelect)[]
 }
 
+/**
+ * O mínimo para desenhar o cabeçalho e a navegação.
+ *
+ * Existe porque a página do site passou a ter secções: o `layout` corre em
+ * todas elas, e fazê-lo carregar o detalhe inteiro punha as oito consultas do
+ * `getSiteDetail` em cada visita a cada separador — exatamente o custo que a
+ * divisão em secções serve para evitar.
+ */
+export interface SiteHeader {
+  site: typeof schema.sites.$inferSelect
+  verified: boolean
+  hasConnector: boolean
+  openFindings: number
+  /** A pior severidade em aberto, ou nulo quando não há nada. */
+  worstSeverity: Severity | null
+}
+
+export async function getSiteHeader(siteId: string): Promise<SiteHeader | null> {
+  const db = getDb()
+
+  const sites = await db.select().from(schema.sites).where(eq(schema.sites.id, siteId)).limit(1)
+  const site = sites[0]
+  if (!site) return null
+
+  const [verifications, connectors, abertos] = await Promise.all([
+    db
+      .select({ id: schema.siteVerifications.id })
+      .from(schema.siteVerifications)
+      .where(
+        and(
+          eq(schema.siteVerifications.siteId, siteId),
+          eq(schema.siteVerifications.state, 'verified'),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: schema.connectors.id })
+      .from(schema.connectors)
+      .where(eq(schema.connectors.siteId, siteId))
+      .limit(1),
+    db
+      .select({ severity: schema.findings.severity })
+      .from(schema.findings)
+      .where(
+        and(
+          eq(schema.findings.siteId, siteId),
+          inArray(schema.findings.state, [...OPEN_STATES]),
+        ),
+      )
+      .limit(200),
+  ])
+
+  return {
+    site,
+    verified: verifications.length > 0,
+    hasConnector: connectors.length > 0,
+    openFindings: abertos.length,
+    // A pior de facto, e não uma escolhida à mão: o cabeçalho é o elemento
+    // mais visível da página, e dizer «médio» sobre um problema crítico seria
+    // mentir no sítio onde mais se olha.
+    worstSeverity: maxSeverity(abertos.map((linha) => linha.severity)),
+  }
+}
+
+/**
+ * Tempo de resposta dia a dia.
+ *
+ * Os dados estão guardados em cada observação de disponibilidade desde o
+ * primeiro dia; o que nunca existiu foi onde os mostrar.
+ *
+ * Um dia sem observações fica com `average` a nulo e não a zero — a mesma
+ * regra da faixa de disponibilidade. Zero milissegundos é uma afirmação
+ * absurda, e desenhá-la como se fosse um dia bom seria pior do que deixar a
+ * linha interrompida.
+ */
+export interface DailyResponseTime {
+  day: string
+  average: number | null
+  slowest: number | null
+  samples: number
+}
+
+export async function getResponseTimes(
+  siteId: string,
+  days = 30,
+): Promise<DailyResponseTime[]> {
+  const db = getDb()
+  const end = new Date()
+  const start = new Date(end.getTime() - days * 24 * 3600_000)
+
+  const amostras = await db
+    .select({
+      observedAt: schema.uptimeSamples.observedAt,
+      responseTimeMs: schema.uptimeSamples.responseTimeMs,
+    })
+    .from(schema.uptimeSamples)
+    .where(
+      and(
+        eq(schema.uptimeSamples.siteId, siteId),
+        gte(schema.uptimeSamples.observedAt, start),
+      ),
+    )
+
+  const baldes = new Map<string, number[]>()
+  for (let dia = new Date(start); dia <= end; dia.setUTCDate(dia.getUTCDate() + 1)) {
+    baldes.set(dia.toISOString().slice(0, 10), [])
+  }
+
+  for (const amostra of amostras) {
+    // Uma observação falhada não tem tempo de resposta, e contá-la como zero
+    // baixava a média com o valor mais rápido possível justamente quando o
+    // site estava em baixo.
+    if (amostra.responseTimeMs === null) continue
+    const balde = baldes.get(amostra.observedAt.toISOString().slice(0, 10))
+    if (balde) balde.push(amostra.responseTimeMs)
+  }
+
+  return [...baldes.entries()].map(([day, valores]) => ({
+    day,
+    average:
+      valores.length > 0
+        ? Math.round(valores.reduce((total, valor) => total + valor, 0) / valores.length)
+        : null,
+    slowest: valores.length > 0 ? Math.round(Math.max(...valores)) : null,
+    samples: valores.length,
+  }))
+}
+
+export interface PageSpeedPoint {
+  /** Quando a medição foi feita. */
+  measuredAt: Date
+  /** 0–100. */
+  score: number
+  lcpMs: number | null
+  cls: number | null
+  tbtMs: number | null
+}
+
+export interface PageSpeedHistory {
+  points: PageSpeedPoint[]
+  /** A última medição, ou nulo quando ainda não houve nenhuma. */
+  latest: PageSpeedPoint | null
+  /**
+   * Diferença face à medição mais antiga do período. Nulo com menos de duas
+   * medições: uma seta de tendência desenhada sobre um único ponto é uma
+   * afirmação sobre dados que não existem.
+   */
+  trend: number | null
+}
+
+/**
+ * Histórico da pontuação de velocidade.
+ *
+ * Lê as métricas dos runs em vez de uma tabela própria: a PageSpeed corre uma
+ * vez por dia e o índice `(site, tipo, início)` já serve exatamente esta
+ * pergunta. Uma tabela nova seria a mesma informação escrita duas vezes.
+ */
+export async function getPageSpeedHistory(
+  siteId: string,
+  days = 30,
+): Promise<PageSpeedHistory> {
+  const db = getDb()
+  const start = new Date(Date.now() - days * 24 * 3600_000)
+
+  const runs = await db
+    .select({
+      startedAt: schema.checkRuns.startedAt,
+      metrics: schema.checkRuns.metrics,
+    })
+    .from(schema.checkRuns)
+    .where(
+      and(
+        eq(schema.checkRuns.siteId, siteId),
+        eq(schema.checkRuns.checkType, 'page_speed'),
+        eq(schema.checkRuns.status, 'ok'),
+        gte(schema.checkRuns.startedAt, start),
+      ),
+    )
+    .orderBy(schema.checkRuns.startedAt)
+
+  const numero = (valor: number | undefined): number | null =>
+    typeof valor === 'number' && Number.isFinite(valor) ? valor : null
+
+  const points: PageSpeedPoint[] = []
+  for (const run of runs) {
+    const score = numero(run.metrics.performanceScore)
+    // Um run sem pontuação não entra: o gráfico mostra medições, e uma linha
+    // que cai a zero num dia em que a Google não respondeu leria como uma
+    // regressão do site.
+    if (score === null) continue
+    points.push({
+      measuredAt: run.startedAt,
+      score,
+      lcpMs: numero(run.metrics.lcpMs),
+      cls: numero(run.metrics.cls),
+      tbtMs: numero(run.metrics.tbtMs),
+    })
+  }
+
+  const latest = points.at(-1) ?? null
+  const primeiro = points[0]
+
+  return {
+    points,
+    latest,
+    trend: latest && primeiro && points.length > 1 ? latest.score - primeiro.score : null,
+  }
+}
+
+/** Só os problemas, para a secção que só mostra problemas. */
+export async function getSiteFindings(
+  siteId: string,
+): Promise<{ organizationId: string; findings: (typeof schema.findings.$inferSelect)[] } | null> {
+  const db = getDb()
+
+  const sites = await db
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+  const site = sites[0]
+  if (!site) return null
+
+  const findings = await db
+    .select()
+    .from(schema.findings)
+    .where(
+      and(eq(schema.findings.siteId, siteId), inArray(schema.findings.state, [...OPEN_STATES])),
+    )
+    .limit(200)
+
+  findings.sort((a, b) => {
+    const bySeverity = severityRank(b.severity) - severityRank(a.severity)
+    return bySeverity !== 0 ? bySeverity : b.lastSeenAt.getTime() - a.lastSeenAt.getTime()
+  })
+
+  return { organizationId: site.organizationId, findings }
+}
+
 export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> {
   const db = getDb()
 

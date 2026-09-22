@@ -38,6 +38,12 @@ export interface WordPressSnapshot {
   projectName: string | null
   lastSyncAt: Date | null
   lastError: string | null
+  /**
+   * A versão do core. `latestVersion` só está preenchida quando está
+   * atrasada — nulo quer dizer atualizado, e o snapshot inteiro é nulo
+   * quando ainda não sabemos em que versão o site está.
+   */
+  core: { version: string; latestVersion: string | null } | null
   plugins: number
   themes: number
   updatesPending: number
@@ -224,8 +230,13 @@ async function wordpressSnapshot(
     .from(schema.wpComponents)
     .where(eq(schema.wpComponents.siteId, siteId))
 
+  // O core sai da lista e da contagem: tem um lugar próprio no painel e um
+  // finding próprio, e misturá-lo aqui fazia «3 atualizações por aplicar»
+  // querer dizer coisas diferentes consoante uma delas fosse o WordPress.
+  const nucleo = components.find((component) => component.kind === 'core')
+
   const outdated = components
-    .filter((component) => component.latestVersion !== null)
+    .filter((component) => component.kind !== 'core' && component.latestVersion !== null)
     .sort((a, b) => a.name.localeCompare(b.name, 'pt'))
     .map((component) => ({
       name: component.name,
@@ -247,6 +258,10 @@ async function wordpressSnapshot(
     projectName: link.externalName,
     lastSyncAt: link.lastSyncAt,
     lastError: link.lastError,
+    core:
+      nucleo && nucleo.version
+        ? { version: nucleo.version, latestVersion: nucleo.latestVersion }
+        : null,
     plugins: components.filter((component) => component.kind === 'plugin').length,
     themes: components.filter((component) => component.kind === 'theme').length,
     updatesPending: outdated.length,

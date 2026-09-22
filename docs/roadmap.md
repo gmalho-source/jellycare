@@ -14,7 +14,7 @@ cobrar por isso.
 - multi-tenant com organizações, sites e verificação de propriedade do domínio
 - uptime multi-região com confirmação e validação de conteúdo
 - SSL, DNS, expiração de domínio, SPF/DKIM/DMARC
-- blacklists e reputação (Safe Browsing, URLhaus, PhishTank)
+- blacklists e reputação (URLhaus, PhishTank — Safe Browsing não, por licença)
 - headers de segurança e ficheiros expostos
 - crawler de links quebrados
 - **teste de formulários com email canário** — o diferenciador entra já na

@@ -2,8 +2,6 @@ import type { CheckContext, CheckDefinition, CheckResult, ObservedFinding } from
 import { USER_AGENT } from '@jellycare/core'
 
 export interface ReputationConfig {
-  /** Sem chave, o Safe Browsing é saltado e a cobertura fica reduzida. */
-  safeBrowsingApiKey?: string
   /** Chave da abuse.ch. Sem ela o URLhaus responde 401 e é saltado. */
   urlhausAuthKey?: string
   timeoutMs?: number
@@ -16,89 +14,21 @@ export interface ProviderResult {
   findings: ObservedFinding[]
 }
 
-const SAFE_BROWSING_ENDPOINT = 'https://safebrowsing.googleapis.com/v4/threatMatches:find'
 const URLHAUS_ENDPOINT = 'https://urlhaus-api.abuse.ch/v1/host/'
 
-interface SafeBrowsingMatch {
-  threatType?: string
-  platformType?: string
-  threat?: { url?: string }
-}
-
-const THREAT_LABELS: Record<string, string> = {
-  MALWARE: 'malware',
-  SOCIAL_ENGINEERING: 'phishing ou engenharia social',
-  UNWANTED_SOFTWARE: 'software indesejado',
-  POTENTIALLY_HARMFUL_APPLICATION: 'aplicação potencialmente prejudicial',
-}
-
-/**
- * Google Safe Browsing.
+/*
+ * Porque é que a Google Safe Browsing não está aqui.
  *
- * É o que determina se o Chrome mostra o ecrã vermelho de aviso aos
- * visitantes. Para o cliente, aparecer aqui custa mais do que o próprio
- * malware: o tráfego orgânico desaparece no dia seguinte.
+ * Foi implementada e retirada. Os termos da API v4 dizem "for non-commercial
+ * use only", e o Jellycare é vendido — usá-la era violar a licença de um
+ * fornecedor para vender um serviço de segurança, o que não se faz nem se
+ * explica a um cliente. A alternativa com licença comercial é a Web Risk, que
+ * é paga por consulta e não se justifica enquanto o URLhaus cobrir a parte do
+ * malware.
+ *
+ * Fica escrito para ninguém a voltar a adicionar por parecer óbvia. Ver
+ * docs/checks.md.
  */
-export async function querySafeBrowsing(
-  urls: string[],
-  apiKey: string,
-  fetchImpl: typeof globalThis.fetch,
-  timeoutMs: number,
-): Promise<ObservedFinding[]> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    const response = await fetchImpl(`${SAFE_BROWSING_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'content-type': 'application/json', 'user-agent': USER_AGENT },
-      body: JSON.stringify({
-        client: { clientId: 'jellycare', clientVersion: '1.0.0' },
-        threatInfo: {
-          threatTypes: Object.keys(THREAT_LABELS),
-          platformTypes: ['ANY_PLATFORM'],
-          threatEntryTypes: ['URL'],
-          threatEntries: urls.map((url) => ({ url })),
-        },
-      }),
-    })
-
-    if (!response.ok) {
-      // O corpo é onde a Google explica — "API key not valid", por exemplo,
-      // que ela devolve com 400 e não com 401. Sem isto o erro era um número
-      // e obrigava a ir ao painel da Google adivinhar. A chave viaja no URL,
-      // não no corpo, por isso nada de secreto sai daqui.
-      const detalhe = await response
-        .text()
-        .then((texto) => texto.slice(0, 300).replace(/\s+/g, ' ').trim())
-        .catch(() => '')
-      throw new Error(
-        `Safe Browsing respondeu ${response.status}${detalhe ? `: ${detalhe}` : ''}`,
-      )
-    }
-
-    const body = (await response.json()) as { matches?: SafeBrowsingMatch[] }
-    const matches = body.matches ?? []
-
-    return matches.map((match) => {
-      const url = match.threat?.url ?? urls[0] ?? ''
-      const label = THREAT_LABELS[match.threatType ?? ''] ?? 'ameaça'
-      return {
-        code: 'blacklisted_safe_browsing',
-        discriminator: url,
-        severity: 'critical',
-        title: `Google Safe Browsing marcou o site como ${label}`,
-        detail:
-          'O Chrome e o Firefox passam a mostrar um ecrã de aviso a quem tentar entrar, e o ' +
-          'tráfego orgânico desaparece. Corrigir a causa e pedir revisão no Search Console.',
-        evidence: { url, threatType: match.threatType, platformType: match.platformType },
-      } satisfies ObservedFinding
-    })
-  } finally {
-    clearTimeout(timer)
-  }
-}
 
 interface UrlhausResponse {
   query_status?: string
@@ -158,6 +88,68 @@ export class NoReputationDataError extends Error {
   }
 }
 
+/** Uma fonte de reputação, com o nome que aparece nos avisos. */
+export interface ReputationProvider {
+  name: string
+  query: () => Promise<ObservedFinding[]>
+}
+
+/**
+ * Junta o que as fontes disseram.
+ *
+ * Está à parte do check, e exportado, porque é aqui que vive a regra que
+ * importa e que hoje tem uma fonte só para a exercitar: uma fonte que falha
+ * enquanto outra responde não pode deitar fora o que a outra encontrou. A
+ * regra tem de estar escrita e testada antes de a segunda fonte chegar — foi
+ * a ausência dela que deixou passar, em silêncio, meia cobertura perdida.
+ */
+export async function aggregateProviders(
+  providers: readonly ReputationProvider[],
+): Promise<CheckResult> {
+  const results = await Promise.allSettled(providers.map((provider) => provider.query()))
+
+  const findings: ObservedFinding[] = []
+  const failures: string[] = []
+  let succeeded = 0
+
+  results.forEach((result, index) => {
+    const name = providers[index]?.name ?? 'desconhecido'
+    if (result.status === 'fulfilled') {
+      succeeded++
+      findings.push(...result.value)
+    } else {
+      const reason = result.reason
+      failures.push(`${name}: ${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  })
+
+  // Se nenhuma fonte respondeu, não observámos nada. Devolver "sem problemas"
+  // faria a reconciliação marcar uma blacklistagem real como resolvida só
+  // porque a API esteve em baixo.
+  if (succeeded === 0) throw new NoReputationDataError(failures)
+
+  // Uma fonte que falha enquanto outra responde não pode desaparecer. O
+  // check tem sucesso — e tem de ter, senão uma chave mal configurada
+  // deitava fora uma blacklistagem verdadeira que a outra fonte encontrou —
+  // mas parte da cobertura foi-se, e isso é um defeito da plataforma que
+  // alguém tem de corrigir. Não é um problema do site do cliente, por isso
+  // não vira finding: fica no aviso da execução.
+  return {
+    findings,
+    metrics: {
+      providersQueried: providers.length,
+      providersSucceeded: succeeded,
+      providersFailed: failures.length,
+      listings: findings.length,
+    },
+    ...(failures.length > 0
+      ? {
+          warnings: failures.map((failure) => `Fonte de reputação indisponível — ${failure}`),
+        }
+      : {}),
+  }
+}
+
 export const reputationCheck: CheckDefinition<ReputationConfig> = {
   type: 'reputation',
   defaultIntervalMinutes: 60 * 24,
@@ -165,20 +157,11 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
 
   async run(context: CheckContext, config: ReputationConfig): Promise<CheckResult> {
     const timeoutMs = config.timeoutMs ?? 15_000
-    const urls = [context.site.url, ...(config.additionalUrls ?? [])]
 
     // Uma fonte sem credenciais é saltada, não tentada: chamá-la só para
     // receber 401 transformava "não configurada" em "falhada" e arrastava o
     // check inteiro com ela.
-    const providers: { name: string; query: () => Promise<ObservedFinding[]> }[] = []
-
-    if (config.safeBrowsingApiKey) {
-      providers.push({
-        name: 'safe_browsing',
-        query: () =>
-          querySafeBrowsing(urls, config.safeBrowsingApiKey as string, context.fetch, timeoutMs),
-      })
-    }
+    const providers: ReputationProvider[] = []
 
     if (config.urlhausAuthKey) {
       providers.push({
@@ -190,54 +173,10 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
 
     if (providers.length === 0) {
       throw new NoReputationDataError([
-        'nenhuma fonte configurada: defina GOOGLE_SAFE_BROWSING_API_KEY, ' +
-          'URLHAUS_AUTH_KEY, ou ambas',
+        'nenhuma fonte configurada: defina URLHAUS_AUTH_KEY',
       ])
     }
 
-    const results = await Promise.allSettled(providers.map((provider) => provider.query()))
-
-    const findings: ObservedFinding[] = []
-    const failures: string[] = []
-    let succeeded = 0
-
-    results.forEach((result, index) => {
-      const name = providers[index]?.name ?? 'desconhecido'
-      if (result.status === 'fulfilled') {
-        succeeded++
-        findings.push(...result.value)
-      } else {
-        const reason = result.reason
-        failures.push(`${name}: ${reason instanceof Error ? reason.message : String(reason)}`)
-      }
-    })
-
-    // Se nenhuma fonte respondeu, não observámos nada. Devolver "sem problemas"
-    // faria a reconciliação marcar uma blacklistagem real como resolvida só
-    // porque a API esteve em baixo.
-    if (succeeded === 0) throw new NoReputationDataError(failures)
-
-    // Uma fonte que falha enquanto outra responde não pode desaparecer. O
-    // check tem sucesso — e tem de ter, senão uma chave mal configurada
-    // deitava fora uma blacklistagem verdadeira que a outra fonte encontrou —
-    // mas metade da cobertura foi-se, e isso é um defeito da plataforma que
-    // alguém tem de corrigir. Não é um problema do site do cliente, por isso
-    // não vira finding: fica no aviso da execução.
-    return {
-      findings,
-      metrics: {
-        providersQueried: providers.length,
-        providersSucceeded: succeeded,
-        providersFailed: failures.length,
-        listings: findings.length,
-      },
-      ...(failures.length > 0
-        ? {
-            warnings: failures.map(
-              (failure) => `Fonte de reputação indisponível — ${failure}`,
-            ),
-          }
-        : {}),
-    }
+    return aggregateProviders(providers)
   },
 }

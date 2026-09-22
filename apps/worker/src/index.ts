@@ -76,14 +76,14 @@ async function main(): Promise<void> {
           ...(process.env.CANARY_EMAIL_DOMAIN
             ? { canaryDomain: process.env.CANARY_EMAIL_DOMAIN }
             : {}),
-          ...(process.env.GOOGLE_SAFE_BROWSING_API_KEY
-            ? { safeBrowsingApiKey: process.env.GOOGLE_SAFE_BROWSING_API_KEY }
-            : {}),
           ...(process.env.URLHAUS_AUTH_KEY
             ? { urlhausAuthKey: process.env.URLHAUS_AUTH_KEY }
             : {}),
           ...(process.env.WP_UMBRELLA_TOKEN
             ? { umbrellaToken: process.env.WP_UMBRELLA_TOKEN }
+            : {}),
+          ...(process.env.GOOGLE_PAGESPEED_API_KEY
+            ? { pageSpeedApiKey: process.env.GOOGLE_PAGESPEED_API_KEY }
             : {}),
         },
         data,

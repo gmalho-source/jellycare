@@ -42,6 +42,35 @@ function buildHeaders(raw: Record<string, string | string[]> = {}): Headers {
   return headers
 }
 
+class MockAbortError extends Error {
+  constructor() {
+    super('The operation was aborted')
+    this.name = 'AbortError'
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) throw new MockAbortError()
+}
+
+/** Espera, ou desiste se o sinal disparar primeiro — como o `fetch` a sério. */
+function sleepOrAbort(ms: number, signal?: AbortSignal | null): Promise<void> {
+  throwIfAborted(signal)
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    function onAbort() {
+      clearTimeout(timer)
+      reject(new MockAbortError())
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 /**
  * `fetch` falso guiado por um mapa de URL para resposta.
  *
@@ -55,14 +84,20 @@ export function mockFetch(routes: MockRoutes, fallback?: MockResponse): MockFetc
     Object.entries(routes).map(([url, response]) => [routeKey(url), response]),
   )
 
-  const impl = async (input: string | URL | Request): Promise<Response> => {
+  const impl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     calls.push(url)
 
     const route = normalized.get(routeKey(url)) ?? fallback ?? { status: 404, body: 'Not Found' }
     const resolved = typeof route === 'function' ? route(url) : route
 
-    if (resolved.delayMs) await new Promise((resolve) => setTimeout(resolve, resolved.delayMs))
+    // O sinal é respeitado como o `fetch` a sério o respeita. Um duplo que o
+    // ignora faz todos os timeouts dos checks passarem sem serem exercidos:
+    // o teste espera o atraso, recebe a resposta, e dá por bom um limite de
+    // tempo que nunca chegou a cortar nada.
+    if (resolved.delayMs) await sleepOrAbort(resolved.delayMs, init?.signal)
+    else throwIfAborted(init?.signal)
+
     if (resolved.error) throw resolved.error
 
     return new Response(resolved.body ?? '', {
