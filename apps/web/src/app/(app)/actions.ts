@@ -19,7 +19,11 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { appOrigin } from '@/lib/app-url'
-import { ALL_CHECKS } from '@/lib/checks'
+import {
+  ALL_CHECKS,
+  MAX_CHECK_INTERVAL_MINUTES,
+  MIN_CHECK_INTERVAL_MINUTES,
+} from '@/lib/checks'
 import { getDb } from '@/lib/db'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import {
@@ -965,4 +969,70 @@ export async function setAutoUpdateAction(
         ? 'Ligada — mas sem janela de manutenção declarada nada será atualizado. Declare uma acima.'
         : 'Ligada. As atualizações são aplicadas dentro da janela de manutenção.',
   }
+}
+
+/**
+ * Mudar a periodicidade de uma verificação num site.
+ *
+ * Existe por causa de um caso concreto: o teste de formulários corre uma vez
+ * por dia, e num cliente cujo funil de contactos é o negócio isso são até
+ * vinte e quatro horas de pedidos perdidos antes de darmos por uma avaria de
+ * entrega. Quem responde pelo site é que sabe se vale o custo.
+ *
+ * Os limites são largos mas existem: abaixo de cinco minutos é um pedido a
+ * cada cinco minutos ao site de um cliente, e acima de um mês a verificação
+ * está ligada só no papel.
+ */
+export async function setCheckIntervalAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({
+      checkConfigId: z.string().uuid(),
+      intervalMinutes: z.coerce
+        .number()
+        .int()
+        .min(MIN_CHECK_INTERVAL_MINUTES, `Mínimo ${MIN_CHECK_INTERVAL_MINUTES} minutos.`)
+        .max(MAX_CHECK_INTERVAL_MINUTES, 'Máximo 30 dias.'),
+    })
+    .safeParse({
+      checkConfigId: formData.get('checkConfigId'),
+      intervalMinutes: formData.get('intervalMinutes'),
+    })
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Periodicidade inválida.' }
+  }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      siteId: schema.checkConfigs.siteId,
+      organizationId: schema.sites.organizationId,
+    })
+    .from(schema.checkConfigs)
+    .innerJoin(schema.sites, eq(schema.sites.id, schema.checkConfigs.siteId))
+    .where(eq(schema.checkConfigs.id, parsed.data.checkConfigId))
+    .limit(1)
+
+  const config = rows[0]
+  if (!config) return { error: 'Verificação não encontrada.' }
+
+  assertMembership(user, config.organizationId)
+  if (!canManage(user, config.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  // `nextRunAt` a nulo para a nova periodicidade valer já. Sem isto, baixar
+  // de um dia para uma hora só tinha efeito depois de passar o dia inteiro
+  // que já estava agendado — exatamente quando alguém a baixa por urgência.
+  await db
+    .update(schema.checkConfigs)
+    .set({ intervalMinutes: parsed.data.intervalMinutes, nextRunAt: null })
+    .where(eq(schema.checkConfigs.id, parsed.data.checkConfigId))
+
+  revalidatePath(`/sites/${config.siteId}`)
+  return { message: 'Periodicidade alterada. A próxima execução fica para já.' }
 }

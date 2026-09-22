@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createDatabase, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -626,6 +626,45 @@ describeE2E('fluxo de entrada e painel', () => {
           .where(eq(schema.legalAcceptances.documentId, documentoId))
         await db.delete(schema.legalDocuments).where(eq(schema.legalDocuments.id, documentoId))
       }
+      await close()
+    }
+  }, 120_000)
+
+  it('muda a periodicidade de uma verificação e a nova vale já', async () => {
+    // Existe por causa de um caso concreto: o teste de formulários corre uma
+    // vez por dia, e num cliente cujo funil de contactos é o negócio isso são
+    // vinte e quatro horas de pedidos perdidos antes de darmos por uma avaria
+    // de entrega.
+    const page = await entrarComo(email)
+    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.waitForSelector('text=Verificações')
+
+    const linha = page.locator('[data-check-row=uptime]')
+    await linha.locator('select[name=intervalMinutes]').selectOption('15')
+    await page.waitForSelector('text=Periodicidade alterada')
+    await page.close()
+
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [config] = await db
+        .select({
+          intervalMinutes: schema.checkConfigs.intervalMinutes,
+          nextRunAt: schema.checkConfigs.nextRunAt,
+        })
+        .from(schema.checkConfigs)
+        .where(
+          and(
+            eq(schema.checkConfigs.siteId, siteId),
+            eq(schema.checkConfigs.checkType, 'uptime'),
+          ),
+        )
+        .limit(1)
+
+      expect(config?.intervalMinutes).toBe(15)
+      // `nextRunAt` a nulo: baixar a periodicidade por urgência não pode ficar
+      // à espera do ciclo antigo que já estava agendado.
+      expect(config?.nextRunAt).toBeNull()
+    } finally {
       await close()
     }
   }, 120_000)

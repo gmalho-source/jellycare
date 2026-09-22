@@ -1,6 +1,13 @@
 import { runCheck, type CheckContext } from '@jellycare/core'
 import { describe, expect, it } from 'vitest'
-import { analyzeDmarc, analyzeSpf, emailAuthCheck, type TxtResolver } from './email-auth.js'
+import {
+  analyzeDmarc,
+  analyzeMx,
+  analyzeSpf,
+  emailAuthCheck,
+  type MxRecord,
+  type TxtResolver,
+} from './email-auth.js'
 import { testSite } from './test-utils.js'
 
 /** Resolver falso: mapa de hostname para registos TXT já divididos em chunks. */
@@ -16,9 +23,31 @@ function resolver(records: Record<string, string[][]>): TxtResolver {
   }
 }
 
-async function run(records: Record<string, string[][]>, dkimSelectors = ['default']) {
+/**
+ * MX saudável por omissão.
+ *
+ * Tem de estar aqui, e não vir do DNS real. O domínio de teste é um domínio
+ * que existe mesmo, e sem estes falsos o teste ia buscar os MX verdadeiros
+ * de um terceiro — passava por sorte, fazia pedidos de rede a infraestrutura
+ * alheia a cada execução, e partia-se no dia em que esse domínio mudasse.
+ */
+const MX_SAUDAVEL: MxRecord[] = [
+  { exchange: 'mx1.exemplo.pt', priority: 10 },
+  { exchange: 'mx2.exemplo.pt', priority: 20 },
+]
+
+async function run(
+  records: Record<string, string[][]>,
+  dkimSelectors = ['default'],
+  mx: { records?: MxRecord[]; resolvem?: boolean } = {},
+) {
   const context: CheckContext = { site: testSite, now: new Date(), fetch: globalThis.fetch }
-  return runCheck(emailAuthCheck, context, { resolver: resolver(records), dkimSelectors })
+  return runCheck(emailAuthCheck, context, {
+    resolver: resolver(records),
+    dkimSelectors,
+    mxResolver: async () => mx.records ?? MX_SAUDAVEL,
+    hostResolver: async () => (mx.resolvem === false ? [] : ['203.0.113.10']),
+  })
 }
 
 function codes(findings: { code: string }[]): string[] {
@@ -131,5 +160,60 @@ describe('emailAuthCheck', () => {
     const finding = outcome.findings.find((f) => f.code === 'dkim_not_found')
     expect(finding?.severity).toBe('low')
     expect(finding?.detail).toContain('não prova a ausência')
+  })
+})
+
+describe('servidores de correio', () => {
+  it('não diz nada quando os MX existem e resolvem', async () => {
+    const outcome = await run(HEALTHY)
+    expect(codes(outcome.findings)).not.toContain('mx_missing')
+    expect(codes(outcome.findings)).not.toContain('mx_unresolvable')
+  })
+
+  it('avisa quando o domínio não tem MX nenhum', async () => {
+    // Sem MX o domínio não recebe correio de lado nenhum, e ninguém dá por
+    // isso até alguém se queixar de não ter tido resposta.
+    const outcome = await run(HEALTHY, ['default'], { records: [] })
+    const finding = outcome.findings.find((f) => f.code === 'mx_missing')
+    expect(finding?.severity).toBe('high')
+  })
+
+  it('avisa quando o MX aponta para um host que não resolve', async () => {
+    const outcome = await run(HEALTHY, ['default'], { resolvem: false })
+    const finding = outcome.findings.find((f) => f.code === 'mx_unresolvable')
+    expect(finding?.severity).toBe('high')
+    expect(finding?.detail).toContain('mx1.exemplo.pt')
+  })
+
+  it('aceita o MX nulo como declaração deliberada e não como avaria', async () => {
+    // `MX .` é a forma normalizada de dizer «este domínio não recebe
+    // correio». Tratá-lo como falha era acusar quem fez a coisa certa.
+    const outcome = await run(HEALTHY, ['default'], {
+      records: [{ exchange: '.', priority: 0 }],
+    })
+    expect(codes(outcome.findings)).not.toContain('mx_missing')
+    expect(codes(outcome.findings)).not.toContain('mx_unresolvable')
+  })
+})
+
+describe('analyzeMx', () => {
+  it('ordena por prioridade', () => {
+    const analise = analyzeMx(
+      [
+        { exchange: 'b.pt', priority: 20 },
+        { exchange: 'a.pt', priority: 10 },
+      ],
+      [],
+    )
+    expect(analise.records.map((r) => r.exchange)).toEqual(['a.pt', 'b.pt'])
+  })
+
+  it('distingue ausência de MX de MX nulo', () => {
+    expect(analyzeMx([], []).found).toBe(false)
+    expect(analyzeMx([], []).nullMx).toBe(false)
+
+    const nulo = analyzeMx([{ exchange: '.', priority: 0 }], [])
+    expect(nulo.found).toBe(false)
+    expect(nulo.nullMx).toBe(true)
   })
 })

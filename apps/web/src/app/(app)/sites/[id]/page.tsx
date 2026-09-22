@@ -30,6 +30,7 @@ import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
 import { SiteDashboard } from '@/components/site-dashboard'
 import { AutoUpdatePanel } from './auto-update-panel'
+import { IntervalField } from './interval-field'
 import { LegalPanel } from './legal-panel'
 import { MaintenancePanel } from './maintenance-panel'
 import { SettingsPanel } from './settings-panel'
@@ -219,17 +220,29 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
                   data-check-row={check.checkType}
                   className="flex items-center justify-between px-5 py-3 text-sm"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-ink-900">{registered?.label ?? check.checkType}</span>
-                    <span className="mt-0.5 block text-xs text-ink-400">
-                      {blocked
-                        ? 'Aguarda verificação do domínio'
-                        : check.enabled
-                          ? `A cada ${formatInterval(check.intervalMinutes)}`
-                          : 'Desativada'}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">
+                      {blocked ? (
+                        'Aguarda verificação do domínio'
+                      ) : check.enabled ? (
+                        <>
+                          <span>A cada</span>
+                          {manageable ? (
+                            <IntervalField
+                              checkConfigId={check.id}
+                              intervalMinutes={check.intervalMinutes}
+                            />
+                          ) : (
+                            <span>{formatInterval(check.intervalMinutes)}</span>
+                          )}
+                        </>
+                      ) : (
+                        'Desativada'
+                      )}
                     </span>
                   </div>
-                  <span className="text-xs text-ink-400">
+                  <span className="shrink-0 pl-3 text-xs text-ink-400">
                     {check.lastRunAt ? formatRelative(check.lastRunAt) : '—'}
                   </span>
                 </li>
