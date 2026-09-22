@@ -241,6 +241,37 @@ describeE2E('fluxo de entrada e painel', () => {
             failureReason: 'HTTP 503',
           },
         ])
+
+        // Um site WordPress ligado, com o core atrasado e um plugin por
+        // atualizar. O core e os plugins são contas separadas no painel, e é
+        // exatamente isso que este retrato serve para provar.
+        await db.insert(schema.connectors).values({
+          siteId: siteVerificado,
+          type: 'wp_umbrella',
+          externalId: '123',
+          externalName: 'Site verificado',
+          lastSyncAt: new Date(Date.now() - 2 * 3600_000),
+        })
+        await db.insert(schema.wpComponents).values([
+          {
+            siteId: siteVerificado,
+            kind: 'core',
+            key: 'wordpress',
+            name: 'WordPress',
+            version: '6.4.3',
+            latestVersion: '6.7.1',
+            active: true,
+          },
+          {
+            siteId: siteVerificado,
+            kind: 'plugin',
+            key: 'contact-form-7/wp-contact-form-7.php',
+            name: 'contact-form-7',
+            version: '5.7.0',
+            latestVersion: '5.9.0',
+            active: true,
+          },
+        ])
       } finally {
         await close()
       }
@@ -494,6 +525,33 @@ describeE2E('fluxo de entrada e painel', () => {
 
     // O tempo de resposta do servidor é outra coisa e fica na mesma secção.
     expect(await equipa.isVisible('text=Tempo de resposta do servidor')).toBe(true)
+    await equipa.close()
+  }, 120_000)
+
+  it('conta o core do WordPress à parte das atualizações de plugins', async () => {
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/wordpress`)
+    await equipa.waitForSelector('h1')
+
+    expect(await equipa.isVisible('text=6.4.3')).toBe(true)
+    expect(await equipa.isVisible('text=Desatualizado — a atual é a 6.7.1')).toBe(true)
+
+    // Uma atualização pendente e não duas. O core tem lugar e finding
+    // próprios, e somá-lo ao agregado fazia «2 atualizações por aplicar»
+    // querer dizer coisas diferentes consoante uma delas fosse o WordPress.
+    const pendentes = equipa.locator('div:has-text("Atualizações pendentes")').last()
+    expect((await pendentes.innerText()).replace(/\s+/g, ' ')).toBe(
+      'Atualizações pendentes 1 em 1 plugins e 0 temas',
+    )
+
+    // No inventário completo o core aparece — é o inventário — mas marcado
+    // como core, e não como se fosse mais um plugin chamado «WordPress».
+    // O «core» cola-se ao nome no innerText porque a separação é uma margem
+    // e não um espaço; no ecrã lê-se «WordPress core».
+    const inventario = equipa.locator('li:has-text("WordPress")').last()
+    expect((await inventario.innerText()).replace(/\s+/g, ' ')).toBe(
+      'WordPresscore 6.4.3 → 6.7.1',
+    )
     await equipa.close()
   }, 120_000)
 

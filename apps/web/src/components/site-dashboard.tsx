@@ -286,7 +286,32 @@ export function WordPressMetrics({
     <Card>
       <CardHeader title="WordPress" />
 
-      <div className="grid gap-4 border-b border-ink-200 px-5 py-4 sm:grid-cols-3">
+      <div className="grid gap-4 border-b border-ink-200 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-xs text-ink-500">Versão do WordPress</p>
+          <p
+            className={`mt-1 text-2xl font-semibold tracking-tight ${
+              snapshot.core === null
+                ? 'text-ink-400'
+                : snapshot.core.latestVersion !== null
+                  ? 'text-[#a32233]'
+                  : 'text-[#15803d]'
+            }`}
+          >
+            {snapshot.core?.version ?? '—'}
+          </p>
+          {/* Vermelho e não amarelo: as explorações automáticas procuram
+              versões conhecidas do core em massa, e é por isso que esta
+              atualização não espera pelo ciclo das outras. */}
+          <p className="mt-1 text-xs text-ink-400">
+            {snapshot.core === null
+              ? 'Ainda por determinar'
+              : snapshot.core.latestVersion !== null
+                ? `Desatualizado — a atual é a ${snapshot.core.latestVersion}`
+                : 'Na versão atual'}
+          </p>
+        </div>
+
         <div>
           <p className="text-xs text-ink-500">Atualizações pendentes</p>
           <p

@@ -1,5 +1,5 @@
 import { createDatabase, schema } from '@jellycare/db'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Site } from '@jellycare/core'
 import type { UmbrellaBackup, UmbrellaIssue } from '@jellycare/connectors'
@@ -122,6 +122,26 @@ const VULNS = {
         ],
       },
     ],
+    // O core atualizado, pela mesma razão que a cópia de segurança recente
+    // está aqui: um core atrasado é por si só um finding, e deixá-lo atrasado
+    // na fixture partilhada fazia todos os testes deste ficheiro verem um
+    // problema que não é o que estão a medir.
+    wordpress_vulnerabilities: {
+      wordpress: { version: '6.7.1', latest_version: '6.7.1' },
+      vulnerabilities: [],
+    },
+  },
+}
+
+/** A mesma resposta, com o WordPress uma versão menor atrás. */
+const VULNS_CORE_ANTIGO = {
+  code: 'success',
+  data: {
+    ...VULNS.data,
+    wordpress_vulnerabilities: {
+      wordpress: { version: '6.4.3', latest_version: '6.7.1' },
+      vulnerabilities: [],
+    },
   },
 }
 
@@ -264,6 +284,71 @@ describe('inventário', () => {
 
     expect(ligacao?.lastSyncAt).not.toBeNull()
     expect(ligacao?.lastError).toBeNull()
+  })
+})
+
+describe('versão do core', () => {
+  it('guarda a versão do WordPress como um componente do inventário', async () => {
+    await ligar()
+    await runWpInventory(deps(CAMINHOS), site, {})
+
+    const [core] = await db
+      .select()
+      .from(schema.wpComponents)
+      .where(and(eq(schema.wpComponents.siteId, site.id), eq(schema.wpComponents.kind, 'core')))
+
+    expect(core).toMatchObject({ name: 'WordPress', version: '6.7.1' })
+    // Atualizado: `latestVersion` só se preenche quando há uma por aplicar,
+    // que é a mesma regra dos plugins e dos temas.
+    expect(core?.latestVersion).toBeNull()
+  })
+
+  it('reporta o core atrasado à parte do agregado de plugins e temas', async () => {
+    await ligar()
+    const outcome = await runWpInventory(
+      deps({ ...CAMINHOS, '/projects/123/vulnerabilities': VULNS_CORE_ANTIGO }),
+      site,
+      {},
+    )
+
+    const core = outcome.findings.find((f) => f.code === 'wp_core_outdated')
+    expect(core?.severity).toBe('high')
+    expect(core?.title).toContain('6.4.3')
+    expect(core?.title).toContain('6.7.1')
+
+    // O agregado continua a contar só plugins e temas. Somar o core fazia
+    // «3 atualizações por aplicar» querer dizer coisas diferentes consoante
+    // uma delas fosse o WordPress.
+    const agregado = outcome.findings.find((f) => f.code === 'wp_updates_pending')
+    expect(agregado?.title).toContain('2 atualizações')
+    expect(outcome.metrics).toMatchObject({ updatesPending: 2, coreOutdated: 1 })
+  })
+
+  it('não reporta nada quando o core está na última versão', async () => {
+    await ligar()
+    const outcome = await runWpInventory(deps(CAMINHOS), site, {})
+
+    expect(outcome.findings.some((f) => f.code === 'wp_core_outdated')).toBe(false)
+    expect(outcome.metrics.coreOutdated).toBe(0)
+  })
+
+  it('não inventa uma linha de core quando a API não diz a versão', async () => {
+    // Um site acabado de ligar ainda não foi analisado. Guardar uma linha
+    // sem versão fazia o painel mostrar «WordPress —» como se soubéssemos
+    // alguma coisa.
+    await ligar()
+    await runWpInventory(
+      deps({ ...CAMINHOS, '/projects/123/vulnerabilities': { code: 'success', data: {} } }),
+      site,
+      {},
+    )
+
+    const linhas = await db
+      .select()
+      .from(schema.wpComponents)
+      .where(and(eq(schema.wpComponents.siteId, site.id), eq(schema.wpComponents.kind, 'core')))
+
+    expect(linhas).toEqual([])
   })
 })
 

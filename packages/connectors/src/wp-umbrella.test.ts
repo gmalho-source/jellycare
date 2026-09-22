@@ -103,7 +103,7 @@ describe('listThemes', () => {
 
 describe('listVulnerabilities', () => {
   it('junta plugins, temas e core numa lista só, com o CVSS', async () => {
-    const vulns = await cliente({
+    const { vulnerabilities: vulns } = await cliente({
       '/projects/1/vulnerabilities': EXEMPLOS['/projects/{projectId}/vulnerabilities'],
     }).listVulnerabilities(1)
 
@@ -123,12 +123,26 @@ describe('listVulnerabilities', () => {
     })
   })
 
+  it('traz a versão do core no mesmo pedido', async () => {
+    // É o único sítio onde a API a dá fora de uma cópia de segurança. Ir
+    // buscá-la a um segundo pedido era pedir duas vezes o mesmo a uma API
+    // com limite de pedidos que ninguém documentou.
+    const { core } = await cliente({
+      '/projects/1/vulnerabilities': EXEMPLOS['/projects/{projectId}/vulnerabilities'],
+    }).listVulnerabilities(1)
+
+    expect(core).toEqual({ version: '6.4.0', latestVersion: '6.5.0' })
+  })
+
   it('devolve lista vazia quando não há nada, em vez de rebentar', async () => {
-    const vulns = await cliente({
+    const relatorio = await cliente({
       '/projects/1/vulnerabilities': { code: 'success', data: {} },
     }).listVulnerabilities(1)
 
-    expect(vulns).toEqual([])
+    expect(relatorio.vulnerabilities).toEqual([])
+    // Nulo e não uma versão inventada: um site acabado de ligar ainda não foi
+    // analisado, e isso é diferente de estar atualizado.
+    expect(relatorio.core).toEqual({ version: null, latestVersion: null })
   })
 })
 

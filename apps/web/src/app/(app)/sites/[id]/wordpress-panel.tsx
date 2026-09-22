@@ -91,6 +91,11 @@ export function WordPressPanel({
                   {component.kind === 'theme' ? (
                     <span className="ml-1.5 text-xs text-ink-400">tema</span>
                   ) : null}
+                  {/* Sem isto o core aparecia nesta lista como se fosse mais
+                      um plugin chamado «WordPress». */}
+                  {component.kind === 'core' ? (
+                    <span className="ml-1.5 text-xs text-ink-400">core</span>
+                  ) : null}
                   {!component.active ? (
                     <span className="ml-1.5 text-xs text-ink-400">inativo</span>
                   ) : null}

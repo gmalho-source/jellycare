@@ -58,6 +58,25 @@ export interface UmbrellaVulnerability {
 }
 
 /**
+ * A versão do core do WordPress, e a mais recente que existe.
+ *
+ * Vem do mesmo pedido das vulnerabilidades, que é o único sítio onde a API a
+ * dá fora do contexto de uma cópia de segurança. Ambas podem ser nulas: um
+ * site acabado de ligar ainda não foi analisado, e nessa altura não sabemos
+ * em que versão está — o que é diferente de saber que está atualizado.
+ */
+export interface UmbrellaCore {
+  version: string | null
+  latestVersion: string | null
+}
+
+/** O que o pedido de vulnerabilidades devolve: as falhas e a versão do core. */
+export interface UmbrellaVulnerabilityReport {
+  core: UmbrellaCore
+  vulnerabilities: UmbrellaVulnerability[]
+}
+
+/**
  * Uma cópia de segurança, tal como o fornecedor a reporta.
  *
  * `finishedAt` é nulo enquanto não termina — e continua nulo quando falha,
@@ -455,8 +474,15 @@ export class WpUmbrellaClient {
     }))
   }
 
-  /** Vulnerabilidades conhecidas, da base de dados da Patchstack. */
-  async listVulnerabilities(projectId: number): Promise<UmbrellaVulnerability[]> {
+  /**
+   * Vulnerabilidades conhecidas, da base de dados da Patchstack, e a versão
+   * do core que a mesma resposta traz.
+   *
+   * As duas coisas juntas porque vêm do mesmo pedido. Separá-las em dois
+   * métodos era pedir duas vezes o mesmo a uma API com limite de pedidos que
+   * ninguém documentou.
+   */
+  async listVulnerabilities(projectId: number): Promise<UmbrellaVulnerabilityReport> {
     const payload = (await this.get(`/projects/${projectId}/vulnerabilities`)) as {
       data?: Record<string, unknown>
     }
@@ -506,7 +532,13 @@ export class WpUmbrellaClient {
       })
     }
 
-    return out
+    return {
+      core: {
+        version: str(coreComponent?.version),
+        latestVersion: str(coreComponent?.latest_version),
+      },
+      vulnerabilities: out,
+    }
   }
 
   /** Limite de páginas, para um `next` que aponte a si próprio não nos prender. */
