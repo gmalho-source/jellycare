@@ -173,6 +173,103 @@ describe('listBackups', () => {
   })
 })
 
+describe('ordenar atualizações', () => {
+  function fakeWrite(registo: { path: string; body: unknown }[]) {
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      registo.push({
+        path: url.pathname,
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      })
+      return new Response(JSON.stringify({ code: 'success', data: { processId: 'p-1' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof globalThis.fetch
+  }
+
+  it('envia sempre o tipo de atualização segura, e não confia no default', async () => {
+    // `update_type` é um parâmetro da API deles, não um comportamento
+    // garantido. Deixá-lo de fora era entregar a um default que não
+    // controlamos a decisão de haver ou não cópia e reversão.
+    const registo: { path: string; body: unknown }[] = []
+    const ref = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeWrite(registo),
+    }).updatePlugins(9, ['wp-seopress/seopress.php'])
+
+    expect(ref.processId).toBe('p-1')
+    expect(registo).toEqual([
+      {
+        path: '/projects/9/plugins/update',
+        body: {
+          plugin_keys: ['wp-seopress/seopress.php'],
+          update_type: 'SAFE_UPDATE',
+        },
+      },
+    ])
+  })
+
+  it('aceita outro tipo quando lhe é pedido', async () => {
+    const registo: { path: string; body: unknown }[] = []
+    await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeWrite(registo),
+    }).updateThemes(9, ['astra'], 'ADVANCED_SAFE_UPDATE')
+
+    expect(registo[0]).toEqual({
+      path: '/projects/9/themes/update',
+      body: { theme_keys: ['astra'], update_type: 'ADVANCED_SAFE_UPDATE' },
+    })
+  })
+
+  it('recusa uma resposta sem identificador de processo', async () => {
+    // Sem processo não há como saber se correu bem. Aceitar isto em silêncio
+    // dava-nos uma atualização ordenada e um registo a dizer que correu.
+    const semProcesso = (async () =>
+      new Response(JSON.stringify({ code: 'success', data: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof globalThis.fetch
+
+    await expect(
+      new WpUmbrellaClient({ token: 'token-de-teste', fetchImpl: semProcesso }).updatePlugins(
+        1,
+        ['x/x.php'],
+      ),
+    ).rejects.toBeInstanceOf(WpUmbrellaError)
+  })
+
+  it('lê o estado dos processos', async () => {
+    const processos = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      fetchImpl: fakeFetch({
+        '/projects/9/processes': {
+          code: 'success',
+          data: [
+            {
+              id: 'task123',
+              type: 'UPDATE_PLUGIN',
+              status: 'failed',
+              created_at: '2026-09-22T01:00:00.000Z',
+              entities: { name: 'Example Plugin', version: '2.0.0' },
+            },
+          ],
+        },
+      }),
+    }).listProcesses(9)
+
+    expect(processos[0]).toEqual({
+      id: 'task123',
+      type: 'UPDATE_PLUGIN',
+      status: 'failed',
+      createdAt: '2026-09-22T01:00:00.000Z',
+      entityName: 'Example Plugin',
+      entityVersion: '2.0.0',
+    })
+  })
+})
+
 describe('paginação', () => {
   it('segue as páginas até a última vir incompleta', async () => {
     // Um site com mais plugins do que o teto de uma página faria-nos dizer ao

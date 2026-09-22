@@ -170,6 +170,17 @@ export const sites = pgTable(
      * preferimos não testar nada a testar o que ninguém mandou.
      */
     formTestUrls: jsonb('form_test_urls').$type<string[]>().notNull().default([]),
+    /**
+     * Aplicar sozinho as atualizações, dentro da janela de manutenção.
+     *
+     * Desligado por omissão, e por site. É a única definição desta plataforma
+     * que a faz escrever no site de um cliente, por isso não se liga em massa
+     * nem por omissão: liga-se site a site, por quem responde por ele.
+     *
+     * Sem janela de manutenção declarada não corre nada, mesmo ligado — a
+     * janela é a autorização, não só o silêncio dos alertas.
+     */
+    autoUpdate: boolean('auto_update').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],
@@ -670,6 +681,48 @@ export const wpBackups = pgTable(
   (table) => [
     uniqueIndex('wp_backups_site_external_idx').on(table.siteId, table.externalId),
     index('wp_backups_site_idx').on(table.siteId, table.startedAt),
+  ],
+)
+
+/**
+ * Cada componente que mandámos atualizar, e o que lhe aconteceu.
+ *
+ * Ao contrário do inventário e das cópias, isto **não** é um retrato: é o
+ * registo do que a plataforma fez ao site de um cliente. Nunca é apagado por
+ * uma recolha. É o que responde a «quem mandou atualizar isto, quando, e de
+ * que versão para que versão» — a pergunta que se faz no dia em que um site
+ * parte, e a que um contrato de serviço gerido obriga a saber responder.
+ *
+ * O `processId` é o do lote enviado à ferramenta. Várias linhas partilham-no
+ * quando foram atualizadas juntas, e é por ele que o resultado é reconciliado
+ * mais tarde: a chamada devolve antes de a atualização acabar.
+ */
+export const wpUpdates = pgTable(
+  'wp_updates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** `plugin` ou `theme`. O core não é atualizável pela API. */
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    fromVersion: text('from_version'),
+    toVersion: text('to_version'),
+    /** Tinha vulnerabilidade conhecida à data em que foi atualizado. */
+    vulnerable: boolean('vulnerable').notNull().default(false),
+    /** O lote a que pertence, do lado da ferramenta. */
+    processId: text('process_id').notNull(),
+    /** `pending`, `succeeded`, `failed` ou `unknown`. */
+    status: text('status').notNull().default('pending'),
+    orderedAt: timestamp('ordered_at', { withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (table) => [
+    index('wp_updates_site_idx').on(table.siteId, table.orderedAt),
+    index('wp_updates_process_idx').on(table.processId),
   ],
 )
 

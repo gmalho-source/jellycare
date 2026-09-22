@@ -78,6 +78,40 @@ export interface UmbrellaBackup {
   errorCode: string | null
 }
 
+/**
+ * Como se pede a atualização.
+ *
+ * `SAFE_UPDATE` é o ciclo com cópia de segurança, verificação de saúde e
+ * reversão automática. **Não é o comportamento por omissão da API — é um
+ * parâmetro**, e é por isso que o enviamos sempre explicitamente. Confiar
+ * num default que não controlamos, para uma operação que escreve no site de
+ * um cliente, seria confiar em documentação que pode mudar sem nos avisar.
+ *
+ * `ADVANCED_SAFE_UPDATE` acrescenta validação visual da página depois da
+ * atualização. É provavelmente o que queremos para atualizações sem ninguém
+ * a olhar, mas não conhecemos o custo nem os limites — fica disponível e não
+ * é o que usamos por omissão.
+ */
+export type UmbrellaUpdateType = 'QUICK_UPDATE' | 'SAFE_UPDATE' | 'ADVANCED_SAFE_UPDATE'
+
+/** O que a API devolve quando se ordena uma atualização. */
+export interface UmbrellaProcessRef {
+  processId: string
+}
+
+/** Uma operação em curso ou terminada do lado da ferramenta. */
+export interface UmbrellaProcess {
+  id: string
+  /** `UPDATE_PLUGIN`, `UPDATE_THEME`, `UPDATE_CORE`, … */
+  type: string
+  /** `pending`, `finished`, `success` ou `failed`. */
+  status: string
+  createdAt: string | null
+  /** Nome e versão do que foi tocado, quando a API os dá. */
+  entityName: string | null
+  entityVersion: string | null
+}
+
 export class WpUmbrellaError extends Error {
   constructor(
     message: string,
@@ -143,6 +177,17 @@ export class WpUmbrellaClient {
       clearTimeout(timer)
     }
 
+    return this.parse(response, path)
+  }
+
+  /**
+   * O que fazer com uma resposta, seja ela de leitura ou de escrita.
+   *
+   * Partilhado de propósito: um 429 ou um 401 numa escrita têm de ser lidos
+   * exatamente da mesma maneira que numa leitura, e duas cópias desta lógica
+   * divergiam na primeira vez que alguém mexesse numa delas.
+   */
+  private async parse(response: Response, path: string): Promise<unknown> {
     if (response.status === 401 || response.status === 403) {
       throw new WpUmbrellaError(
         'A WP Umbrella recusou as credenciais. Confirme o token e o scope `public_api`.',
@@ -226,6 +271,110 @@ export class WpUmbrellaClient {
         version,
         newVersion: latest && latest !== version ? latest : null,
         active: row.is_active === true,
+      }
+    })
+  }
+
+  /**
+   * Um pedido que escreve.
+   *
+   * Separado do `get` e não um parâmetro dele: quero que qualquer leitura
+   * deste ficheiro mostre, numa linha, tudo o que esta plataforma é capaz de
+   * alterar no site de um cliente.
+   */
+  private async post(path: string, body: unknown): Promise<unknown> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+
+    let response: Response
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.token}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } catch (error) {
+      throw new WpUmbrellaError(
+        `Não foi possível contactar a WP Umbrella em ${path}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        0,
+      )
+    } finally {
+      clearTimeout(timer)
+    }
+
+    return this.parse(response, path)
+  }
+
+  /**
+   * Ordena a atualização de plugins.
+   *
+   * As chaves são as mesmas que `listPlugins` devolve — `pasta/ficheiro.php`.
+   * Devolve o identificador do processo, que é por onde se sabe depois se
+   * correu bem: a chamada volta muito antes de a atualização acabar.
+   */
+  async updatePlugins(
+    projectId: number,
+    pluginKeys: readonly string[],
+    updateType: UmbrellaUpdateType = 'SAFE_UPDATE',
+  ): Promise<UmbrellaProcessRef> {
+    const payload = (await this.post(`/projects/${projectId}/plugins/update`, {
+      plugin_keys: [...pluginKeys],
+      update_type: updateType,
+    })) as { data?: Record<string, unknown> }
+
+    const processId = str(payload?.data?.processId)
+    if (!processId) {
+      throw new WpUmbrellaError(
+        'A atualização foi aceite mas não veio identificador de processo; sem ele não há como confirmar o resultado.',
+        0,
+      )
+    }
+    return { processId }
+  }
+
+  /** O mesmo para temas. A chave é o `stylesheet`. */
+  async updateThemes(
+    projectId: number,
+    themeKeys: readonly string[],
+    updateType: UmbrellaUpdateType = 'SAFE_UPDATE',
+  ): Promise<UmbrellaProcessRef> {
+    const payload = (await this.post(`/projects/${projectId}/themes/update`, {
+      theme_keys: [...themeKeys],
+      update_type: updateType,
+    })) as { data?: Record<string, unknown> }
+
+    const processId = str(payload?.data?.processId)
+    if (!processId) {
+      throw new WpUmbrellaError(
+        'A atualização foi aceite mas não veio identificador de processo; sem ele não há como confirmar o resultado.',
+        0,
+      )
+    }
+    return { processId }
+  }
+
+  /** As operações de um projeto, para reconciliar o que foi ordenado. */
+  async listProcesses(projectId: number, limit = 50): Promise<UmbrellaProcess[]> {
+    const payload = (await this.get(
+      `/projects/${projectId}/processes?page=1&per_page=${limit}`,
+    )) as { data?: unknown }
+
+    return rows(payload?.data).map((row) => {
+      const entities = row.entities as Record<string, unknown> | undefined
+      return {
+        id: str(row.id) ?? '',
+        type: (str(row.type) ?? '').toUpperCase(),
+        status: (str(row.status) ?? str(row.code) ?? 'unknown').toLowerCase(),
+        createdAt: str(row.created_at),
+        entityName: str(entities?.name),
+        entityVersion: str(entities?.version),
       }
     })
   }

@@ -71,6 +71,13 @@
       "when": 1790062440163,
       "tag": "0009_perfect_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790063256452,
+      "tag": "0010_bizarre_hex",
+      "breakpoints": true
     }
   ]
 }

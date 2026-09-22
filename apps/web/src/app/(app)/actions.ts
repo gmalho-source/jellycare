@@ -911,3 +911,58 @@ export async function setMaintenanceWindowAction(
   revalidatePath(`/sites/${parsed.data.siteId}`)
   return { message: 'Janela declarada. Os alertas ficam suspensos nesse período.' }
 }
+
+/**
+ * Ligar ou desligar a atualização automática de um site.
+ *
+ * É a única definição desta plataforma que a faz escrever no site de um
+ * cliente, por isso é por site e só por quem gere. A janela de manutenção
+ * continua a ser condição: ligada sem janela, não corre nada — e o painel
+ * diz isso em vez de deixar a pessoa a achar que ficou tratado.
+ */
+export async function setAutoUpdateAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({ siteId: z.string().uuid(), enabled: z.enum(['on', 'off']) })
+    .safeParse({ siteId: formData.get('siteId'), enabled: formData.get('enabled') })
+  if (!parsed.success) return { error: 'Dados inválidos.' }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      organizationId: schema.sites.organizationId,
+      maintenanceWindows: schema.sites.maintenanceWindows,
+    })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, parsed.data.siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  const ligar = parsed.data.enabled === 'on'
+  await db
+    .update(schema.sites)
+    .set({ autoUpdate: ligar })
+    .where(eq(schema.sites.id, parsed.data.siteId))
+
+  revalidatePath(`/sites/${parsed.data.siteId}`)
+
+  if (!ligar) return { message: 'Atualização automática desligada.' }
+
+  return {
+    message:
+      site.maintenanceWindows.length === 0
+        ? 'Ligada — mas sem janela de manutenção declarada nada será atualizado. Declare uma acima.'
+        : 'Ligada. As atualizações são aplicadas dentro da janela de manutenção.',
+  }
+}

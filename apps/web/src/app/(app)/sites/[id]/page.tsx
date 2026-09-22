@@ -13,9 +13,11 @@ import {
   listMembers,
   organizationObjections,
   pruneEndedWindows,
+  schema,
   windowState,
   MAX_FORM_TEST_URLS,
 } from '@jellycare/db'
+import { desc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { checkMeta } from '@/lib/checks'
 import { getSiteDashboard } from '@/lib/dashboard'
@@ -27,6 +29,7 @@ import { updateFindingState } from '../../actions'
 import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
 import { SiteDashboard } from '@/components/site-dashboard'
+import { AutoUpdatePanel } from './auto-update-panel'
 import { LegalPanel } from './legal-panel'
 import { MaintenancePanel } from './maintenance-panel'
 import { SettingsPanel } from './settings-panel'
@@ -64,7 +67,18 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const lastRequest = await latestReportRequest(getDb(), detail.site.id)
   // Estado legal da organização, não do site. Fica ao lado dos acessos, que
   // são a outra coisa desta página que pertence à organização e não ao site.
+  const db = getDb()
   const legal = await getLegalState(detail.site.organizationId)
+  // Só para sites ligados a uma ferramenta de manutenção: sem ligação não há
+  // nada para atualizar, e o painel não deve oferecer o que não pode fazer.
+  const atualizacoes = detail.connector
+    ? await db
+        .select()
+        .from(schema.wpUpdates)
+        .where(eq(schema.wpUpdates.siteId, detail.site.id))
+        .orderBy(desc(schema.wpUpdates.orderedAt))
+        .limit(10)
+    : []
   const objecoes = await organizationObjections(getDb(), detail.site.organizationId)
   // A lista de projetos só é precisa para quem pode configurar. Quem não pode
   // não vê o seletor, e não vale um pedido a um terceiro por cada visita.
@@ -426,6 +440,28 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           </ul>
         )}
       </Card>
+
+      {detail.connector ? (
+        <Card>
+          <CardHeader title="Atualizações automáticas" />
+          <AutoUpdatePanel
+            siteId={detail.site.id}
+            enabled={detail.site.autoUpdate}
+            hasWindow={detail.site.maintenanceWindows.length > 0}
+            history={atualizacoes.map((registo) => ({
+              id: registo.id,
+              name: registo.name,
+              kind: registo.kind,
+              fromVersion: registo.fromVersion,
+              toVersion: registo.toVersion,
+              status: registo.status,
+              vulnerable: registo.vulnerable,
+              orderedAt: registo.orderedAt,
+            }))}
+            canManage={manageable}
+          />
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="Janelas de manutenção" />
