@@ -1,7 +1,6 @@
 import type { CheckOutcome, ObservedFinding, Site } from '@jellycare/core'
 import { WpUmbrellaClient, WpUmbrellaError } from '@jellycare/connectors'
-import { isInMaintenanceWindow } from './schedule.js'
-import { schema, type Database } from '@jellycare/db'
+import { isInAnyMaintenanceWindow, schema, type Database } from '@jellycare/db'
 import { and, desc, eq, inArray } from 'drizzle-orm'
 
 /**
@@ -82,6 +81,7 @@ export async function runWpAutoUpdate(
     .select({
       autoUpdate: schema.sites.autoUpdate,
       maintenanceWindows: schema.sites.maintenanceWindows,
+      maintenanceSchedule: schema.sites.maintenanceSchedule,
     })
     .from(schema.sites)
     .where(eq(schema.sites.id, site.id))
@@ -99,7 +99,8 @@ export async function runWpAutoUpdate(
   }
 
   const janelas = definicoes.maintenanceWindows
-  if (janelas.length === 0) {
+  const horario = definicoes.maintenanceSchedule
+  if (janelas.length === 0 && !horario) {
     // Ligado e sem janela é a combinação que não faz nada e parece que faz.
     // Dizê-lo em voz alta, porque quem ligou isto espera que aconteça.
     return {
@@ -111,8 +112,9 @@ export async function runWpAutoUpdate(
           severity: 'medium',
           title: 'Atualização automática sem janela de manutenção',
           detail:
-            'A atualização automática está ligada, mas não há nenhuma janela declarada — ' +
-            'por isso nada é atualizado. Declare uma janela para o trabalho poder acontecer.',
+            'A atualização automática está ligada, mas não há horário de manutenção nem ' +
+            'janela declarada — por isso nada é atualizado. Defina um horário para o trabalho ' +
+            'poder acontecer.',
           evidence: {},
         },
       ],
@@ -122,7 +124,7 @@ export async function runWpAutoUpdate(
     }
   }
 
-  if (!isInMaintenanceWindow(janelas, now)) {
+  if (!isInAnyMaintenanceWindow(janelas, horario, now)) {
     return {
       status: 'ok',
       findings: [],

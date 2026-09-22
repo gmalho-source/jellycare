@@ -669,6 +669,45 @@ describeE2E('fluxo de entrada e painel', () => {
     }
   }, 120_000)
 
+  it('define um horário de manutenção recorrente', async () => {
+    // Sem horário recorrente, «aplica sozinha» exigia alguém a declarar uma
+    // data de cada vez — o contrário de automático.
+    const page = await entrarComo(email)
+    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.waitForSelector('text=Horário recorrente')
+    expect(await page.isVisible('text=Sem horário')).toBe(true)
+
+    await page.click('text=Definir horário')
+    await page.check('input[name=weekday][value="2"]')
+    await page.fill('input[name=hour]', '3')
+    await page.selectOption('select[name=durationMinutes]', '120')
+    await page.selectOption('select[name=timezone]', 'Europe/Lisbon')
+    await page.click('text=Guardar horário')
+    await page.waitForSelector('text=ter, às 03:00')
+    await page.close()
+
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [site] = await db
+        .select({ maintenanceSchedule: schema.sites.maintenanceSchedule })
+        .from(schema.sites)
+        .where(eq(schema.sites.id, siteId))
+        .limit(1)
+
+      // O fuso é guardado pelo nome e não por diferença horária: é o que faz
+      // «três da manhã» continuar a ser três da manhã depois da mudança da
+      // hora.
+      expect(site?.maintenanceSchedule).toMatchObject({
+        weekdays: [2],
+        hour: 3,
+        durationMinutes: 120,
+        timezone: 'Europe/Lisbon',
+      })
+    } finally {
+      await close()
+    }
+  }, 120_000)
+
   it('declara e remove uma janela de manutenção', async () => {
     // O worker respeita as janelas desde o início; o que não havia era como
     // declarar uma sem um `update` à mão na base de dados.
@@ -724,7 +763,10 @@ describeE2E('fluxo de entrada e painel', () => {
       await close()
     }
 
-    await page.click('text=Remover >> nth=0')
+    // Pelo formulário e não por posição: o horário recorrente tem o seu
+    // próprio «Remover» na mesma página, e um `nth=0` apanhava o errado
+    // consoante a ordem por que os testes corressem.
+    await page.click('form:has(input[name=operacao][value=remover]) button[type=submit]')
     await page.waitForSelector('text=Janela removida')
     expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
     await contexto.close()

@@ -78,6 +78,13 @@
       "when": 1790063256452,
       "tag": "0010_bizarre_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790065240654,
+      "tag": "0011_flashy_power_pack",
+      "breakpoints": true
     }
   ]
 }

@@ -181,6 +181,20 @@ export const sites = pgTable(
      * janela é a autorização, não só o silêncio dos alertas.
      */
     autoUpdate: boolean('auto_update').notNull().default(false),
+    /**
+     * Horário de manutenção que se repete todas as semanas.
+     *
+     * As janelas avulsas continuam a existir para o trabalho planeado; esta é
+     * a que faz a manutenção automática ser automática, em vez de exigir uma
+     * autorização pontual de cada vez.
+     */
+    maintenanceSchedule: jsonb('maintenance_schedule').$type<{
+      weekdays: number[]
+      hour: number
+      minute: number
+      durationMinutes: number
+      timezone: string
+    } | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('sites_org_idx').on(table.organizationId, table.state)],

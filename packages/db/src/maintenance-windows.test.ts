@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   addMaintenanceWindow,
+  isInAnyMaintenanceWindow,
+  isInRecurringWindow,
+  parseMaintenanceSchedule,
   MAX_MAINTENANCE_WINDOWS,
   MAX_WINDOW_DAYS,
   pruneEndedWindows,
@@ -174,5 +177,101 @@ describe('windowState', () => {
     expect(windowState(janela('2026-09-21T09:00:00Z', '2026-09-21T11:00:00Z'), AGORA)).toBe(
       'terminada',
     )
+  })
+})
+
+describe('isInRecurringWindow', () => {
+  const noturna = {
+    weekdays: [],
+    hour: 3,
+    minute: 0,
+    durationMinutes: 120,
+    timezone: 'Europe/Lisbon',
+  }
+
+  it('abre à hora certa no fuso declarado', () => {
+    // 03:30 em Lisboa, no inverno, é 03:30 UTC.
+    expect(isInRecurringWindow(noturna, new Date('2026-01-15T03:30:00Z'))).toBe(true)
+    expect(isInRecurringWindow(noturna, new Date('2026-01-15T06:00:00Z'))).toBe(false)
+  })
+
+  it('segue a mudança da hora em vez de uma diferença fixa', () => {
+    // No verão Lisboa está uma hora à frente de UTC: a mesma janela local das
+    // 03:00 passa a começar às 02:00 UTC. Guardar o fuso e não a diferença é
+    // o que faz «três da manhã» continuar a ser três da manhã.
+    expect(isInRecurringWindow(noturna, new Date('2026-07-15T02:30:00Z'))).toBe(true)
+    expect(isInRecurringWindow(noturna, new Date('2026-07-15T03:30:00Z'))).toBe(true)
+    expect(isInRecurringWindow(noturna, new Date('2026-07-15T05:30:00Z'))).toBe(false)
+  })
+
+  it('atravessa a meia-noite', () => {
+    const tarde = { ...noturna, hour: 23, minute: 0, durationMinutes: 180 }
+    // 23:30 do dia 15 e 01:30 do dia 16, ambos dentro.
+    expect(isInRecurringWindow(tarde, new Date('2026-01-15T23:30:00Z'))).toBe(true)
+    expect(isInRecurringWindow(tarde, new Date('2026-01-16T01:30:00Z'))).toBe(true)
+    expect(isInRecurringWindow(tarde, new Date('2026-01-16T02:30:00Z'))).toBe(false)
+  })
+
+  it('respeita os dias da semana, incluindo o que transita da noite anterior', () => {
+    // 15/01/2026 é uma quinta-feira. Janela só às quintas, das 23h às 2h.
+    const soQuinta = { ...noturna, weekdays: [4], hour: 23, minute: 0, durationMinutes: 180 }
+    expect(isInRecurringWindow(soQuinta, new Date('2026-01-15T23:30:00Z'))).toBe(true)
+    // 01:30 de sexta ainda pertence à janela que abriu na quinta.
+    expect(isInRecurringWindow(soQuinta, new Date('2026-01-16T01:30:00Z'))).toBe(true)
+    // Mas 23:30 de sexta já não.
+    expect(isInRecurringWindow(soQuinta, new Date('2026-01-16T23:30:00Z'))).toBe(false)
+  })
+
+  it('não abre com fuso inválido', () => {
+    // Uma configuração que não se entende não autoriza mexer no site de
+    // ninguém: o lado seguro é não abrir.
+    expect(
+      isInRecurringWindow({ ...noturna, timezone: 'Nao/Existe' }, new Date('2026-01-15T03:30:00Z')),
+    ).toBe(false)
+  })
+
+  it('não abre sem horário nenhum', () => {
+    expect(isInRecurringWindow(null, AGORA)).toBe(false)
+    expect(isInRecurringWindow({ ...noturna, durationMinutes: 0 }, AGORA)).toBe(false)
+  })
+})
+
+describe('isInAnyMaintenanceWindow', () => {
+  it('basta uma das duas vias', () => {
+    const horario = {
+      weekdays: [],
+      hour: 3,
+      minute: 0,
+      durationMinutes: 60,
+      timezone: 'Europe/Lisbon',
+    }
+    const momento = new Date('2026-01-15T03:30:00Z')
+
+    expect(isInAnyMaintenanceWindow([], horario, momento)).toBe(true)
+    expect(
+      isInAnyMaintenanceWindow(
+        [janela('2026-01-15T10:00:00Z', '2026-01-15T12:00:00Z')],
+        null,
+        new Date('2026-01-15T11:00:00Z'),
+      ),
+    ).toBe(true)
+    expect(isInAnyMaintenanceWindow([], null, momento)).toBe(false)
+  })
+})
+
+describe('parseMaintenanceSchedule', () => {
+  const valido = { weekdays: [1, 3], hour: 3, minute: 0, durationMinutes: 120, timezone: 'Europe/Lisbon' }
+
+  it('aceita e normaliza', () => {
+    const resultado = parseMaintenanceSchedule({ ...valido, weekdays: [3, 1, 3, 9] })
+    expect(resultado.error).toBeUndefined()
+    // Ordenados, sem repetidos, e o 9 fora porque não é dia da semana.
+    expect(resultado.schedule?.weekdays).toEqual([1, 3])
+  })
+
+  it('recusa hora, duração e fuso inválidos', () => {
+    expect(parseMaintenanceSchedule({ ...valido, hour: 25 }).error).toContain('Hora')
+    expect(parseMaintenanceSchedule({ ...valido, durationMinutes: 5 }).error).toContain('duração')
+    expect(parseMaintenanceSchedule({ ...valido, timezone: 'Nao/Existe' }).error).toContain('Fuso')
   })
 })

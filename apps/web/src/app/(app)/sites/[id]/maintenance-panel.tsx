@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { formatDateTime } from '@/components/ui'
 import { setMaintenanceWindowAction, type ActionState } from '../../actions'
+import { ScheduleField, type Horario } from './schedule-field'
 
 /**
  * Janelas de manutenção.
@@ -39,10 +40,12 @@ type Janela = { start: string; end: string; estado: 'a decorrer' | 'agendada' | 
 export function MaintenancePanel({
   siteId,
   windows,
+  schedule,
   canManage,
 }: {
   siteId: string
   windows: Janela[]
+  schedule: Horario | null
   canManage: boolean
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -56,7 +59,14 @@ export function MaintenancePanel({
     <div className="space-y-4 px-5 py-4">
       <p className="text-sm text-ink-600">
         Durante uma janela os alertas ficam suspensos. As verificações continuam a correr e o que
-        for encontrado continua a ser registado — só não acorda ninguém.
+        for encontrado continua a ser registado — só não acorda ninguém. É também a janela que
+        autoriza a manutenção automática a mexer no site.
+      </p>
+
+      <ScheduleField siteId={siteId} schedule={schedule} canManage={canManage} />
+
+      <p className="border-t border-ink-100 pt-3 text-xs font-medium text-ink-600">
+        Janelas avulsas
       </p>
 
       {windows.length === 0 ? (

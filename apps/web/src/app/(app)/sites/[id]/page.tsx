@@ -460,7 +460,10 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           <AutoUpdatePanel
             siteId={detail.site.id}
             enabled={detail.site.autoUpdate}
-            hasWindow={detail.site.maintenanceWindows.length > 0}
+            hasWindow={
+              detail.site.maintenanceWindows.length > 0 ||
+              detail.site.maintenanceSchedule !== null
+            }
             history={atualizacoes.map((registo) => ({
               id: registo.id,
               name: registo.name,
@@ -485,6 +488,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
             end: janela.end,
             estado: windowState(janela),
           }))}
+          schedule={detail.site.maintenanceSchedule}
           canManage={manageable}
         />
       </Card>

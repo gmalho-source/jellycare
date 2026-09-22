@@ -4,6 +4,7 @@ import { buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
 import {
   addMaintenanceWindow,
   grantAccess,
+  parseMaintenanceSchedule,
   parseFormTestUrls,
   parseSiteSettings,
   requestReport,
@@ -1035,4 +1036,64 @@ export async function setCheckIntervalAction(
 
   revalidatePath(`/sites/${config.siteId}`)
   return { message: 'Periodicidade alterada. A próxima execução fica para já.' }
+}
+
+/**
+ * Definir — ou limpar — o horário de manutenção recorrente.
+ *
+ * O horário é guardado com o nome do fuso e não com a diferença horária: «três
+ * da manhã em Lisboa» tem de continuar a ser três da manhã depois da mudança
+ * da hora, e uma diferença fixa não continuava.
+ */
+export async function setMaintenanceScheduleAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const siteId = z.string().uuid().safeParse(formData.get('siteId'))
+  if (!siteId.success) return { error: 'Dados inválidos.' }
+
+  const db = getDb()
+  const rows = await db
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId.data))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  if (formData.get('operacao') === 'limpar') {
+    await db
+      .update(schema.sites)
+      .set({ maintenanceSchedule: null })
+      .where(eq(schema.sites.id, siteId.data))
+    revalidatePath(`/sites/${siteId.data}`)
+    return { message: 'Horário removido.' }
+  }
+
+  const resultado = parseMaintenanceSchedule({
+    weekdays: formData.getAll('weekday').map(Number),
+    hour: Number(formData.get('hour')),
+    minute: Number(formData.get('minute') ?? 0),
+    durationMinutes: Number(formData.get('durationMinutes')),
+    timezone: formData.get('timezone'),
+  })
+  if (resultado.error || !resultado.schedule) {
+    return { error: resultado.error ?? 'Horário inválido.' }
+  }
+
+  await db
+    .update(schema.sites)
+    .set({ maintenanceSchedule: resultado.schedule })
+    .where(eq(schema.sites.id, siteId.data))
+
+  revalidatePath(`/sites/${siteId.data}`)
+  return { message: 'Horário guardado.' }
 }

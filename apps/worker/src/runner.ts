@@ -11,7 +11,12 @@ import {
   type FindingNotification,
   type Site,
 } from '@jellycare/core'
-import { recordCheckRun, schema, type Database } from '@jellycare/db'
+import {
+  recordCheckRun,
+  schema,
+  type Database,
+  type MaintenanceSchedule,
+} from '@jellycare/db'
 import {
   FORM_CHECKS,
   FORM_DELIVERY_CHECK,
@@ -220,6 +225,7 @@ export async function executeCheckJob(
     notifications,
     site,
     maintenanceWindows: siteRow.maintenanceWindows,
+    maintenanceSchedule: siteRow.maintenanceSchedule,
     now,
   })
 
@@ -386,6 +392,7 @@ interface DispatchInput {
   notifications: FindingNotification[]
   site: Site
   maintenanceWindows: { start: string; end: string }[]
+  maintenanceSchedule: MaintenanceSchedule | null
   now: Date
 }
 
@@ -427,6 +434,7 @@ async function dispatchNotifications(
       siteId: input.site.id,
       siteLabel: input.site.label,
       maintenanceWindows: input.maintenanceWindows,
+      maintenanceSchedule: input.maintenanceSchedule,
       now: input.now,
     })
 
