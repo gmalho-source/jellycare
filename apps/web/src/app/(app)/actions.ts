@@ -2,12 +2,14 @@
 
 import { buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
 import {
+  addMaintenanceWindow,
   grantAccess,
   parseFormTestUrls,
   parseSiteSettings,
   requestReport,
   revokeAccess,
   revokeSession,
+  removeMaintenanceWindow,
   schema,
   setNegotiatedDpaRef,
 } from '@jellycare/db'
@@ -827,4 +829,85 @@ export async function setNegotiatedDpaAction(
   return {
     message: ref.length > 0 ? 'Referência guardada.' : 'Referência removida.',
   }
+}
+
+/**
+ * Declarar uma janela de manutenção, ou remover uma.
+ *
+ * Durante a janela os alertas não saem, mas as verificações continuam a
+ * correr e os problemas continuam a ser registados — o worker respeita isto
+ * desde o início. O que faltava era poder declará-la sem um `update` à mão.
+ *
+ * Os instantes chegam já em ISO com fuso, convertidos no browser. Receber a
+ * hora escrita e interpretá-la aqui dava a hora do servidor, que corre em
+ * UTC: quem marcasse as 22h em Lisboa ficava com uma janela às 23h, e quem a
+ * marcasse no Dubai ficava três horas ao lado. O browser é o único sítio que
+ * sabe em que fuso está quem escreveu.
+ */
+export async function setMaintenanceWindowAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser()
+
+  const parsed = z
+    .object({
+      siteId: z.string().uuid(),
+      operacao: z.enum(['adicionar', 'remover']),
+      start: z.string().min(1),
+      end: z.string().min(1),
+    })
+    .safeParse({
+      siteId: formData.get('siteId'),
+      operacao: formData.get('operacao'),
+      start: formData.get('start'),
+      end: formData.get('end'),
+    })
+  if (!parsed.success) return { error: 'Indique o início e o fim da janela.' }
+
+  const db = getDb()
+  const rows = await db
+    .select({
+      organizationId: schema.sites.organizationId,
+      maintenanceWindows: schema.sites.maintenanceWindows,
+    })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, parsed.data.siteId))
+    .limit(1)
+
+  const site = rows[0]
+  if (!site) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { error: 'Sem permissão para alterar isto.' }
+  }
+
+  if (parsed.data.operacao === 'remover') {
+    const restantes = removeMaintenanceWindow(site.maintenanceWindows, {
+      start: parsed.data.start,
+      end: parsed.data.end,
+    })
+    await db
+      .update(schema.sites)
+      .set({ maintenanceWindows: restantes })
+      .where(eq(schema.sites.id, parsed.data.siteId))
+
+    revalidatePath(`/sites/${parsed.data.siteId}`)
+    return { message: 'Janela removida.' }
+  }
+
+  const resultado = addMaintenanceWindow(site.maintenanceWindows, {
+    start: parsed.data.start,
+    end: parsed.data.end,
+  })
+  if (resultado.error) return { error: resultado.error }
+
+  await db
+    .update(schema.sites)
+    .set({ maintenanceWindows: resultado.windows })
+    .where(eq(schema.sites.id, parsed.data.siteId))
+
+  revalidatePath(`/sites/${parsed.data.siteId}`)
+  return { message: 'Janela declarada. Os alertas ficam suspensos nesse período.' }
 }

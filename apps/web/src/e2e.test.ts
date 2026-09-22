@@ -630,6 +630,67 @@ describeE2E('fluxo de entrada e painel', () => {
     }
   }, 120_000)
 
+  it('declara e remove uma janela de manutenção', async () => {
+    // O worker respeita as janelas desde o início; o que não havia era como
+    // declarar uma sem um `update` à mão na base de dados.
+    // O browser vai para o Dubai, de propósito.
+    //
+    // O contentor de testes corre em UTC. Com o browser também em UTC, uma
+    // conversão de fuso partida dá exatamente o mesmo resultado que uma
+    // conversão correta, e o teste passava a dizer nada. Num fuso com
+    // desfasamento — e é o caso real de quem trabalha entre Lisboa e o
+    // Dubai — a diferença aparece: 22:00 escritas ali são 18:00Z.
+    const contexto = await browser.newContext({ timezoneId: 'Asia/Dubai' })
+    const page = await contexto.newPage()
+    await page.goto(`${baseUrl}/login`)
+    await page.fill('#email', email)
+    await page.click('button[type=submit]')
+    await page.waitForSelector('text=Se este email tiver conta')
+    await page.goto(loginLink())
+    await page.waitForURL(`${baseUrl}/`)
+
+    await page.goto(`${baseUrl}/sites/${siteId}`)
+    await page.waitForSelector('text=Janelas de manutenção')
+    expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
+
+    // Amanhã à noite, escrito como quem escreve no formulário.
+    const amanha = new Date(Date.now() + 24 * 3600_000)
+    const dia = amanha.toISOString().slice(0, 10)
+    await page.fill('input[aria-label="Início da janela"]', `${dia}T22:00`)
+    await page.fill('input[aria-label="Fim da janela"]', `${dia}T23:30`)
+    await page.click('form:has(input[name=operacao][value=adicionar]) button[type=submit]')
+    // A mensagem da ação, e não o texto de ajuda da página — a primeira
+    // versão deste teste esperava por uma frase que já lá estava, e por isso
+    // passava a espera com o formulário por submeter.
+    await page.waitForSelector('text=Janela declarada')
+
+    await page.waitForSelector('text=agendada')
+
+    // O que ficou guardado é ISO em UTC, e corresponde à hora escrita no
+    // fuso do browser — não à hora do servidor.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [site] = await db
+        .select({ maintenanceWindows: schema.sites.maintenanceWindows })
+        .from(schema.sites)
+        .where(eq(schema.sites.id, siteId))
+        .limit(1)
+      expect(site?.maintenanceWindows).toHaveLength(1)
+      const janela = site!.maintenanceWindows[0]!
+      // 22:00 no Dubai são 18:00 em UTC. Guardar `${dia}T22:00Z` seria o
+      // defeito que esta asserção existe para apanhar.
+      expect(janela.start).toBe(`${dia}T18:00:00.000Z`)
+      expect(janela.end).toBe(`${dia}T19:30:00.000Z`)
+    } finally {
+      await close()
+    }
+
+    await page.click('text=Remover >> nth=0')
+    await page.waitForSelector('text=Janela removida')
+    expect(await page.isVisible('text=Nenhuma janela declarada')).toBe(true)
+    await contexto.close()
+  }, 120_000)
+
   it('mostra as verificações de segurança bloqueadas até o domínio estar provado', async () => {
     const page = await browser.newPage()
 

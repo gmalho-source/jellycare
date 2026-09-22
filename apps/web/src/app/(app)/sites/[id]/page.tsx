@@ -12,6 +12,8 @@ import {
   latestReportRequest,
   listMembers,
   organizationObjections,
+  pruneEndedWindows,
+  windowState,
   MAX_FORM_TEST_URLS,
 } from '@jellycare/db'
 import { getDb } from '@/lib/db'
@@ -26,6 +28,7 @@ import { AccessPanel } from './access-panel'
 import { FormUrlsPanel } from './form-urls-panel'
 import { SiteDashboard } from '@/components/site-dashboard'
 import { LegalPanel } from './legal-panel'
+import { MaintenancePanel } from './maintenance-panel'
 import { SettingsPanel } from './settings-panel'
 import { WordPressPanel } from './wordpress-panel'
 import { ReportPanel } from './report-panel'
@@ -422,6 +425,19 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
             })}
           </ul>
         )}
+      </Card>
+
+      <Card>
+        <CardHeader title="Janelas de manutenção" />
+        <MaintenancePanel
+          siteId={detail.site.id}
+          windows={pruneEndedWindows(detail.site.maintenanceWindows).map((janela) => ({
+            start: janela.start,
+            end: janela.end,
+            estado: windowState(janela),
+          }))}
+          canManage={manageable}
+        />
       </Card>
 
       {manageable ? (
