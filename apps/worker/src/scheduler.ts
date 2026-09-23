@@ -14,6 +14,17 @@ export interface SchedulerOptions {
   /** Janela ao longo da qual o lote é espalhado. */
   spreadMs?: number
   now?: () => Date
+  /**
+   * Sob que nome a batida é gravada.
+   *
+   * Em produção há um agendador e o nome é sempre o mesmo. Isto existe porque
+   * a linha da batida é única na tabela e partilhada por tudo o que fala com
+   * a mesma base de dados: os testes do worker escreviam-na ao mesmo tempo
+   * que os do painel a liam, e a asserção de «monitorização parada» passava
+   * ou falhava conforme a ordem em que os dois processos calhavam correr.
+   * Dar um nome próprio a quem está a testar separa-os por construção.
+   */
+  id?: string
 }
 
 export interface TickResult {
@@ -69,6 +80,7 @@ async function recordHeartbeat(
   db: Database,
   now: Date,
   outcome: { result?: TickResult; error?: unknown },
+  id: string,
 ): Promise<void> {
   const saudavel = outcome.error === undefined
   const mensagem =
@@ -92,7 +104,7 @@ async function recordHeartbeat(
 
   await db
     .insert(schema.schedulerHeartbeats)
-    .values({ id: SCHEDULER_ID, ...valores })
+    .values({ id, ...valores })
     .onConflictDoUpdate({ target: schema.schedulerHeartbeats.id, set: valores })
 }
 
@@ -106,15 +118,16 @@ async function recordHeartbeat(
  */
 export async function tick(options: SchedulerOptions): Promise<TickResult> {
   const agora = options.now?.() ?? new Date()
+  const id = options.id ?? SCHEDULER_ID
   try {
     const result = await runTick(options, agora)
-    await recordHeartbeat(options.db, agora, { result })
+    await recordHeartbeat(options.db, agora, { result }, id)
     return result
   } catch (error) {
     // A batida primeiro. Se esta escrita também falhar, aí sim não há nada a
     // fazer — mas o Postgres e o Redis falham por razões diferentes, e foi
     // justamente por isso que a batida não vive no Redis.
-    await recordHeartbeat(options.db, agora, { error }).catch(() => {})
+    await recordHeartbeat(options.db, agora, { error }, id).catch(() => {})
     throw error
   }
 }

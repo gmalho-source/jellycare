@@ -11,7 +11,7 @@ import { RecordingNotifier } from './channels.js'
 import { createCheckQueue, checkJobId } from './queues.js'
 import { executeCheckJob } from './runner.js'
 import type { CheckJobData } from './runner.js'
-import { SCHEDULER_ID, tick } from './scheduler.js'
+import { tick } from './scheduler.js'
 
 /**
  * Ciclo completo com Postgres e Redis reais: agendar, executar, persistir,
@@ -158,6 +158,18 @@ async function sampleFromRegion(region: string, up: boolean, agoMs = 60_000) {
     failureReason: up ? null : 'connection_refused',
   })
 }
+
+/**
+ * A batida destes testes tem nome próprio.
+ *
+ * A linha da batida é única na tabela e a base de dados de testes é
+ * partilhada com a suite do painel, que a põe velha de propósito para provar
+ * que o dashboard não consegue dizer que está tudo bem com a monitorização
+ * parada. Com os dois a escreverem `checks`, a asserção passava ou falhava
+ * consoante a ordem em que as duas suites calhavam correr — e foi isso que
+ * partiu um deploy.
+ */
+const BATIDA_DE_TESTE = 'checks-testes-do-worker'
 
 describe('ciclo completo do worker', () => {
   it('executa um check, regista o run e não alerta quando está tudo bem', async () => {
@@ -451,7 +463,7 @@ describe('agendador', () => {
   it('enfileira o que está vencido e adia o próximo run', async () => {
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
 
-    const result = await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    const result = await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
 
     // Limite inferior e não igualdade: o número total é global e depende do
     // que os outros pacotes tiverem em curso.
@@ -470,7 +482,7 @@ describe('agendador', () => {
   it('não enfileira o que ainda não venceu', async () => {
     await addCheck('uptime', 5, new Date(Date.now() + 600_000))
 
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
     expect(await queuedForSite()).toHaveLength(0)
   })
 
@@ -478,13 +490,13 @@ describe('agendador', () => {
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
 
     const now = new Date()
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE, now: () => now })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE, now: () => now })
     // Simula dois schedulers em paralelo durante um deploy, ou um retry.
     await db
       .update(schema.checkConfigs)
       .set({ nextRunAt: new Date(Date.now() - 60_000) })
       .where(eq(schema.checkConfigs.siteId, siteId))
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE, now: () => now })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE, now: () => now })
 
     expect(await queuedForSite()).toHaveLength(1)
   })
@@ -493,7 +505,7 @@ describe('agendador', () => {
     await addCheck('uptime', 5, null)
     await db.update(schema.sites).set({ state: 'archived' }).where(eq(schema.sites.id, siteId))
 
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
     expect(await queuedForSite()).toHaveLength(0)
   })
 
@@ -517,7 +529,7 @@ describe('agendador', () => {
     } as unknown as typeof queue
 
     await expect(
-      tick({ db, queue: filaComFalha, spreadMs: 0, batchSize: LOTE }),
+      tick({ db, queue: filaComFalha, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE }),
     ).rejects.toThrow('não entraram na fila')
 
     // O saudável entrou.
@@ -546,7 +558,7 @@ describe('agendador', () => {
     await addCheck('tls', 1440, null)
     await addCheck('email_auth', 1440, null)
 
-    await tick({ db, queue, spreadMs: 60_000, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 60_000, batchSize: LOTE })
 
     const jobs = await queuedForSite()
     const delayed = await Promise.all(jobs.map((job) => job.getState()))
@@ -568,13 +580,13 @@ describe('sinal de vida do agendador', () => {
     const linhas = await db
       .select()
       .from(schema.schedulerHeartbeats)
-      .where(eq(schema.schedulerHeartbeats.id, SCHEDULER_ID))
+      .where(eq(schema.schedulerHeartbeats.id, BATIDA_DE_TESTE))
     return linhas[0]
   }
 
   it('grava a passagem mesmo quando não há nada vencido', async () => {
     const antes = new Date()
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
 
     const linha = await batida()
     expect(linha?.lastTickAt.getTime()).toBeGreaterThanOrEqual(antes.getTime() - 1000)
@@ -594,7 +606,7 @@ describe('sinal de vida do agendador', () => {
     } as unknown as typeof queue
 
     await expect(
-      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+      tick({ db, queue: filaPartida, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE }),
     ).rejects.toThrow()
 
     const linha = await batida()
@@ -605,7 +617,7 @@ describe('sinal de vida do agendador', () => {
   })
 
   it('a falha não apaga a última passagem saudável', async () => {
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
     const saudavel = (await batida())?.lastHealthyTickAt
 
     await addCheck('uptime', 5, new Date(Date.now() - 60_000))
@@ -616,7 +628,7 @@ describe('sinal de vida do agendador', () => {
       }) as unknown as typeof queue.add,
     } as unknown as typeof queue
     await expect(
-      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+      tick({ db, queue: filaPartida, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE }),
     ).rejects.toThrow()
 
     // Saber há quanto tempo é que a última passagem correu bem é a diferença
@@ -633,11 +645,11 @@ describe('sinal de vida do agendador', () => {
       }) as unknown as typeof queue.add,
     } as unknown as typeof queue
     await expect(
-      tick({ db, queue: filaPartida, spreadMs: 0, batchSize: LOTE }),
+      tick({ db, queue: filaPartida, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE }),
     ).rejects.toThrow()
     expect((await batida())?.lastError).not.toBeNull()
 
-    await tick({ db, queue, spreadMs: 0, batchSize: LOTE })
+    await tick({ db, queue, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
 
     // Um erro que ficasse colado mantinha o alarme a tocar depois de a avaria
     // estar resolvida, e um alarme que toca sem razão é um alarme que se
