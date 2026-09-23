@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { HealthBadge, formatRelative, formatUptime } from '@/components/ui'
+import { Icone } from '@/components/icons'
 import { SchedulerBanner } from '@/components/scheduler-banner'
-import { listSites } from '@/lib/queries'
-import { getCheckLiveness, getSchedulerHealth } from '@/lib/scheduler-health'
+import { HealthBadge, Stat, formatRelative, formatUptime } from '@/components/ui'
+import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { requireUser } from '@/lib/session'
+import { lerVigia } from '@/lib/vigia'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,43 +15,40 @@ const STATE_LABEL: Record<string, string> = {
   archived: 'Arquivado',
 }
 
+/** A média das disponibilidades conhecidas. Um site sem dados não conta como zero. */
+function mediaDisponibilidade(valores: readonly (number | null)[]): {
+  media: number | null
+  comDados: number
+} {
+  const conhecidos = valores.filter((valor): valor is number => valor !== null)
+  if (conhecidos.length === 0) return { media: null, comDados: 0 }
+  const soma = conhecidos.reduce((total, valor) => total + valor, 0)
+  return { media: soma / conhecidos.length, comDados: conhecidos.length }
+}
+
 export default async function SitesPage() {
   const user = await requireUser()
   const organizacoes = user.memberships.map((membership) => membership.organizationId)
-  const [sites, agendador, checks] = await Promise.all([
-    listSites(organizacoes),
-    getSchedulerHealth(),
-    // Só os sites deste utilizador: dizer-lhe que o `uptime` está atrasado em
-    // três sites quando ele só tem um é um aviso que ele não pode verificar.
-    getCheckLiveness(new Date(), organizacoes),
-  ])
 
-  // Com a monitorização parada, os números são os da última passagem. Dizer
-  // «nenhum com problemas abertos» em cima disso é a afirmação que o painel
-  // manteve durante dezoito horas enquanto não verificava nada.
-  const aVigiar = agendador.status === 'ok' && checks.every((check) => check.late === 0)
+  const [sites, vigia] = await Promise.all([listSites(organizacoes), lerVigia(organizacoes)])
 
-  // Primeiro o que precisa de atenção. Quem abre o painel de manhã quer ver o
-  // que arde, não a lista por ordem alfabética.
-  const sorted = [...sites].sort((a, b) => {
-    if (a.worstSeverity && !b.worstSeverity) return -1
-    if (!a.worstSeverity && b.worstSeverity) return 1
-    return a.label.localeCompare(b.label, 'pt-PT')
-  })
-
+  const sorted = ordenarPorGravidade(sites)
   const comProblemas = sorted.filter((site) => site.worstSeverity !== null).length
+  const porVerificar = sorted.filter((site) => !site.verified).length
+  const { media, comDados } = mediaDisponibilidade(sorted.map((site) => site.uptime24h))
+  const atrasados = vigia.checks.filter((check) => check.late > 0).length
 
   return (
     <div className="space-y-6">
-      <SchedulerBanner health={agendador} checks={checks} />
+      <SchedulerBanner health={vigia.health} checks={vigia.checks} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Sites</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Sites</h1>
           <p className="mt-1 text-sm text-ink-600">
             {sites.length === 0
               ? 'Ainda não há sites em monitorização.'
-              : !aVigiar
+              : !vigia.aVigiar
                 ? `${sites.length} ${sites.length === 1 ? 'site' : 'sites'} — números da última passagem, ver o aviso acima.`
                 : comProblemas === 0
                   ? `${sites.length} ${sites.length === 1 ? 'site' : 'sites'} em monitorização, nenhum com problemas abertos.`
@@ -58,80 +56,128 @@ export default async function SitesPage() {
           </p>
         </div>
 
+        {/* A ação principal é grafite e não vermelha: o vermelho da marca não
+            compete com o vermelho do estado no mesmo ecrã. */}
         <Link
           href="/sites/new"
-          className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90"
         >
+          <Icone nome="mais" className="h-3.5 w-3.5" />
           Adicionar site
         </Link>
       </div>
 
+      {sorted.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Stat
+            rotulo="Sites vigiados"
+            valor={sorted.length}
+            nota={
+              porVerificar === 0
+                ? 'todos com propriedade confirmada'
+                : `${porVerificar} por verificar`
+            }
+          />
+          <Stat
+            rotulo="Com problemas abertos"
+            valor={comProblemas}
+            nota={
+              comProblemas === 0
+                ? 'nada em aberto neste momento'
+                : `${sorted.reduce((total, site) => total + site.openFindings, 0)} problemas ao todo`
+            }
+          />
+          <Stat
+            rotulo="Disponibilidade 24 h"
+            valor={formatUptime(media)}
+            nota={
+              comDados === 0
+                ? 'ainda sem observações'
+                : `média de ${comDados} ${comDados === 1 ? 'site' : 'sites'}`
+            }
+          />
+          <Stat
+            rotulo="Tipos de verificação"
+            valor={vigia.checks.length}
+            nota={
+              atrasados === 0 ? 'nenhum em atraso' : `${atrasados} em atraso`
+            }
+          />
+        </div>
+      )}
+
       {sorted.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
+        <div className="rounded-2xl border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
           <p className="text-sm text-ink-600">
             Adicione o primeiro site para começar a monitorizar.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-ink-200 bg-white">
-          {/* Uma lista e não uma tabela.
+        <ul className="overflow-hidden rounded-2xl bg-white shadow-card">
+          {/* Uma lista e não uma tabela. Quatro colunas de largura fixa não
+              cabem num telemóvel, e uma tabela que rola na horizontal esconde
+              metade da informação a quem só tem o telemóvel à mão: aqui as
+              medidas passam para baixo do nome e nada sai do ecrã.
 
-              Quatro colunas de largura fixa não cabem num telemóvel, e uma
-              tabela que rola na horizontal esconde metade da informação a
-              quem só tem o telemóvel à mão. A mesma grelha empilha em duas
-              linhas no ecrã pequeno e alinha em quatro colunas a partir de
-              `sm`, sem duplicar marcação.
+              A linha inteira é ligação. Antes só o nome é que era, e tocar na
+              disponibilidade não fazia nada — num ecrã táctil isso lê-se como
+              avaria. */}
+          {sorted.map((site) => (
+            <li key={site.id} className="border-b border-ink-100 last:border-0">
+              <Link
+                href={`/sites/${site.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-ink-50 sm:gap-4 sm:px-5 sm:py-3.5"
+              >
+                <span
+                  aria-hidden
+                  className={`sev-${site.worstSeverity ?? 'ok'} sev-ponto h-9 w-1 shrink-0 rounded-full`}
+                />
 
-              A linha inteira passou a ser ligação: antes só o nome é que
-              era, e tocar na disponibilidade não fazia nada — num ecrã táctil
-              isso lê-se como avaria. */}
-          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_9rem_9rem] gap-4 border-b border-ink-200 bg-ink-50 px-5 py-2.5 text-xs uppercase tracking-wide text-ink-400 sm:grid">
-            <span className="font-medium">Site</span>
-            <span className="font-medium">Estado</span>
-            <span className="font-medium">Disponibilidade 24h</span>
-            <span className="font-medium">Última verificação</span>
-          </div>
+                <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink-100 text-sm font-semibold text-ink-600 sm:flex">
+                  {site.label.trim().charAt(0).toUpperCase() || '·'}
+                </span>
 
-          <ul className="divide-y divide-ink-100">
-            {sorted.map((site) => (
-              <li key={site.id}>
-                <Link
-                  href={`/sites/${site.id}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 text-sm hover:bg-ink-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_9rem_9rem] sm:gap-4 sm:px-5"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-ink-900">{site.label}</span>
-                    <span className="mt-0.5 block truncate text-xs text-ink-400">
-                      {site.hostname}
-                    </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.9375rem] font-semibold tracking-tight text-ink-900">
+                    {site.label}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-ink-400">
+                    {site.hostname}
                   </span>
 
-                  <span className="flex items-center gap-2 justify-self-end sm:justify-self-start">
+                  {/* No telemóvel as medidas vivem debaixo do nome; a partir
+                      de `sm` cada uma tem a sua coluna à direita. */}
+                  <span className="mt-2 flex flex-wrap items-center gap-2 sm:hidden">
                     <HealthBadge severity={site.worstSeverity} openFindings={site.openFindings} />
-                    {!site.verified && (
-                      <span className="text-xs text-ink-400">{STATE_LABEL[site.state]}</span>
-                    )}
-                  </span>
-
-                  {/* No pequeno as duas medidas partilham uma linha; a partir
-                      de `sm` o `contents` desfaz este invólucro e cada uma
-                      ocupa a sua coluna da grelha. */}
-                  <span className="col-span-2 flex items-center gap-1.5 text-xs text-ink-400 sm:contents">
-                    <span className="tabular-nums sm:text-sm sm:text-ink-600">
+                    <span className="font-mono text-xs tabular-nums text-ink-600">
                       {formatUptime(site.uptime24h)}
                     </span>
-                    <span aria-hidden className="sm:hidden">
-                      ·
-                    </span>
-                    <span className="sm:text-sm sm:text-ink-600">
-                      {formatRelative(site.lastRunAt)}
-                    </span>
+                    <span className="text-xs text-ink-400">{formatRelative(site.lastRunAt)}</span>
                   </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+                </span>
+
+                <span className="hidden w-20 text-right font-mono text-sm tabular-nums text-ink-600 sm:block">
+                  {formatUptime(site.uptime24h)}
+                </span>
+
+                <span className="hidden w-40 justify-end gap-2 sm:flex">
+                  {!site.verified && (
+                    <span className="self-center text-xs text-ink-400">
+                      {STATE_LABEL[site.state]}
+                    </span>
+                  )}
+                  <HealthBadge severity={site.worstSeverity} openFindings={site.openFindings} />
+                </span>
+
+                <span className="hidden w-24 text-right text-xs text-ink-400 sm:block">
+                  {formatRelative(site.lastRunAt)}
+                </span>
+
+                <Icone nome="seta" className="hidden h-4 w-4 shrink-0 text-ink-200 sm:block" />
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )

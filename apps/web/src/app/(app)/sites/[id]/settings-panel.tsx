@@ -59,7 +59,7 @@ export function SettingsPanel({
         <input type="hidden" name="siteId" value={siteId} />
 
         <div>
-          <label htmlFor="site-label" className="block text-xs text-ink-500">
+          <label htmlFor="site-label" className="block text-xs text-ink-400">
             Nome
           </label>
           <input
@@ -76,7 +76,7 @@ export function SettingsPanel({
         </div>
 
         <div>
-          <label htmlFor="site-recipients" className="block text-xs text-ink-500">
+          <label htmlFor="site-recipients" className="block text-xs text-ink-400">
             Destinatários do relatório mensal
           </label>
           <textarea
@@ -95,7 +95,7 @@ export function SettingsPanel({
 
         <div className="flex flex-wrap gap-4">
           <div className="min-w-[14rem] flex-1">
-            <label htmlFor="site-expected" className="block text-xs text-ink-500">
+            <label htmlFor="site-expected" className="block text-xs text-ink-400">
               Conteúdo esperado na homepage
             </label>
             <input
@@ -108,7 +108,7 @@ export function SettingsPanel({
           </div>
 
           <div className="w-32">
-            <label htmlFor="site-sla" className="block text-xs text-ink-500">
+            <label htmlFor="site-sla" className="block text-xs text-ink-400">
               SLA (%)
             </label>
             <input
@@ -125,7 +125,7 @@ export function SettingsPanel({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-60"
+            className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
           >
             {saving ? 'A guardar…' : 'Guardar'}
           </button>
@@ -136,7 +136,7 @@ export function SettingsPanel({
         </div>
       </form>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-ink-200 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-3 border-t border-ink-100 px-5 py-4">
         <form action={changeState}>
           <input type="hidden" name="siteId" value={siteId} />
           <input type="hidden" name="state" value={archived ? 'active' : 'archived'} />
@@ -174,7 +174,7 @@ export function SettingsPanel({
       </div>
 
       {showDelete ? (
-        <form action={remove} className="border-t border-ink-200 bg-jelly-50 px-5 py-4">
+        <form action={remove} className="border-t border-ink-100 bg-jelly-50 px-5 py-4">
           <input type="hidden" name="siteId" value={siteId} />
 
           <p className="text-sm text-ink-900">
@@ -204,13 +204,13 @@ export function SettingsPanel({
             <button
               type="button"
               onClick={() => setShowDelete(false)}
-              className="text-sm text-ink-500 hover:text-ink-900"
+              className="text-sm text-ink-400 hover:text-ink-900"
             >
               Cancelar
             </button>
           </div>
 
-          <p className="mt-2 text-xs text-ink-500">
+          <p className="mt-2 text-xs text-ink-400">
             Escreva o nome do site exatamente para confirmar.
           </p>
 

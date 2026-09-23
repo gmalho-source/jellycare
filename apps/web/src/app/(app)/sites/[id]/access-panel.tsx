@@ -50,7 +50,7 @@ export function AccessPanel({
       {members.length === 0 ? (
         <EmptyState>Ninguém, além de si.</EmptyState>
       ) : (
-        <ul className="divide-y divide-ink-200">
+        <ul className="divide-y divide-ink-100">
           {members.map((member) => (
             <li
               key={member.userId}
@@ -72,7 +72,7 @@ export function AccessPanel({
                     <button
                       type="submit"
                       disabled={resending}
-                      className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-900 disabled:opacity-50"
+                      className="rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-ink-900 disabled:opacity-50"
                     >
                       Reenviar convite
                     </button>
@@ -84,7 +84,7 @@ export function AccessPanel({
                       <input type="hidden" name="userId" value={member.userId} />
                       <button
                         type="submit"
-                        className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+                        className="rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-ink-900"
                       >
                         Retirar acesso
                       </button>
@@ -99,7 +99,7 @@ export function AccessPanel({
 
       {resendState.message || resendState.error ? (
         <p
-          className={`border-t border-ink-200 px-5 py-3 text-sm ${
+          className={`border-t border-ink-100 px-5 py-3 text-sm ${
             resendState.error ? 'text-red-600' : 'text-ink-600'
           }`}
         >
@@ -108,12 +108,12 @@ export function AccessPanel({
       ) : null}
 
       {canManage ? (
-        <form action={action} className="border-t border-ink-200 px-5 py-4">
+        <form action={action} className="border-t border-ink-100 px-5 py-4">
           <input type="hidden" name="organizationId" value={organizationId} />
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[16rem] flex-1">
-              <label htmlFor="access-email" className="block text-xs text-ink-500">
+              <label htmlFor="access-email" className="block text-xs text-ink-400">
                 Email
               </label>
               <input
@@ -127,7 +127,7 @@ export function AccessPanel({
             </div>
 
             <div>
-              <label htmlFor="access-role" className="block text-xs text-ink-500">
+              <label htmlFor="access-role" className="block text-xs text-ink-400">
                 Papel
               </label>
               <select
@@ -145,7 +145,7 @@ export function AccessPanel({
             <button
               type="submit"
               disabled={pending}
-              className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-60"
+              className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
             >
               {pending ? 'A dar acesso…' : 'Dar acesso'}
             </button>

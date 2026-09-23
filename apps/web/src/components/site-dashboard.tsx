@@ -1,6 +1,13 @@
 import type { Severity } from '@jellycare/core'
 import type { DashboardData } from '@/lib/dashboard'
-import { Card, CardHeader, EmptyState, formatDateTime, formatRelative } from '@/components/ui'
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  formatDateTime,
+  formatRelative,
+  formatUptime,
+} from '@/components/ui'
 import { UptimeStrip } from './uptime-strip'
 
 /**
@@ -66,18 +73,20 @@ function Tile({
 }) {
   const cor =
     tone === 'mau'
-      ? 'text-[#a32233]'
+      ? 'text-mau'
       : tone === 'aviso'
-        ? 'text-[#a16207]'
+        ? 'text-medio'
         : tone === 'bom'
-          ? 'text-[#15803d]'
+          ? 'text-bom'
           : 'text-ink-900'
 
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
-      <p className="text-xs text-ink-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tracking-tight ${cor}`}>{value}</p>
-      {footnote ? <p className="mt-1 text-xs text-ink-400">{footnote}</p> : null}
+    <div className="flex flex-col gap-1.5 rounded-2xl bg-white px-5 py-4 shadow-card">
+      <span className="text-xs font-medium text-ink-400">{label}</span>
+      <span className={`font-display text-3xl font-semibold tracking-tight tabular-nums ${cor}`}>
+        {value}
+      </span>
+      {footnote ? <span className="text-xs text-ink-400">{footnote}</span> : null}
     </div>
   )
 }
@@ -141,7 +150,7 @@ export function DashboardOverview({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile
           label="Disponibilidade, 30 dias"
-          value={uptime.uptimePercent === null ? '—' : `${uptime.uptimePercent.toFixed(2)}%`}
+          value={formatUptime(uptime.uptimePercent)}
           footnote={
             uptime.samples === 0
               ? 'Sem observações ainda'
@@ -215,7 +224,7 @@ export function DashboardOverview({
                 <li key={incident.start.toISOString()} className="px-5 py-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-ink-900">{formatDateTime(incident.start)}</span>
-                    <span className="shrink-0 text-xs text-[#a32233]">
+                    <span className="shrink-0 text-xs text-mau">
                       {duracao(incident.durationMs)}
                       {incident.ongoing ? ' · a decorrer' : ''}
                     </span>
@@ -286,16 +295,16 @@ export function WordPressMetrics({
     <Card>
       <CardHeader title="WordPress" />
 
-      <div className="grid gap-4 border-b border-ink-200 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 border-b border-ink-100 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <p className="text-xs text-ink-500">Versão do WordPress</p>
+          <p className="text-xs text-ink-400">Versão do WordPress</p>
           <p
-            className={`mt-1 text-2xl font-semibold tracking-tight ${
+            className={`mt-1 font-display text-2xl font-semibold tracking-tight ${
               snapshot.core === null
                 ? 'text-ink-400'
                 : snapshot.core.latestVersion !== null
-                  ? 'text-[#a32233]'
-                  : 'text-[#15803d]'
+                  ? 'text-mau'
+                  : 'text-bom'
             }`}
           >
             {snapshot.core?.version ?? '—'}
@@ -313,10 +322,10 @@ export function WordPressMetrics({
         </div>
 
         <div>
-          <p className="text-xs text-ink-500">Atualizações pendentes</p>
+          <p className="text-xs text-ink-400">Atualizações pendentes</p>
           <p
-            className={`mt-1 text-2xl font-semibold tracking-tight ${
-              snapshot.updatesPending > 0 ? 'text-[#a16207]' : 'text-[#15803d]'
+            className={`mt-1 font-display text-2xl font-semibold tracking-tight ${
+              snapshot.updatesPending > 0 ? 'text-medio' : 'text-bom'
             }`}
           >
             {snapshot.updatesPending}
@@ -327,14 +336,14 @@ export function WordPressMetrics({
         </div>
 
         <div>
-          <p className="text-xs text-ink-500">Vulnerabilidades conhecidas</p>
+          <p className="text-xs text-ink-400">Vulnerabilidades conhecidas</p>
           <p
-            className={`mt-1 text-2xl font-semibold tracking-tight ${
+            className={`mt-1 font-display text-2xl font-semibold tracking-tight ${
               vulns.critical + vulns.high > 0
-                ? 'text-[#a32233]'
+                ? 'text-mau'
                 : totalVulns > 0
-                  ? 'text-[#a16207]'
-                  : 'text-[#15803d]'
+                  ? 'text-medio'
+                  : 'text-bom'
             }`}
           >
             {totalVulns}
@@ -354,7 +363,7 @@ export function WordPressMetrics({
         </div>
 
         <div>
-          <p className="text-xs text-ink-500">Última recolha</p>
+          <p className="text-xs text-ink-400">Última recolha</p>
           <p className="mt-1 text-sm text-ink-900">
             {snapshot.lastError
               ? 'falhou'
@@ -390,7 +399,7 @@ export function WordPressMetrics({
                   <span className="ml-1.5 text-xs text-ink-400">tema</span>
                 ) : null}
               </span>
-              <span className="shrink-0 text-xs text-[#a16207]">
+              <span className="shrink-0 text-xs text-medio">
                 {component.from ?? '?'} → {component.to}
               </span>
             </li>
@@ -420,12 +429,12 @@ export function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardDat
     <Card>
       <CardHeader title="Cópias de segurança" />
 
-      <div className="grid gap-4 border-b border-ink-200 px-5 py-4 sm:grid-cols-3">
+      <div className="grid gap-4 border-b border-ink-100 px-5 py-4 sm:grid-cols-3">
         <div>
-          <p className="text-xs text-ink-500">Última cópia concluída</p>
+          <p className="text-xs text-ink-400">Última cópia concluída</p>
           <p
-            className={`mt-1 text-2xl font-semibold tracking-tight ${
-              semCopia ? 'text-[#a32233]' : 'text-[#15803d]'
+            className={`mt-1 font-display text-2xl font-semibold tracking-tight ${
+              semCopia ? 'text-mau' : 'text-bom'
             }`}
           >
             {semCopia ? 'nenhuma' : formatRelative(snapshot.lastGoodAt)}
@@ -438,8 +447,8 @@ export function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardDat
         </div>
 
         <div>
-          <p className="text-xs text-ink-500">Cópias registadas</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900">
+          <p className="text-xs text-ink-400">Cópias registadas</p>
+          <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink-900">
             {snapshot.total}
           </p>
           <p className="mt-1 text-xs text-ink-400">
@@ -450,8 +459,8 @@ export function BackupMetrics({ snapshot }: { snapshot: NonNullable<DashboardDat
         </div>
 
         <div>
-          <p className="text-xs text-ink-500">Versão do WordPress</p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900">
+          <p className="text-xs text-ink-400">Versão do WordPress</p>
+          <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink-900">
             {snapshot.wordpressVersion ?? '—'}
           </p>
           <p className="mt-1 text-xs text-ink-400">na última cópia</p>

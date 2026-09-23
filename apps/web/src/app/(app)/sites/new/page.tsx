@@ -25,7 +25,7 @@ export default async function NewSitePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Adicionar site</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Adicionar site</h1>
         <p className="mt-1 text-sm text-ink-600">
           O site começa em disponibilidade. As restantes verificações ativam-se assim que a
           propriedade do domínio estiver comprovada.
@@ -33,7 +33,7 @@ export default async function NewSitePage() {
       </div>
 
       {organizations.length === 0 ? (
-        <div className="rounded-xl border border-ink-200 bg-white px-6 py-10 text-center text-sm text-ink-600">
+        <div className="rounded-2xl bg-white shadow-card px-6 py-10 text-center text-sm text-ink-600">
           Não tem permissão para adicionar sites em nenhuma organização.
         </div>
       ) : (

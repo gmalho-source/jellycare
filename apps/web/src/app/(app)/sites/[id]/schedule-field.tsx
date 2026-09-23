@@ -90,7 +90,7 @@ export function ScheduleField({
           <button
             type="button"
             onClick={() => setAberto(true)}
-            className="text-xs font-medium text-jelly-600 underline underline-offset-2"
+            className="text-xs font-medium text-ink-900 underline underline-offset-2"
           >
             {schedule ? 'Alterar' : 'Definir horário'}
           </button>
@@ -202,7 +202,7 @@ export function ScheduleField({
             >
               Cancelar
             </button>
-            {state.error && <span className="text-sm text-jelly-600">{state.error}</span>}
+            {state.error && <span className="text-sm text-mau">{state.error}</span>}
             {state.message && <span className="text-sm text-green-700">{state.message}</span>}
           </div>
         </form>

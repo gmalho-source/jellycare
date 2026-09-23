@@ -45,8 +45,8 @@ export default async function LegalDocumentPage({
         </div>
       )}
 
-      <header className="rounded-xl border border-ink-200 bg-white px-5 py-4">
-        <h1 className="text-lg font-semibold tracking-tight">{visivel.title}</h1>
+      <header className="rounded-2xl bg-white shadow-card px-5 py-4">
+        <h1 className="font-display text-xl font-semibold tracking-tight">{visivel.title}</h1>
         <p className="mt-1 text-xs text-ink-400">
           Versão {visivel.version} · em vigor desde {formatDateTime(visivel.effectiveAt)} ·
           publicada a {formatDateTime(visivel.publishedAt)}
@@ -57,12 +57,12 @@ export default async function LegalDocumentPage({
       </header>
 
       <div
-        className="legal-prose rounded-xl border border-ink-200 bg-white px-5 py-6"
+        className="legal-prose rounded-2xl bg-white shadow-card px-5 py-6"
         dangerouslySetInnerHTML={{ __html: renderLegalMarkdown(visivel.body) }}
       />
 
       {historico.length > 1 && (
-        <section className="rounded-xl border border-ink-200 bg-white px-5 py-4">
+        <section className="rounded-2xl bg-white shadow-card px-5 py-4">
           <h2 className="text-sm font-semibold text-ink-900">Versões</h2>
           <ul className="mt-2 space-y-1 text-xs text-ink-600">
             {historico.map((versao) => (

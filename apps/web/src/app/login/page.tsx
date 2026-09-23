@@ -25,14 +25,14 @@ export default async function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <Brand className="h-9" />
-          <p className="mt-3.5 text-sm text-ink-400">
+          <p className="mt-3.5 text-sm text-shell-muted">
             Manutenção ativa e proativa de websites
           </p>
         </div>
 
         <LoginForm />
 
-        <p className="mt-6 text-center text-xs text-ink-400">
+        <p className="mt-6 text-center text-xs text-shell-muted">
           Um produto Jelly. O acesso é por convite.
         </p>
       </div>

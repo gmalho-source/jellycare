@@ -54,7 +54,7 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
                 <div className="min-w-0">
                   <a
                     href={`/api/reports/${report.id}`}
-                    className="text-sm font-medium text-ink-900 hover:text-jelly-500"
+                    className="text-sm font-medium text-ink-900 hover:underline"
                   >
                     {MONTHS[report.periodMonth - 1]} de {report.periodYear}
                   </a>

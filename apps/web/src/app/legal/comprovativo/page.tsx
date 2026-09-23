@@ -48,10 +48,10 @@ export default async function ComprovativoPage() {
       {comprovativos.map(({ acceptance, body }) => (
         <article
           key={acceptance.documentId}
-          className="rounded-xl border border-ink-200 bg-white px-5 py-6 print:border-0 print:px-0"
+          className="rounded-2xl bg-white shadow-card px-5 py-6 print:border-0 print:px-0"
         >
-          <header className="border-b border-ink-200 pb-4">
-            <h1 className="text-lg font-semibold tracking-tight">{acceptance.title}</h1>
+          <header className="border-b border-ink-100 pb-4">
+            <h1 className="font-display text-xl font-semibold tracking-tight">{acceptance.title}</h1>
             <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs text-ink-600 sm:grid-cols-2">
               <div className="flex gap-2">
                 <dt className="text-ink-400">Responsável pelo tratamento</dt>

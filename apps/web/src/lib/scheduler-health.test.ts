@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { lateAfterMinutes, summariseLiveness, type TrackedConfig } from './scheduler-health'
+import {
+  lateAfterMinutes,
+  resumirVigia,
+  summariseLiveness,
+  type CheckLiveness,
+  type SchedulerHealth,
+  type TrackedConfig,
+} from './scheduler-health'
 
 const AGORA = new Date('2026-09-22T12:00:00Z')
 
@@ -120,5 +127,57 @@ describe('summariseLiveness', () => {
 
     expect(resumo[0]?.tracked).toBe(1)
     expect(resumo[0]?.late).toBe(0)
+  })
+})
+
+describe('resumirVigia', () => {
+  const vivo: SchedulerHealth = {
+    status: 'ok',
+    ageSeconds: 42,
+    lastTickAt: AGORA,
+    lastHealthyTickAt: AGORA,
+    lastEnqueueAt: AGORA,
+    lastError: null,
+    lastErrorAt: null,
+  }
+
+  function tipo(checkType: string, late: number): CheckLiveness {
+    return { checkType, tracked: 3, late, lastSuccessAt: AGORA, worstLateMinutes: late > 0 ? 90 : null }
+  }
+
+  it('diz há quanto tempo passou e quantos tipos vigia', () => {
+    const resumo = resumirVigia(vivo, [tipo('uptime', 0), tipo('tls', 0)])
+
+    expect(resumo.estado).toBe('ok')
+    expect(resumo.titulo).toBe('A vigiar · há 42 segundos')
+    expect(resumo.detalhe).toBe('2 tipos de verificação · 0 em atraso')
+  })
+
+  it('não dá o vigia por bom quando um check deixou de concluir', () => {
+    // É a avaria a seguir à que nos apanhou: o ciclo passa, e nada termina.
+    // A pastilha tem de a nomear em vez de dizer «a vigiar».
+    const resumo = resumirVigia(vivo, [tipo('uptime', 2), tipo('tls', 0)])
+
+    expect(resumo.estado).toBe('alerta')
+    expect(resumo.titulo).toBe('1 verificação em atraso')
+  })
+
+  it('nomeia a paragem e há quanto tempo dura', () => {
+    const resumo = resumirVigia(
+      { ...vivo, status: 'stale', ageSeconds: 18 * 3600 },
+      [tipo('uptime', 0)],
+    )
+
+    expect(resumo.estado).toBe('alerta')
+    expect(resumo.titulo).toBe('Monitorização parada')
+    expect(resumo.detalhe).toBe('sem passagens há 18 horas')
+  })
+
+  it('distingue nunca ter passado de ter parado', () => {
+    // Sem batida nenhuma não sabemos nada, e não saber nunca é «ok».
+    const resumo = resumirVigia({ ...vivo, status: 'unknown', ageSeconds: null }, [])
+
+    expect(resumo.estado).toBe('alerta')
+    expect(resumo.titulo).toBe('Sem sinal do agendador')
   })
 })

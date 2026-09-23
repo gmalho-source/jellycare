@@ -122,7 +122,7 @@ export function LegalPanel({
             Preenchido, o cliente deixa de ver o pedido de aceitação. Vazio devolve-o ao fluxo
             normal.
           </p>
-          {state.error && <p className="mt-2 text-xs text-jelly-600">{state.error}</p>}
+          {state.error && <p className="mt-2 text-xs text-mau">{state.error}</p>}
           {state.message && <p className="mt-2 text-xs text-green-700">{state.message}</p>}
         </form>
       )}

@@ -45,12 +45,12 @@ export function ReportPanel({
   const emCurso = lastRequest !== null && lastRequest.completedAt === null
 
   return (
-    <form action={action} className="border-t border-ink-200 px-5 py-4">
+    <form action={action} className="border-t border-ink-100 px-5 py-4">
       <input type="hidden" name="siteId" value={siteId} />
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[16rem] flex-1">
-          <label htmlFor="report-recipient" className="block text-xs text-ink-500">
+          <label htmlFor="report-recipient" className="block text-xs text-ink-400">
             Enviar para
           </label>
           <input
@@ -69,7 +69,7 @@ export function ReportPanel({
         <button
           type="submit"
           disabled={pending || emCurso}
-          className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-60"
+          className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
         >
           {pending ? 'A pedir…' : emCurso ? 'Em curso…' : 'Enviar agora'}
         </button>

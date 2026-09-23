@@ -35,7 +35,7 @@ export default async function PortalLegalPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Tratamento de dados</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Tratamento de dados</h1>
         <p className="mt-1 text-sm text-ink-600">
           O acordo que enquadra o que fazemos com os dados dos seus sites, exigido pelo artigo
           28.º do RGPD.
@@ -82,7 +82,7 @@ export default async function PortalLegalPage() {
         <>
           {estado.missing.map((documento) => (
             <article key={documento.id} className="space-y-3">
-              <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
+              <div className="rounded-2xl bg-white shadow-card px-5 py-4">
                 <h2 className="text-base font-semibold tracking-tight">{documento.title}</h2>
                 <p className="mt-1 text-xs text-ink-400">
                   Versão {documento.version} · em vigor desde{' '}
@@ -90,7 +90,7 @@ export default async function PortalLegalPage() {
                 </p>
               </div>
               <div
-                className="legal-prose max-h-[28rem] overflow-y-auto rounded-xl border border-ink-200 bg-white px-5 py-6"
+                className="legal-prose max-h-[28rem] overflow-y-auto rounded-2xl bg-white shadow-card px-5 py-6"
                 dangerouslySetInnerHTML={{ __html: renderLegalMarkdown(documento.body) }}
               />
             </article>
@@ -119,7 +119,7 @@ export default async function PortalLegalPage() {
             action={
               <Link
                 href="/legal/comprovativo"
-                className="text-xs font-medium text-jelly-600 hover:underline"
+                className="text-xs font-medium text-ink-900 underline underline-offset-2"
               >
                 Comprovativo
               </Link>

@@ -27,7 +27,7 @@ export function AcceptForm({
   )
 
   return (
-    <form action={action} className="rounded-xl border border-ink-200 bg-white p-5">
+    <form action={action} className="rounded-2xl bg-white shadow-card p-5">
       <input type="hidden" name="organizationId" value={organizationId} />
       {documentIds.map((id) => (
         <input key={id} type="hidden" name="documentId" value={id} />
@@ -66,11 +66,11 @@ export function AcceptForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-50"
         >
           {pending ? 'A registar…' : 'Aceitar'}
         </button>
-        {state.error && <span className="text-sm text-jelly-600">{state.error}</span>}
+        {state.error && <span className="text-sm text-mau">{state.error}</span>}
         {state.message && <span className="text-sm text-green-700">{state.message}</span>}
       </div>
     </form>

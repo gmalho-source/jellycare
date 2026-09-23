@@ -14,7 +14,7 @@ export function NewSiteForm({
   const [state, action, pending] = useActionState<ActionState, FormData>(createSite, {})
 
   return (
-    <form action={action} className="space-y-5 rounded-xl border border-ink-200 bg-white p-6">
+    <form action={action} className="space-y-5 rounded-2xl bg-white shadow-card p-6">
       {organizations.length > 1 && (
         <div>
           <label htmlFor="organizationId" className="text-sm font-medium text-ink-900">
@@ -107,13 +107,13 @@ export function NewSiteForm({
       </fieldset>
 
       {state.error && (
-        <p className="rounded-lg bg-jelly-50 px-3 py-2 text-sm text-jelly-700">{state.error}</p>
+        <p className="sev-critical rounded-xl px-3.5 py-2.5 text-sm font-medium">{state.error}</p>
       )}
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-jelly-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-50"
+        className="h-11 w-full rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-50"
       >
         {pending ? 'A criar…' : 'Criar site'}
       </button>

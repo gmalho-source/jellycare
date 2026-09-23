@@ -1,6 +1,7 @@
 import { resolveSession, type AuthenticatedUser } from '@jellycare/db'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { cache } from 'react'
 import { getDb } from './db'
 
 export const SESSION_COOKIE = 'jellycare_session'
@@ -30,12 +31,19 @@ export function sessionCookieOptions(expiresAt: Date): SessionCookieOptions {
   }
 }
 
-/** Utilizador autenticado, ou `null`. Não redireciona. */
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+/**
+ * Utilizador autenticado, ou `null`. Não redireciona.
+ *
+ * Memorizado dentro do pedido: a moldura da aplicação e a coluna de navegação
+ * são ramos independentes da árvore e ambos precisam de saber quem está
+ * dentro. Sem isto, cada página resolvia a sessão duas vezes contra a base de
+ * dados para chegar exatamente à mesma resposta.
+ */
+export const getCurrentUser = cache(async (): Promise<AuthenticatedUser | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   if (!token) return null
   return resolveSession(getDb(), token)
-}
+})
 
 /** Utilizador autenticado, ou redireciona para a entrada. */
 export async function requireUser(): Promise<AuthenticatedUser> {

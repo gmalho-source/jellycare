@@ -57,7 +57,7 @@ export function WordPressPanel({
   return (
     <>
       {linked ? (
-        <div className="border-b border-ink-200 px-5 py-3 text-xs">
+        <div className="border-b border-ink-100 px-5 py-3 text-xs">
           {lastError ? (
             <p className="text-red-600">Última recolha falhou: {lastError}</p>
           ) : lastSyncAt ? (
@@ -115,16 +115,16 @@ export function WordPressPanel({
       ) : null}
 
       {canManage ? (
-        <form action={action} className="border-t border-ink-200 px-5 py-4">
+        <form action={action} className="border-t border-ink-100 px-5 py-4">
           <input type="hidden" name="siteId" value={siteId} />
 
           {unavailable ? (
-            <p className="text-xs text-ink-500">
+            <p className="text-xs text-ink-400">
               Não foi possível obter a lista de projetos: {unavailable}
             </p>
           ) : (
             <>
-              <label htmlFor="umbrella-project" className="block text-xs text-ink-500">
+              <label htmlFor="umbrella-project" className="block text-xs text-ink-400">
                 Projeto na WP Umbrella
               </label>
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
@@ -146,7 +146,7 @@ export function WordPressPanel({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
                 >
                   {pending ? 'A guardar…' : 'Guardar'}
                 </button>

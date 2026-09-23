@@ -351,7 +351,10 @@ describeE2E('fluxo de entrada e painel', () => {
 
     // A linha do site mostra o histórico agregado: disponibilidade das últimas
     // 24 horas e quando correu a última verificação.
-    const linha = page.locator('li', { hasText: 'Site de teste' })
+    //
+    // Restrito ao conteúdo: o mesmo nome aparece também na coluna de
+    // navegação, e sem isto o localizador apanhava as duas entradas.
+    const linha = page.locator('main li', { hasText: 'Site de teste' })
     await expect.poll(() => linha.textContent()).toContain('50,00%')
     expect(await linha.textContent()).toMatch(/minuto|hora|segundo/)
 
@@ -658,9 +661,11 @@ describeE2E('fluxo de entrada e painel', () => {
     // A tendência face à primeira medição do período: 63 menos 51.
     expect(await equipa.isVisible('text=+12 pontos')).toBe(true)
 
-    // Os três vitals, com os valores convertidos para as unidades que se lêem.
-    expect(await equipa.isVisible('text=3.2 s')).toBe(true)
-    expect(await equipa.isVisible('text=0.06')).toBe(true)
+    // Os três vitals, com os valores convertidos para as unidades que se lêem
+    // e com vírgula decimal: um painel em português onde se lê «3.2 s» está a
+    // usar a pontuação de outra língua no número que o cliente cita.
+    expect(await equipa.isVisible('text=3,2 s')).toBe(true)
+    expect(await equipa.isVisible('text=0,06')).toBe(true)
     expect(await equipa.isVisible('text=150 ms')).toBe(true)
 
     // A cor não anda sozinha: o estado em palavras ao lado de cada métrica.

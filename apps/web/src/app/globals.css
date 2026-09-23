@@ -1,20 +1,160 @@
 @import 'tailwindcss';
 
+/* Os tipos de letra são servidos por nós e não pelo Google.
+   Duas razões: a compilação da imagem no Fly não passa a depender de um
+   servidor externo estar de pé, e nenhum pedido do painel de um cliente sai
+   para um terceiro só para desenhar texto. Só os subconjuntos latinos —
+   português cabe todo neles. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-500-700-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-500-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/plex-sans-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/plex-sans-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/plex-sans-500-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/plex-sans-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/plex-sans-600-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/plex-sans-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/plex-mono-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/plex-mono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/plex-mono-500-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/plex-mono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
-  /* Vermelho Jelly. A marca aparece na identidade, não no estado dos sites —
-     um site saudável não deve ficar vermelho só porque a marca é vermelha. */
+  /* Space Grotesk nos títulos e nos números grandes, IBM Plex Sans no texto,
+     IBM Plex Mono nas medições. O mono não é enfeite: é o que alinha 412 ms
+     por cima de 22,6 s numa coluna que se lê de relance. */
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Vermelho Jelly. Reservado à identidade — a marca e o item ativo da
+     navegação. Nunca representa o estado de um site: se a marca for vermelha
+     e a avaria também, ninguém sabe o que está a olhar. Por isso a ação
+     principal é grafite e não vermelha. */
   --color-jelly-50: #fef2f4;
   --color-jelly-100: #fde3e7;
   --color-jelly-500: #dd364a;
   --color-jelly-600: #c42a3d;
   --color-jelly-700: #a32233;
 
-  --color-ink-50: #f8f8f9;
-  --color-ink-100: #eeeef1;
-  --color-ink-200: #dcdce2;
-  --color-ink-400: #8b8b96;
+  /* Neutros quentes. O papel puxa ao creme para que o branco dos cartões se
+     destaque sem precisar de moldura. */
+  --color-ink-50: #f6f5f3;
+  --color-ink-100: #f0ede8;
+  --color-ink-200: #e6e3de;
+  --color-ink-400: #6e6e7a;
   --color-ink-600: #55555f;
-  --color-ink-900: #17171c;
+  --color-ink-900: #16161a;
+
+  /* A moldura escura da aplicação: barra lateral e barra de topo. */
+  --color-shell: #16161a;
+  --color-shell-raised: #202027;
+  --color-shell-line: #2c2c35;
+  --color-shell-text: #a8a8b4;
+  --color-shell-muted: #8a8a97;
+
+  /* Verde do estado saudável. Não é o mesmo verde das badges: nas barras de
+     disponibilidade precisa de ser mais claro para não fazer uma parede. */
+  --color-saudavel: #2fa37f;
+
+  /* O vermelho do alarme não é o vermelho da marca: um é estado, o outro é
+     identidade, e têm de se distinguir mesmo quando aparecem no mesmo ecrã. */
+  --color-alarme: #c0243a;
+  --color-aviso: #d97706;
+
+  /* Juízo sobre um número: bom, médio, mau. São os tons escuros da rampa de
+     gravidade, porque aqui a cor está em texto e não em fundo. */
+  --color-bom: #0b6048;
+  --color-medio: #8a4200;
+  --color-mau: #8e1122;
+
+  /* Os cartões não têm moldura — têm sombra. Uma moldura de 1px em cada
+     cartão desenha uma grelha de linhas que compete com o conteúdo. */
+  --shadow-card: 0 1px 2px rgb(22 22 26 / 0.05), 0 12px 28px -20px rgb(22 22 26 / 0.45);
+  --shadow-raised: 0 1px 2px rgb(22 22 26 / 0.05), 0 16px 36px -26px rgb(22 22 26 / 0.5);
 }
 
 :root {
@@ -24,37 +164,49 @@
 body {
   background: var(--color-ink-50);
   color: var(--color-ink-900);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Severidades. Cada uma tem cor própria e constante em toda a aplicação: se o
    crítico for vermelho numa página e laranja noutra, ninguém aprende a ler o
-   painel de relance. */
+   painel de relance.
+
+   Cada classe traz também o seu ponto cheio em `--sev-ponto`, para que a
+   pastilha possa ter um ponto saturado ao lado do texto escuro sem que cada
+   componente reescreva a tabela de cores. */
 .sev-critical {
-  background: #fde3e7;
-  color: #a32233;
+  background: #fce4e6;
+  color: #8e1122;
+  --sev-ponto: #c0243a;
 }
 .sev-high {
-  background: #ffedd5;
-  color: #9a3412;
+  background: #fcebd7;
+  color: #8a4200;
+  --sev-ponto: #d97706;
 }
 .sev-medium {
-  background: #fef3c7;
-  color: #854d0e;
+  background: #faf0cc;
+  color: #6b5200;
+  --sev-ponto: #b08900;
 }
 .sev-low {
-  background: #e0f2fe;
-  color: #075985;
+  background: #e9edf3;
+  color: #3f4a5a;
+  --sev-ponto: #6b7a90;
 }
 .sev-info {
-  background: #eeeef1;
-  color: #55555f;
+  background: #e4edf9;
+  color: #1f4e8c;
+  --sev-ponto: #2c6fbf;
 }
 .sev-ok {
-  background: #dcfce7;
-  color: #166534;
+  background: #dff1ea;
+  color: #0b6048;
+  --sev-ponto: #2fa37f;
+}
+
+.sev-ponto {
+  background: var(--sev-ponto, currentColor);
 }
 
 /* Documentos legais.

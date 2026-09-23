@@ -69,7 +69,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">{detail.site.label}</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">{detail.site.label}</h1>
           <p className="mt-1 text-sm text-ink-600">
             <a
               href={detail.site.url}
@@ -141,7 +141,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
             Nada em aberto. Continuamos a verificar — se algo mudar, é avisado.
           </EmptyState>
         ) : (
-          <ul className="divide-y divide-ink-200">
+          <ul className="divide-y divide-ink-100">
             {abertos.map((finding) => (
               <li key={finding.id} className="px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -163,7 +163,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
         <ul className="grid gap-x-6 gap-y-2 px-5 py-4 text-sm sm:grid-cols-2">
           {detail.checks.map((check) => (
             <li key={check.id} className="flex items-center justify-between gap-3">
-              <span className="text-ink-700">
+              <span className="text-ink-600">
                 {checkMeta(check.checkType)?.label ?? check.checkType}
               </span>
               <span className="text-xs text-ink-400">
@@ -181,7 +181,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
             O primeiro relatório é enviado no início do mês seguinte ao arranque.
           </EmptyState>
         ) : (
-          <ul className="divide-y divide-ink-200">
+          <ul className="divide-y divide-ink-100">
             {detail.reports.map((report) => (
               <li
                 key={report.id}

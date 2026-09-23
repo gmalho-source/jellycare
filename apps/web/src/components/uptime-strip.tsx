@@ -1,5 +1,6 @@
 'use client'
 
+import { formatNumero } from './ui'
 import { useState } from 'react'
 
 /**
@@ -26,15 +27,15 @@ export interface DailyUptime {
 
 /**
  * As cores passaram o validador de paletas para visão normal e daltonismo
- * (ΔE 9.9 no pior par em protanopia, 22.8 em visão normal). O vermelho é o
- * mesmo `jelly-700` que as badges de severidade já usam para crítico — o
- * estado tem de se ler igual em todo o produto.
+ * (ΔE 9.0 no pior par em protanopia, 18.2 em visão normal, e as três acima de
+ * 3:1 de contraste contra o branco). O vermelho é o mesmo ponto que a pastilha
+ * de crítico usa — o estado tem de se ler igual em todo o produto.
  */
 const ESTADOS = {
-  bom: { fill: '#15803d', label: 'Sem falhas' },
-  degradado: { fill: '#ca8a04', label: 'Falhas pontuais' },
-  mau: { fill: '#a32233', label: 'Indisponível' },
-  vazio: { fill: '#dcdce2', label: 'Sem observações' },
+  bom: { fill: '#1f9370', label: 'Sem falhas' },
+  degradado: { fill: '#b87d00', label: 'Falhas pontuais' },
+  mau: { fill: '#c0243a', label: 'Indisponível' },
+  vazio: { fill: '#e6e3de', label: 'Sem observações' },
 } as const
 
 type Estado = keyof typeof ESTADOS
@@ -70,7 +71,7 @@ export function UptimeStrip({ days }: { days: DailyUptime[] }) {
           const legenda =
             day.percent === null
               ? `${dataCurta(day.day)} — sem observações`
-              : `${dataCurta(day.day)} — ${day.percent.toFixed(2)}% em ${day.total} ${
+              : `${dataCurta(day.day)} — ${formatNumero(day.percent, 2)}% em ${day.total} ${
                   day.total === 1 ? 'observação' : 'observações'
                 }`
 
@@ -97,7 +98,7 @@ export function UptimeStrip({ days }: { days: DailyUptime[] }) {
           <span className="text-ink-900">
             {activo.percent === null
               ? `${dataCurta(activo.day)} — sem observações`
-              : `${dataCurta(activo.day)} — ${activo.percent.toFixed(2)}% em ${activo.total} ${
+              : `${dataCurta(activo.day)} — ${formatNumero(activo.percent, 2)}% em ${activo.total} ${
                   activo.total === 1 ? 'observação' : 'observações'
                 }`}
           </span>
@@ -105,7 +106,7 @@ export function UptimeStrip({ days }: { days: DailyUptime[] }) {
         <span>{days.at(-1) ? dataCurta(days.at(-1)!.day) : 'hoje'}</span>
       </div>
 
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-500">
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-400">
         {(Object.keys(ESTADOS) as Estado[])
           .filter((estado) => presentes.has(estado))
           .map((estado) => (

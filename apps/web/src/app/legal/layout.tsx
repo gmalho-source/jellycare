@@ -17,7 +17,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
           <Link href="/" className="flex min-w-0 items-center gap-2.5">
             <Brand />
           </Link>
-          <nav className="flex items-center gap-4 text-xs text-ink-400">
+          <nav className="flex items-center gap-4 text-xs text-shell-muted">
             <Link href="/legal/dpa" className="hover:text-white">
               Tratamento de dados
             </Link>

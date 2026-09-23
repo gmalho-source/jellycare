@@ -258,3 +258,81 @@ export async function getCheckLiveness(
     now,
   )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Resumo para a moldura da aplicação                                         */
+/* -------------------------------------------------------------------------- */
+
+/** «42 segundos», «7 minutos», «18 horas». Para dizer há quanto tempo. */
+export function duracao(segundos: number): string {
+  if (segundos < 120) return `${segundos} segundos`
+  const minutos = Math.round(segundos / 60)
+  if (minutos < 120) return `${minutos} minutos`
+  const horas = Math.round(minutos / 60)
+  return horas < 48 ? `${horas} horas` : `${Math.round(horas / 24)} dias`
+}
+
+export interface ResumoVigia {
+  estado: 'ok' | 'alerta'
+  titulo: string
+  detalhe: string
+}
+
+/**
+ * Uma linha e meia sobre o vigia, para a barra lateral.
+ *
+ * A faixa de aviso só aparece quando há avaria; esta pastilha está sempre lá,
+ * em todas as páginas. É a diferença entre «não vi nenhum aviso» e «vi que
+ * está a vigiar» — e durante dezoito horas a primeira leitura foi a única
+ * disponível, com a plataforma parada.
+ */
+export function resumirVigia(
+  health: SchedulerHealth,
+  checks: readonly CheckLiveness[],
+): ResumoVigia {
+  const atrasados = checks.filter((check) => check.late > 0)
+
+  if (health.status === 'stale') {
+    return {
+      estado: 'alerta',
+      titulo: 'Monitorização parada',
+      detalhe: `sem passagens há ${duracao(health.ageSeconds ?? 0)}`,
+    }
+  }
+
+  if (health.status === 'failing') {
+    return {
+      estado: 'alerta',
+      titulo: 'Agendador a falhar',
+      detalhe: 'as últimas passagens deram erro',
+    }
+  }
+
+  if (health.status === 'unknown') {
+    return {
+      estado: 'alerta',
+      titulo: 'Sem sinal do agendador',
+      detalhe: 'nunca registou uma passagem',
+    }
+  }
+
+  if (atrasados.length > 0) {
+    return {
+      estado: 'alerta',
+      titulo:
+        atrasados.length === 1
+          ? '1 verificação em atraso'
+          : `${atrasados.length} verificações em atraso`,
+      detalhe: `de ${checks.length} ${checks.length === 1 ? 'tipo' : 'tipos'} vigiados`,
+    }
+  }
+
+  return {
+    estado: 'ok',
+    titulo: `A vigiar · há ${duracao(health.ageSeconds ?? 0)}`,
+    detalhe:
+      checks.length === 0
+        ? 'ainda sem verificações concluídas'
+        : `${checks.length} ${checks.length === 1 ? 'tipo' : 'tipos'} de verificação · 0 em atraso`,
+  }
+}

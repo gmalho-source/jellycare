@@ -56,7 +56,7 @@ export function IntervalField({
           </option>
         ))}
       </select>
-      {state.error && <span className="text-xs text-jelly-600">{state.error}</span>}
+      {state.error && <span className="text-xs text-mau">{state.error}</span>}
       {/* Sem isto, mudar o valor não dava sinal nenhum de ter sido guardado —
           o seletor mostrava a escolha nova quer ela tivesse sido gravada ou
           não. */}

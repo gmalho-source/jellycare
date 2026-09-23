@@ -48,20 +48,20 @@ export default async function PortalLayout({
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
           <Link href="/portal" className="flex min-w-0 items-center gap-2.5">
             <Brand />
-            <span className="hidden text-xs text-ink-400 sm:inline">
+            <span className="hidden text-xs text-shell-muted sm:inline">
               manutenção e vigilância por Jelly
             </span>
           </Link>
 
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/legal/aceitar" className="text-ink-400 hover:text-white">
+            <Link href="/legal/aceitar" className="text-shell-muted hover:text-white">
               Dados
             </Link>
-            <span className="hidden text-ink-400 sm:inline">{user.email}</span>
+            <span className="hidden text-shell-muted sm:inline">{user.email}</span>
             <form action={signOut}>
               <button
                 type="submit"
-                className="rounded-md px-2 py-1 text-ink-400 hover:bg-white/10 hover:text-white"
+                className="rounded-md px-2 py-1 text-shell-muted hover:bg-white/10 hover:text-white"
               >
                 Sair
               </button>

@@ -1,6 +1,7 @@
 import { maxSeverity, severityRank, type Severity } from '@jellycare/core'
 import { schema } from '@jellycare/db'
 import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm'
+import { cache } from 'react'
 import { getDb } from './db'
 
 export interface SiteSummary {
@@ -17,12 +18,35 @@ export interface SiteSummary {
   /** Percentagem de amostras em cima nas últimas 24 horas. `null` sem dados. */
   uptime24h: number | null
   lastRunAt: Date | null
+  /** Tem ligação a uma ferramenta de manutenção. Decide as secções do menu. */
+  hasConnector: boolean
 }
 
 const OPEN_STATES = ['open', 'acknowledged'] as const
 
-/** Sites das organizações a que o utilizador pertence, com o estado de saúde. */
-export async function listSites(organizationIds: string[]): Promise<SiteSummary[]> {
+/**
+ * Os sites de uma ou mais organizações, com o estado de cada um.
+ *
+ * Memorizado dentro do pedido com uma chave estável: a coluna de navegação e
+ * a lista pedem o mesmo em ramos diferentes da árvore, e `cache` distingue
+ * argumentos por identidade — um array novo em cada chamada nunca acertaria
+ * no que já foi lido.
+ */
+export function listSites(organizationIds: string[]): Promise<SiteSummary[]> {
+  return lerSites([...organizationIds].sort().join(','))
+}
+
+/** Primeiro o que precisa de atenção: quem abre o painel de manhã quer ver o que arde. */
+export function ordenarPorGravidade(sites: readonly SiteSummary[]): SiteSummary[] {
+  return [...sites].sort((a, b) => {
+    if (a.worstSeverity && !b.worstSeverity) return -1
+    if (!a.worstSeverity && b.worstSeverity) return 1
+    return a.label.localeCompare(b.label, 'pt-PT')
+  })
+}
+
+const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
+  const organizationIds = chave.length === 0 ? [] : chave.split(',')
   if (organizationIds.length === 0) return []
   const db = getDb()
 
@@ -35,7 +59,7 @@ export async function listSites(organizationIds: string[]): Promise<SiteSummary[
   if (sites.length === 0) return []
   const siteIds = sites.map((site) => site.id)
 
-  const [findingRows, verificationRows, uptimeRows, lastRuns] = await Promise.all([
+  const [findingRows, verificationRows, uptimeRows, lastRuns, connectorRows] = await Promise.all([
     db
       .select({
         siteId: schema.findings.siteId,
@@ -87,9 +111,15 @@ export async function listSites(organizationIds: string[]): Promise<SiteSummary[
       .from(schema.checkRuns)
       .where(inArray(schema.checkRuns.siteId, siteIds))
       .groupBy(schema.checkRuns.siteId),
+
+    db
+      .select({ siteId: schema.connectors.siteId })
+      .from(schema.connectors)
+      .where(inArray(schema.connectors.siteId, siteIds)),
   ])
 
   const verified = new Set(verificationRows.map((row) => row.siteId))
+  const comConector = new Set(connectorRows.map((row) => row.siteId))
   const lastRunBySite = new Map(lastRuns.map((row) => [row.siteId, row.lastRunAt]))
   const uptimeBySite = new Map(
     uptimeRows.map((row) => [row.siteId, row.total > 0 ? (row.up / row.total) * 100 : null]),
@@ -118,9 +148,10 @@ export async function listSites(organizationIds: string[]): Promise<SiteSummary[
       openFindings: countsBySite.get(site.id) ?? 0,
       uptime24h: uptimeBySite.get(site.id) ?? null,
       lastRunAt: lastRunBySite.get(site.id) ?? null,
+      hasConnector: comConector.has(site.id),
     }
   })
-}
+})
 
 export interface SiteReport {
   id: string
@@ -164,7 +195,7 @@ export interface SiteHeader {
   worstSeverity: Severity | null
 }
 
-export async function getSiteHeader(siteId: string): Promise<SiteHeader | null> {
+export const getSiteHeader = cache(async (siteId: string): Promise<SiteHeader | null> => {
   const db = getDb()
 
   const sites = await db.select().from(schema.sites).where(eq(schema.sites.id, siteId)).limit(1)
@@ -209,7 +240,7 @@ export async function getSiteHeader(siteId: string): Promise<SiteHeader | null> 
     // mentir no sítio onde mais se olha.
     worstSeverity: maxSeverity(abertos.map((linha) => linha.severity)),
   }
-}
+})
 
 /**
  * Tempo de resposta dia a dia.

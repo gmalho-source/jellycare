@@ -35,7 +35,7 @@ export default async function PortalPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">
           {tudoBem ? 'Está tudo em ordem' : sites.length === 0 ? 'Bem-vindo' : 'A precisar de atenção'}
         </h1>
         <p className="mt-1 text-sm text-ink-600">{resumo}</p>
@@ -53,7 +53,7 @@ export default async function PortalPage() {
             <Link
               key={site.id}
               href={`/portal/sites/${site.id}`}
-              className="block rounded-xl border border-ink-200 bg-white p-5 transition hover:border-jelly-500"
+              className="block rounded-2xl bg-white shadow-card p-5 transition hover:border-jelly-500"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

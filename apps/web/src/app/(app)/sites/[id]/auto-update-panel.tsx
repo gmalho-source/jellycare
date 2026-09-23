@@ -103,7 +103,7 @@ export function AutoUpdatePanel({
                 <span className="min-w-0 truncate text-ink-900">
                   {registo.name}
                   {registo.vulnerable && (
-                    <span className="ml-1.5 text-xs text-[#a32233]">vulnerável</span>
+                    <span className="ml-1.5 text-xs text-mau">vulnerável</span>
                   )}
                 </span>
 

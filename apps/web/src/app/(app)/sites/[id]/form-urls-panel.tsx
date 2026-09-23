@@ -42,7 +42,7 @@ export function FormUrlsPanel({
 
   if (!canManage) {
     return (
-      <div className="border-t border-ink-200 px-5 py-4 text-sm text-ink-600">
+      <div className="border-t border-ink-100 px-5 py-4 text-sm text-ink-600">
         {urls.length === 0
           ? 'Nenhuma página declarada para teste de formulários.'
           : `${urls.length} ${urls.length === 1 ? 'página declarada' : 'páginas declaradas'}.`}
@@ -51,10 +51,10 @@ export function FormUrlsPanel({
   }
 
   return (
-    <form action={action} className="border-t border-ink-200 px-5 py-4">
+    <form action={action} className="border-t border-ink-100 px-5 py-4">
       <input type="hidden" name="siteId" value={siteId} />
 
-      <label htmlFor="form-urls" className="block text-xs text-ink-500">
+      <label htmlFor="form-urls" className="block text-xs text-ink-400">
         Páginas a testar — uma por linha, até {maxUrls}
       </label>
       <textarea
@@ -73,7 +73,7 @@ export function FormUrlsPanel({
       </p>
 
       {porDeclarar.length > 0 ? (
-        <p className="mt-2 text-xs text-ink-500">
+        <p className="mt-2 text-xs text-ink-400">
           A descoberta encontrou formulários em{' '}
           {porDeclarar.map((page, index) => (
             <span key={page}>
@@ -89,7 +89,7 @@ export function FormUrlsPanel({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-jelly-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-jelly-600 disabled:opacity-60"
+          className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
         >
           {pending ? 'A guardar…' : 'Guardar'}
         </button>

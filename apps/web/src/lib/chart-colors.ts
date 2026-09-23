@@ -7,11 +7,11 @@
  * classes do Tailwind não chegam.
  */
 export const COR_ESTADO = {
-  bom: '#15803d',
-  medio: '#a16207',
-  mau: '#a32233',
+  bom: '#1f9370',
+  medio: '#b87d00',
+  mau: '#c0243a',
   /** Sem dados. Nunca é um juízo — é a ausência de um. */
-  sem: '#8b8b96',
+  sem: '#a3a3ad',
 } as const
 
 export type EstadoGrafico = keyof typeof COR_ESTADO

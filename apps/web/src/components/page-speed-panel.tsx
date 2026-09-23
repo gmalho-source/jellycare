@@ -1,5 +1,6 @@
 import { LIMIARES } from '@jellycare/checks'
 import { COR_ESTADO } from '@/lib/chart-colors'
+import { formatNumero } from './ui'
 import type { PageSpeedHistory, PageSpeedPoint } from '@/lib/queries'
 
 /**
@@ -86,7 +87,7 @@ function Vital({
     <li className="flex items-baseline justify-between gap-4 border-t border-ink-100 py-2 first:border-t-0">
       <div className="min-w-0">
         <p className="text-sm font-medium">{nome}</p>
-        <p className="text-xs text-ink-500">{descricao}</p>
+        <p className="text-xs text-ink-400">{descricao}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-sm tabular-nums" style={{ color: COR_ESTADO[estado] }}>
@@ -202,13 +203,13 @@ export function PageSpeedPanel({ history }: { history: PageSpeedHistory }) {
         <Vital
           nome="Maior elemento visível"
           descricao="Quanto tempo até a página parecer carregada (LCP)"
-          valor={latest.lcpMs === null ? '—' : `${(latest.lcpMs / 1000).toFixed(1)} s`}
+          valor={latest.lcpMs === null ? '—' : `${formatNumero(latest.lcpMs / 1000, 1)} s`}
           estado={estadoMetrica(latest.lcpMs, LIMIARES.lcpRazoavel, LIMIARES.lcpMau)}
         />
         <Vital
           nome="Estabilidade visual"
           descricao="Quanto o conteúdo salta enquanto carrega (CLS)"
-          valor={latest.cls === null ? '—' : latest.cls.toFixed(2)}
+          valor={latest.cls === null ? '—' : formatNumero(latest.cls, 2)}
           estado={estadoMetrica(latest.cls, LIMIARES.clsRazoavel, LIMIARES.clsMau)}
         />
         <Vital

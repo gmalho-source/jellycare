@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { COR_ESTADO } from '@/lib/chart-colors'
+import { formatNumero } from './ui'
 
 /**
  * Tempo de resposta, dia a dia.
@@ -185,18 +186,18 @@ export function ResponseTimeChart({ days }: { days: DiaResposta[] }) {
         <span>{days.at(-1) ? dataCurta(days.at(-1)!.day) : 'hoje'}</span>
       </div>
 
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-500">
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-400">
         <li className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.bom }} />
           Rápido, abaixo de {RAPIDO} ms
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.medio }} />
-          Aceitável, até {LENTO / 1000} s
+          Aceitável, até {formatNumero(LENTO / 1000, 1)} s
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: COR_ESTADO.mau }} />
-          Lento, acima de {LENTO / 1000} s
+          Lento, acima de {formatNumero(LENTO / 1000, 1)} s
         </li>
       </ul>
     </div>
