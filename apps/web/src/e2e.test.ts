@@ -657,9 +657,15 @@ describeE2E('fluxo de entrada e painel', () => {
     // antigas, por isso o total de atrasados nunca volta a zero aqui. O que
     // este teste controla — e verifica — é o agendador: sem erro guardado e
     // fora dos estados de paragem.
-    const corpo = await (await fetch(`${baseUrl}/api/health/scheduler`)).json()
+    const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
+    const corpo = await resposta.json()
     expect(corpo.lastError).toBeNull()
     expect(['ok', 'checks_late']).toContain(corpo.status)
+
+    // Nada disto pode ser guardado. Um sinal de vida servido de uma cache
+    // responde «está tudo bem» sobre um instante que já passou, que é o
+    // contrário do que um vigia externo vem cá fazer.
+    expect(resposta.headers.get('cache-control')).toContain('no-store')
   }, 120_000)
 
   it('mostra a velocidade das páginas com a pontuação e os vitals', async () => {

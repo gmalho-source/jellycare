@@ -132,6 +132,43 @@ Há ironia em recomendar um monitor de terceiros para um produto de
 monitorização, e não é contradição: é o princípio de que nada se vigia a si
 próprio. É a mesma razão pela qual a batida não vive no Redis.
 
+### Configurar o UptimeRobot
+
+Com a chave da conta — em [dashboard.uptimerobot.com](https://dashboard.uptimerobot.com)
+→ Settings → API, a **Main API key** e não uma de monitor, que só lê:
+
+```bash
+UPTIMEROBOT_API_KEY=... node scripts/uptimerobot.mjs            # mostra o que faria
+UPTIMEROBOT_API_KEY=... node scripts/uptimerobot.mjs --confirmar
+```
+
+O script está escrito para poder voltar a correr: se já houver um monitor
+sobre o mesmo endereço, atualiza-o em vez de criar um segundo. A chave nunca
+sai do ambiente de quem corre o comando.
+
+Se preferir fazê-lo à mão, é um monitor **HTTP(s)** com estes valores:
+
+| Campo | Valor |
+| --- | --- |
+| URL | `https://jellycare.pt/api/health/scheduler` |
+| Intervalo | 5 minutos (o mínimo do plano gratuito) |
+| Contactos de alerta | pelo menos um; sem contacto o monitor deteta e não avisa |
+
+Não é preciso configurar palavras-chave nem códigos HTTP: o endpoint responde
+**503** quando o agendador para ou quando uma verificação deixa de concluir, e
+qualquer serviço de uptime trata um 503 como «em baixo». Responde também
+`Cache-Control: no-store`, porque um sinal de vida servido de uma cache diz
+«está tudo bem» sobre um instante que já passou.
+
+**O que isto deteta que o workflow não deteta:** o dashboard em baixo. O
+workflow chama o mesmo endereço, mas corre dentro da mesma plataforma de que
+depende a nossa fila de agendamentos; o monitor externo bate de fora e avisa
+também quando *ele* não consegue lá chegar.
+
+**O que continua por cobrir:** um 503 diz que algo parou, não o quê. O corpo
+da resposta distingue (`status` em `stale`, `failing`, `unknown` ou
+`checks_late`), e é a primeira coisa a ler quando o alarme tocar.
+
 ---
 
 ## Consumo do Redis

@@ -49,8 +49,16 @@ export async function GET(): Promise<NextResponse> {
         worstLateMinutes: check.worstLateMinutes,
       })),
     },
-    // O código HTTP é a parte que interessa ao vigia: falha com um 503 e não
-    // precisa de saber ler JSON para dar o alarme.
-    { status: status === 'ok' ? 200 : 503 },
+    {
+      // O código HTTP é a parte que interessa ao vigia: falha com um 503 e não
+      // precisa de saber ler JSON para dar o alarme.
+      status: status === 'ok' ? 200 : 503,
+      // Nada disto pode ser guardado por ninguém. Sem `Cache-Control`, um
+      // intermediário — a CDN de amanhã, o proxy da empresa de quem vigia —
+      // pode servir um 200 de há dez minutos e o alarme fica a olhar para uma
+      // fotografia. Um sinal de vida cacheado é pior do que não ter sinal:
+      // responde «está tudo bem» com autoridade.
+      headers: { 'cache-control': 'no-store, max-age=0' },
+    },
   )
 }
