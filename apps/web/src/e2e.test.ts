@@ -256,6 +256,26 @@ describeE2E('fluxo de entrada e painel', () => {
           metrics: { performanceScore: 42, lcpMs: 5400, cls: 0.21, tbtMs: 480 },
         })
 
+        // A mesma página medida em computador, com pontuação diferente da de
+        // telemóvel: é o que permite provar que o seletor troca mesmo de
+        // fonte e não repinta o mesmo número.
+        await db.insert(schema.checkRuns).values({
+          siteId: siteVerificado,
+          checkType: 'page_speed_desktop',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 3 * 3600_000),
+          durationMs: 12_800,
+          metrics: { performanceScore: 88, lcpMs: 1900, cls: 0.01, tbtMs: 40 },
+        })
+
+        // As duas verificações de velocidade configuradas, para o botão de
+        // análise ter o que antecipar.
+        await db.insert(schema.checkConfigs).values([
+          { siteId: siteVerificado, checkType: 'page_speed', intervalMinutes: 60 * 24 },
+          { siteId: siteVerificado, checkType: 'page_speed_desktop', intervalMinutes: 60 * 24 },
+        ])
+
         // Um site WordPress ligado, com o core atrasado e um plugin por
         // atualizar. O core e os plugins são contas separadas no painel, e é
         // exatamente isso que este retrato serve para provar.
@@ -775,6 +795,56 @@ describeE2E('fluxo de entrada e painel', () => {
     // Continua sem ver o que é falha nossa, aqui como na visão geral.
     expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
     await cliente.close()
+  }, 120_000)
+
+  it('troca entre telemóvel e computador, e pede uma análise fora de horas', async () => {
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/desempenho`)
+    await equipa.waitForSelector('h1')
+
+    // Telemóvel primeiro: é o que a Google usa para indexar.
+    expect(await equipa.isVisible('[aria-label="42 em 100"]')).toBe(true)
+
+    await equipa.click('a:has-text("Computador")')
+    await equipa.waitForURL(`${baseUrl}/sites/${siteVerificado}/desempenho?vista=computador`)
+
+    // Outro número, da outra verificação. Se o seletor não trocasse de fonte,
+    // continuava aqui o 42.
+    expect(await equipa.isVisible('[aria-label="88 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label="42 em 100"]')).toBe(false)
+
+    // E a explicação ao lado acompanha: dizer «medido em telemóvel» por cima
+    // de uma medição de computador é a forma mais rápida de alguém citar o
+    // número errado numa reunião.
+    expect(await equipa.isVisible('text=Medido em computador')).toBe(true)
+
+    // E o pedido de medição fora de horas.
+    await equipa.click('button:has-text("Analisar agora")')
+    await equipa.waitForSelector('text=Pedido registado')
+    await equipa.close()
+
+    // O botão não mede nada: antecipa as verificações para que o agendador as
+    // apanhe na passagem seguinte. É isso que se verifica, e não só a frase
+    // simpática no ecrã.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const configs = await db
+        .select({
+          checkType: schema.checkConfigs.checkType,
+          nextRunAt: schema.checkConfigs.nextRunAt,
+        })
+        .from(schema.checkConfigs)
+        .where(eq(schema.checkConfigs.siteId, siteVerificado))
+
+      const velocidade = configs.filter((linha) => linha.checkType.startsWith('page_speed'))
+      expect(velocidade).toHaveLength(2)
+      for (const linha of velocidade) {
+        expect(linha.nextRunAt).not.toBeNull()
+        expect(linha.nextRunAt!.getTime()).toBeLessThanOrEqual(Date.now())
+      }
+    } finally {
+      await close()
+    }
   }, 120_000)
 
   it('trava o portal até o cliente aceitar o acordo, e guarda a prova', async () => {

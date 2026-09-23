@@ -7,3 +7,6 @@ dist/
 .env.local
 .DS_Store
 coverage/
+
+# O Redis de desenvolvimento deixa a fotografia dele na raiz do repositório.
+dump.rdb

@@ -2,6 +2,7 @@ import { LIMIARES } from '@jellycare/checks'
 import { COR_ESTADO } from '@/lib/chart-colors'
 import { formatNumero } from './ui'
 import type { PageSpeedHistory, PageSpeedPoint } from '@/lib/queries'
+import type { VistaDispositivo } from './vista-dispositivo'
 
 /**
  * A velocidade das páginas, medida pela PageSpeed Insights.
@@ -160,7 +161,13 @@ function dataCurta(quando: Date): string {
   return quando.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })
 }
 
-export function PageSpeedPanel({ history }: { history: PageSpeedHistory }) {
+export function PageSpeedPanel({
+  history,
+  vista = 'telemovel',
+}: {
+  history: PageSpeedHistory
+  vista?: VistaDispositivo
+}) {
   const { latest, points, trend } = history
 
   if (!latest) {
@@ -177,9 +184,13 @@ export function PageSpeedPanel({ history }: { history: PageSpeedHistory }) {
         <Mostrador score={latest.score} />
 
         <div className="min-w-0 flex-1">
+          {/* A frase muda com o que está a ser medido. Dizer «medido em
+              telemóvel» por cima de uma medição de computador é a forma mais
+              rápida de alguém citar o número errado numa reunião. */}
           <p className="text-sm text-ink-600">
-            Medido em telemóvel, que é como a Google indexa. A velocidade conta para a posição
-            na pesquisa e para quem desiste antes de a página abrir.
+            {vista === 'computador'
+              ? 'Medido em computador. Não é o que a Google usa para indexar, mas é o que vê quem trabalha com o site a partir de uma secretária.'
+              : 'Medido em telemóvel, que é como a Google indexa. A velocidade conta para a posição na pesquisa e para quem desiste antes de a página abrir.'}
           </p>
           <p className="mt-1 text-xs text-ink-400">
             Última medição a {dataCurta(latest.measuredAt)}

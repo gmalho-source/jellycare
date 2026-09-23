@@ -1,6 +1,6 @@
 'use server'
 
-import { buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
+import { PAGE_SPEED_TYPES, buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
 import {
   addMaintenanceWindow,
   grantAccess,
@@ -14,7 +14,7 @@ import {
   schema,
   setNegotiatedDpaRef,
 } from '@jellycare/db'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -26,6 +26,7 @@ import {
   MIN_CHECK_INTERVAL_MINUTES,
 } from '@/lib/checks'
 import { getDb } from '@/lib/db'
+import { getSiteHeader } from '@/lib/queries'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import {
   SESSION_COOKIE,
@@ -1096,4 +1097,72 @@ export async function setMaintenanceScheduleAction(
 
   revalidatePath(`/sites/${siteId.data}`)
   return { message: 'Horário guardado.' }
+}
+
+export interface PageSpeedRequestState {
+  message?: string
+  error?: string
+}
+
+const pageSpeedRequestSchema = z.object({
+  siteId: z.string().uuid(),
+})
+
+/**
+ * Pede uma medição de velocidade já, sem esperar pela passagem diária.
+ *
+ * Não enfileira nada. O dashboard não fala com o Redis — e não vale a pena
+ * que passe a falar só por isto, porque seria mais uma peça entre o botão e o
+ * trabalho. Antecipa `nextRunAt` das verificações de velocidade e o agendador
+ * apanha-as na passagem seguinte, que é de trinta em trinta segundos.
+ *
+ * O `nextRunAt` é empurrado para a frente no momento em que o job entra na
+ * fila, por isso carregar duas vezes seguidas não produz duas medições: a
+ * segunda encontra a verificação já agendada para daqui a um dia.
+ *
+ * Pede as duas — telemóvel e computador — porque quem carrega quer ver a
+ * página outra vez, e não uma metade dela.
+ */
+export async function requestPageSpeedAction(
+  _previous: PageSpeedRequestState,
+  formData: FormData,
+): Promise<PageSpeedRequestState> {
+  const user = await requireUser()
+
+  const parsed = pageSpeedRequestSchema.safeParse({ siteId: formData.get('siteId') })
+  if (!parsed.success) return { error: 'Site inválido.' }
+
+  const header = await getSiteHeader(parsed.data.siteId)
+  if (!header) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, header.site.organizationId)
+
+  // A medição carrega o site do cliente por inteiro, várias vezes. Sem prova
+  // de propriedade não corre — e dizê-lo aqui é melhor do que deixar o pedido
+  // entrar e o worker recusá-lo em silêncio.
+  if (!header.verified) {
+    return { error: 'A análise só corre depois de provada a propriedade do domínio.' }
+  }
+
+  const atualizadas = await getDb()
+    .update(schema.checkConfigs)
+    .set({ nextRunAt: new Date() })
+    .where(
+      and(
+        eq(schema.checkConfigs.siteId, parsed.data.siteId),
+        inArray(schema.checkConfigs.checkType, [...PAGE_SPEED_TYPES]),
+        eq(schema.checkConfigs.enabled, true),
+      ),
+    )
+    .returning({ checkType: schema.checkConfigs.checkType })
+
+  if (atualizadas.length === 0) {
+    return { error: 'As verificações de velocidade estão desligadas neste site.' }
+  }
+
+  revalidatePath(`/sites/${parsed.data.siteId}/desempenho`)
+
+  // Curta de propósito: a mensagem vive ao lado do botão, no cabeçalho do
+  // cartão, e uma frase longa empurra o título para duas linhas.
+  return { message: 'Pedido registado — a próxima passagem apanha-o.' }
 }

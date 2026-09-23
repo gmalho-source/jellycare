@@ -2,7 +2,7 @@ import type { CheckDefinition } from '@jellycare/core'
 import { brokenLinksCheck } from './broken-links.js'
 import { emailAuthCheck } from './email-auth.js'
 import { exposedFilesCheck } from './exposed-files.js'
-import { pageSpeedCheck } from './page-speed.js'
+import { pageSpeedCheck, pageSpeedDesktopCheck } from './page-speed.js'
 import { reputationCheck } from './reputation.js'
 import { securityHeadersCheck } from './security-headers.js'
 import { tlsCheck } from './tls.js'
@@ -68,7 +68,12 @@ export const CHECK_REGISTRY: Record<string, RegisteredCheck> = {
     // por inteiro, várias vezes, para ser cronometrado. Não é observação
     // passiva, por isso espera pela prova de propriedade.
     access: 'verified',
-    label: 'Velocidade das páginas',
+    label: 'Velocidade em telemóvel',
+  },
+  [pageSpeedDesktopCheck.type]: {
+    definition: pageSpeedDesktopCheck as CheckDefinition<any>,
+    access: 'verified',
+    label: 'Velocidade em computador',
   },
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

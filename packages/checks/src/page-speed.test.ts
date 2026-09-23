@@ -1,6 +1,11 @@
 import { runCheck, type CheckContext } from '@jellycare/core'
 import { describe, expect, it } from 'vitest'
-import { measurePageSpeed, pageSpeedCheck, type PageSpeedConfig } from './page-speed.js'
+import {
+  measurePageSpeed,
+  pageSpeedCheck,
+  pageSpeedDesktopCheck,
+  type PageSpeedConfig,
+} from './page-speed.js'
 import { mockFetch, testSite, type MockRoutes } from './test-utils.js'
 
 const ENDPOINT =
@@ -143,16 +148,35 @@ describe('pageSpeedCheck', () => {
     expect(outcome.error).not.toContain('chave-teste')
   })
 
-  it('mede o computador quando é o pedido', async () => {
+  it('a verificação de computador mede computador e guarda a pontuação', async () => {
+    // A estratégia está presa ao tipo de verificação. Se viesse da
+    // configuração do site, uma configuração errada punha esta a medir
+    // telemóvel e a escrever no histórico do computador.
     const desktop = ENDPOINT.replace('strategy=mobile', 'strategy=desktop')
-    const outcome = await run({ [desktop]: { body: resposta({ score: 0.4 }) } }, {
-      ...CONFIG,
-      strategy: 'desktop',
-    })
+    const fetch = mockFetch({ [desktop]: { body: resposta({ score: 0.4 }) } })
+    const context: CheckContext = { site: testSite, now: new Date(), fetch }
+    const outcome = await runCheck(pageSpeedDesktopCheck, context, CONFIG)
 
     expect(outcome.status).toBe('ok')
-    expect(outcome.findings[0]?.discriminator).toBe('desktop')
-    expect(outcome.findings[0]?.title).toContain('computador')
+    expect(outcome.metrics.performanceScore).toBe(40)
+  })
+
+  it('o computador mede mas não abre problemas', async () => {
+    // Uma pontuação de 40 em telemóvel abre um problema médio. Em computador
+    // não abre nenhum: ligá-lo faria nascer um problema em todos os sites com
+    // computador lento no dia em que esta verificação entrou.
+    const desktop = ENDPOINT.replace('strategy=mobile', 'strategy=desktop')
+    const fetch = mockFetch({ [desktop]: { body: resposta({ score: 0.4 }) } })
+    const context: CheckContext = { site: testSite, now: new Date(), fetch }
+    const outcome = await runCheck(pageSpeedDesktopCheck, context, CONFIG)
+
+    expect(outcome.findings).toHaveLength(0)
+
+    // E o telemóvel continua a abrir, para o teste provar a diferença e não
+    // apenas a ausência.
+    const movel = await run({ [ENDPOINT]: { body: resposta({ score: 0.4 }) } })
+    expect(movel.findings[0]?.discriminator).toBe('mobile')
+    expect(movel.findings[0]?.title).toContain('telemóvel')
   })
 
   it('mede o URL configurado e não sempre a homepage', async () => {

@@ -1,4 +1,4 @@
-import { getCheck, uptimeCheck } from '@jellycare/checks'
+import { PAGE_SPEED_TYPES, getCheck, uptimeCheck } from '@jellycare/checks'
 import {
   CONNECTOR_CHECKS,
   WP_AUTO_UPDATE_CHECK,
@@ -261,7 +261,7 @@ async function execute(
             ...config,
             ...(deps.urlhausAuthKey ? { urlhausAuthKey: deps.urlhausAuthKey } : {}),
           }
-        : checkType === 'page_speed'
+        : PAGE_SPEED_TYPES.includes(checkType)
           ? {
               ...config,
               ...(deps.pageSpeedApiKey ? { apiKey: deps.pageSpeedApiKey } : {}),

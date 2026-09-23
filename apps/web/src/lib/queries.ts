@@ -337,6 +337,7 @@ export interface PageSpeedHistory {
  */
 export async function getPageSpeedHistory(
   siteId: string,
+  checkType = 'page_speed',
   days = 30,
 ): Promise<PageSpeedHistory> {
   const db = getDb()
@@ -351,7 +352,7 @@ export async function getPageSpeedHistory(
     .where(
       and(
         eq(schema.checkRuns.siteId, siteId),
-        eq(schema.checkRuns.checkType, 'page_speed'),
+        eq(schema.checkRuns.checkType, checkType),
         eq(schema.checkRuns.status, 'ok'),
         gte(schema.checkRuns.startedAt, start),
       ),

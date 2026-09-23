@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
-import { Card, CardHeader } from '@/components/ui'
+import { Card, CardHeader, formatRelative } from '@/components/ui'
 import { PageSpeedPanel } from '@/components/page-speed-panel'
 import { ResponseTimeChart } from '@/components/response-time-chart'
+import { SeletorDispositivo, tipoDeVelocidade, vistaDe } from '@/components/vista-dispositivo'
 import { getPageSpeedHistory, getResponseTimes, getSiteHeader } from '@/lib/queries'
 import { assertMembership, requireUser } from '@/lib/session'
 
@@ -13,8 +14,11 @@ export const dynamic = 'force-dynamic'
  * Estava só do lado interno, e não havia razão nenhuma para isso: a pontuação
  * e os vitals são factos sobre o site do cliente, não sobre a nossa operação.
  * É também a secção que ele leva a uma reunião — «o site demora 22 segundos a
- * ficar utilizável em telemóvel» é um argumento que se vê, e escondê-lo de
- * quem decide o orçamento era guardar o melhor da conversa para nós.
+ * ficar utilizável em telemóvel» é um argumento que se vê.
+ *
+ * Sem o botão de pedir medição: cada análise é uma chamada à conta da Google
+ * que nós pagamos, e o pedido é decisão de quem gere a plataforma. O cliente
+ * pede-a a nós, que é a conversa que queremos ter.
  *
  * Os mesmos dois componentes do painel interno. Uma segunda versão para o
  * portal era a via rápida e a errada: ao fim de duas alterações diziam
@@ -22,8 +26,10 @@ export const dynamic = 'force-dynamic'
  */
 export default async function PortalDesempenhoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ vista?: string | string[] }>
 }) {
   const { id } = await params
   const user = await requireUser()
@@ -32,20 +38,26 @@ export default async function PortalDesempenhoPage({
   if (!header) notFound()
   assertMembership(user, header.site.organizationId)
 
-  // Duas coisas diferentes com o mesmo nome no dia a dia: a velocidade é o
-  // tempo que a página leva a ficar utilizável para quem a abre; o tempo de
-  // resposta é o que o servidor demora a dizer a primeira palavra. Um site
-  // pode ter o segundo excelente e o primeiro péssimo.
-  const [velocidade, dias] = await Promise.all([getPageSpeedHistory(id), getResponseTimes(id)])
+  const vista = vistaDe((await searchParams).vista)
+
+  const [velocidade, dias] = await Promise.all([
+    getPageSpeedHistory(id, tipoDeVelocidade(vista)),
+    getResponseTimes(id),
+  ])
 
   return (
     <>
       <Card>
         <CardHeader
           title="Velocidade das páginas"
-          action={<span className="text-xs text-ink-400">PageSpeed Insights</span>}
+          action={<SeletorDispositivo base={`/portal/sites/${id}/desempenho`} vista={vista} />}
         />
-        <PageSpeedPanel history={velocidade} />
+        <PageSpeedPanel history={velocidade} vista={vista} />
+        <p className="border-t border-ink-100 px-5 py-3 text-xs text-ink-400">
+          {velocidade.latest
+            ? `Última medição ${formatRelative(velocidade.latest.measuredAt)} · medido pela PageSpeed Insights, uma vez por dia.`
+            : 'A primeira medição aparece aqui depois da próxima passagem diária.'}
+        </p>
       </Card>
 
       <Card>

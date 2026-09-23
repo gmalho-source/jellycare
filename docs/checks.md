@@ -330,8 +330,36 @@ desativar por formulário.
 - validação de conteúdo esperado, não só de HTTP 200 — um site hackeado
   responde 200 lindamente
 - tempo de resposta e evolução histórica
-- Core Web Vitals via Lighthouse ou PageSpeed Insights API, com histórico
+- Core Web Vitals via PageSpeed Insights, com histórico
 - páginas com erro 5xx detetadas durante o crawl
+
+### Telemóvel e computador são duas verificações
+
+`page_speed` mede em telemóvel, `page_speed_desktop` em computador. Duas e não
+uma com uma opção: a periodicidade, o histórico e o sinal de vida são todos
+por tipo de verificação, e a estratégia presa ao tipo impede que uma
+configuração errada ponha a verificação de computador a medir telemóvel e a
+escrever o resultado no histórico do computador — dois números diferentes com
+o mesmo nome.
+
+**Só o telemóvel abre problemas.** É o que a Google usa para indexar e é de lá
+que vem quem desiste antes de a página abrir. O computador é medido e
+mostrado, mas não gera findings: ligá-lo faria nascer um problema novo em
+todos os sites com computador lento no dia em que a verificação entrou, e uma
+enxurrada de avisos no primeiro dia ensina a ignorá-los. É um booleano em
+`packages/checks/src/page-speed.ts` quando quisermos mudar de ideias.
+
+### Pedir uma medição fora de horas
+
+A secção de desempenho tem um botão «Analisar agora», só no painel interno. O
+dashboard não fala com o Redis e não vale a pena que passe a falar por isto:
+o botão antecipa o `next_run_at` das duas verificações e o agendador apanha-as
+na passagem seguinte, que é de trinta em trinta segundos. Como o `next_run_at`
+é empurrado para a frente no momento em que o job entra na fila, carregar duas
+vezes seguidas não produz duas medições.
+
+Não está no portal do cliente de propósito: cada análise é uma chamada à conta
+da Google que nós pagamos.
 
 ---
 

@@ -78,6 +78,24 @@ const TRACOS: Record<string, React.ReactNode> = {
       <path d="M8 4.8V8.3l2.2 1.4" />
     </>
   ),
+  telemovel: (
+    <>
+      <rect x="4.5" y="2" width="7" height="12" rx="1.6" />
+      <path d="M7.2 12.2h1.6" />
+    </>
+  ),
+  computador: (
+    <>
+      <rect x="2" y="3" width="12" height="8" rx="1.4" />
+      <path d="M6 13.5h4" />
+    </>
+  ),
+  atualizar: (
+    <>
+      <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" />
+      <path d="M13.4 2.6v3h-3" />
+    </>
+  ),
   seta: <path d="m6 4 4 4-4 4" />,
   voltar: <path d="m10 4-4 4 4 4" />,
   externo: (

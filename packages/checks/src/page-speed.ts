@@ -6,12 +6,20 @@ export type PageSpeedStrategy = 'mobile' | 'desktop'
 export interface PageSpeedConfig {
   /** Chave da plataforma para a PageSpeed Insights. Ver `MISSING_KEY_HINT`. */
   apiKey?: string
-  /** Telemóvel por defeito: é o que a Google usa para indexar. */
-  strategy?: PageSpeedStrategy
   timeoutMs?: number
   /** URL a medir, quando não é a homepage. */
   url?: string
 }
+
+/**
+ * A estratégia pertence ao **tipo de verificação** e não à configuração do
+ * site.
+ *
+ * Se fosse configurável por site, uma configuração errada punha a verificação
+ * de computador a medir telemóvel e a escrever o resultado no histórico do
+ * computador — dois números diferentes com o mesmo nome, e ninguém saberia
+ * qual estava a ler.
+ */
 
 const ENDPOINT = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
 
@@ -183,75 +191,119 @@ export function vitalsFalhados(medicao: PageSpeedMeasurement): string[] {
   return falhas
 }
 
-export const pageSpeedCheck: CheckDefinition<PageSpeedConfig> = {
-  type: 'page_speed',
-  // Uma vez por dia. A medição é cara do lado da Google e a velocidade de um
-  // site não muda de hora a hora — muda quando alguém publica alguma coisa.
-  defaultIntervalMinutes: 60 * 24,
-  // Uma medição do Lighthouse varia entre execuções. Duas seguidas abaixo do
-  // limiar é o que separa uma página lenta de um dia mau da Google.
-  confirmationsRequired: 2,
-
-  async run(context: CheckContext, config: PageSpeedConfig): Promise<CheckResult> {
-    if (!config.apiKey) throw new PageSpeedNotConfiguredError()
-
-    const strategy: PageSpeedStrategy = config.strategy ?? 'mobile'
-    const url = config.url ?? context.site.url
-    const medicao = await measurePageSpeed(
-      url,
-      config.apiKey,
-      strategy,
-      context.fetch,
-      config.timeoutMs ?? 90_000,
-    )
-
-    const metrics: Record<string, number> = {}
-    if (medicao.score !== null) metrics.performanceScore = medicao.score
-    if (medicao.lcpMs !== null) metrics.lcpMs = medicao.lcpMs
-    if (medicao.cls !== null) metrics.cls = medicao.cls
-    if (medicao.tbtMs !== null) metrics.tbtMs = medicao.tbtMs
-    if (medicao.fcpMs !== null) metrics.fcpMs = medicao.fcpMs
-    if (medicao.speedIndexMs !== null) metrics.speedIndexMs = medicao.speedIndexMs
-
-    // Sem pontuação não há juízo a fazer. Devolver "está tudo bem" faria a
-    // reconciliação fechar um problema de desempenho real só porque o
-    // Lighthouse não conseguiu carregar a página desta vez.
-    if (medicao.score === null) {
-      throw new Error('PageSpeed Insights não devolveu pontuação de desempenho')
-    }
-
-    const findings: ObservedFinding[] = []
-    const falhas = vitalsFalhados(medicao)
-
-    // Um finding só, e não um por métrica: LCP, CLS e TBT maus na mesma
-    // página são quase sempre a mesma causa, e três alertas para um problema
-    // é a forma mais rápida de ensinar alguém a ignorá-los.
-    if (medicao.score < LIMIARES.scoreRazoavel) {
-      const mau = medicao.score < LIMIARES.scoreMau
-      findings.push({
-        code: 'page_speed_poor',
-        discriminator: strategy,
-        severity: mau ? 'medium' : 'low',
-        title: mau
-          ? `Página lenta em ${strategy === 'mobile' ? 'telemóvel' : 'computador'} (${medicao.score}/100)`
-          : `Desempenho abaixo do bom em ${strategy === 'mobile' ? 'telemóvel' : 'computador'} (${medicao.score}/100)`,
-        detail:
-          (falhas.length > 0
-            ? `O que está a pesar: ${falhas.join('; ')}.`
-            : 'A pontuação está abaixo do limiar sem que uma métrica isolada se destaque.') +
-          ' A velocidade conta para a posição na pesquisa da Google e é o que faz ' +
-          'quem chega pelo telemóvel desistir antes de a página abrir.',
-        evidence: {
-          url,
-          strategy,
-          score: medicao.score,
-          ...(medicao.lcpMs !== null ? { lcpMs: Math.round(medicao.lcpMs) } : {}),
-          ...(medicao.cls !== null ? { cls: Number(medicao.cls.toFixed(3)) } : {}),
-          ...(medicao.tbtMs !== null ? { tbtMs: Math.round(medicao.tbtMs) } : {}),
-        },
-      })
-    }
-
-    return { findings, metrics }
-  },
+interface Variante {
+  type: string
+  strategy: PageSpeedStrategy
+  /**
+   * Abre problemas a partir da medição.
+   *
+   * Só o telemóvel o faz. É o que a Google usa para indexar, e é de onde vem
+   * quem desiste antes de a página abrir. O computador é medido e mostrado,
+   * mas não abre problemas: ligá-lo faria nascer um problema novo em todos os
+   * sites com computador lento no dia em que esta verificação entrou, e uma
+   * enxurrada de avisos no primeiro dia é a forma mais rápida de ensinar
+   * alguém a ignorá-los. Fica a um booleano de distância de mudar de ideias.
+   */
+  abreProblemas: boolean
 }
+
+function criarPageSpeed({ type, strategy, abreProblemas }: Variante): CheckDefinition<PageSpeedConfig> {
+  const dispositivo = strategy === 'mobile' ? 'telemóvel' : 'computador'
+
+  return {
+    type,
+    // Uma vez por dia. A medição é cara do lado da Google e a velocidade de um
+    // site não muda de hora a hora — muda quando alguém publica alguma coisa.
+    defaultIntervalMinutes: 60 * 24,
+    // Uma medição do Lighthouse varia entre execuções. Duas seguidas abaixo do
+    // limiar é o que separa uma página lenta de um dia mau da Google.
+    confirmationsRequired: 2,
+
+    async run(context: CheckContext, config: PageSpeedConfig): Promise<CheckResult> {
+      if (!config.apiKey) throw new PageSpeedNotConfiguredError()
+
+      const url = config.url ?? context.site.url
+      const medicao = await measurePageSpeed(
+        url,
+        config.apiKey,
+        strategy,
+        context.fetch,
+        config.timeoutMs ?? 90_000,
+      )
+
+      const metrics: Record<string, number> = {}
+      if (medicao.score !== null) metrics.performanceScore = medicao.score
+      if (medicao.lcpMs !== null) metrics.lcpMs = medicao.lcpMs
+      if (medicao.cls !== null) metrics.cls = medicao.cls
+      if (medicao.tbtMs !== null) metrics.tbtMs = medicao.tbtMs
+      if (medicao.fcpMs !== null) metrics.fcpMs = medicao.fcpMs
+      if (medicao.speedIndexMs !== null) metrics.speedIndexMs = medicao.speedIndexMs
+
+      // Sem pontuação não há juízo a fazer. Devolver "está tudo bem" faria a
+      // reconciliação fechar um problema de desempenho real só porque o
+      // Lighthouse não conseguiu carregar a página desta vez.
+      if (medicao.score === null) {
+        throw new Error('PageSpeed Insights não devolveu pontuação de desempenho')
+      }
+
+      const findings: ObservedFinding[] = []
+      const falhas = vitalsFalhados(medicao)
+
+      // Um finding só, e não um por métrica: LCP, CLS e TBT maus na mesma
+      // página são quase sempre a mesma causa, e três alertas para um problema
+      // é a forma mais rápida de ensinar alguém a ignorá-los.
+      if (abreProblemas && medicao.score < LIMIARES.scoreRazoavel) {
+        const mau = medicao.score < LIMIARES.scoreMau
+        findings.push({
+          code: 'page_speed_poor',
+          discriminator: strategy,
+          severity: mau ? 'medium' : 'low',
+          title: mau
+            ? `Página lenta em ${dispositivo} (${medicao.score}/100)`
+            : `Desempenho abaixo do bom em ${dispositivo} (${medicao.score}/100)`,
+          detail:
+            (falhas.length > 0
+              ? `O que está a pesar: ${falhas.join('; ')}.`
+              : 'A pontuação está abaixo do limiar sem que uma métrica isolada se destaque.') +
+            ' A velocidade conta para a posição na pesquisa da Google e é o que faz ' +
+            'quem chega pelo telemóvel desistir antes de a página abrir.',
+          evidence: {
+            url,
+            strategy,
+            score: medicao.score,
+            ...(medicao.lcpMs !== null ? { lcpMs: Math.round(medicao.lcpMs) } : {}),
+            ...(medicao.cls !== null ? { cls: Number(medicao.cls.toFixed(3)) } : {}),
+            ...(medicao.tbtMs !== null ? { tbtMs: Math.round(medicao.tbtMs) } : {}),
+          },
+        })
+      }
+
+      return { findings, metrics }
+    },
+  }
+}
+
+export const pageSpeedCheck = criarPageSpeed({
+  type: 'page_speed',
+  strategy: 'mobile',
+  abreProblemas: true,
+})
+
+export const pageSpeedDesktopCheck = criarPageSpeed({
+  type: 'page_speed_desktop',
+  strategy: 'desktop',
+  abreProblemas: false,
+})
+
+/**
+ * Os tipos que precisam da chave da PageSpeed.
+ *
+ * Derivado aqui e lido pelo worker: uma lista escrita à mão do outro lado
+ * ficava para trás no dia em que se acrescentasse uma variante, e o sintoma
+ * seria a verificação nova a queixar-se de falta de chave com a chave
+ * definida.
+ */
+export const PAGE_SPEED_TYPES: readonly string[] = [
+  pageSpeedCheck.type,
+  pageSpeedDesktopCheck.type,
+]
