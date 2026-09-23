@@ -42,7 +42,7 @@ export default async function PortalPage() {
       </div>
 
       {sites.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
+        <div className="rounded-2xl border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
           <p className="text-sm text-ink-600">
             Assim que a Jelly ligar o primeiro site, ele aparece aqui.
           </p>
@@ -53,7 +53,7 @@ export default async function PortalPage() {
             <Link
               key={site.id}
               href={`/portal/sites/${site.id}`}
-              className="block rounded-2xl bg-white shadow-card p-5 transition hover:border-jelly-500"
+              className="block rounded-2xl bg-white p-5 shadow-card transition hover:shadow-raised"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

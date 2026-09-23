@@ -20,7 +20,7 @@ import { Icone } from './icons'
 export function RailList({ children }: { children: ReactNode }) {
   return (
     <nav>
-      <ul className="flex gap-1 overflow-x-auto px-4 pb-3 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-2 lg:pb-0">
+      <ul className="flex gap-1 overflow-x-auto px-3 py-2 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-2 lg:py-0">
         {children}
       </ul>
     </nav>

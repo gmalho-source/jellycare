@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { Shell, type SiteNaBarra } from '@/components/shell'
 import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { canManage, isClientOnly, requireUser } from '@/lib/session'
-import { sectionsFor } from '@/lib/site-nav'
+import { sectionHref, sectionsFor } from '@/lib/site-nav'
 import { lerVigia } from '@/lib/vigia'
 import { signOut } from './actions'
 
@@ -20,17 +20,36 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // ferramenta de manutenção e quem pode gerir a organização são perguntas do
   // servidor, e a barra só desenha o que lhe for dado.
   const naBarra: SiteNaBarra[] = ordenarPorGravidade(sites).map((site) => ({
-    id: site.id,
+    href: `/sites/${site.id}`,
     label: site.label,
     severity: site.worstSeverity,
     seccoes: sectionsFor({
       hasConnector: site.hasConnector,
       canManage: canManage(user, site.organizationId),
-    }).map((seccao) => ({ slug: seccao.slug, label: seccao.label })),
+    }).map((seccao) => ({
+      href: sectionHref(site.id, seccao.slug),
+      label: seccao.label,
+      icone: seccao.slug || 'geral',
+      exato: seccao.slug.length === 0,
+    })),
   }))
 
   return (
-    <Shell email={user.email} vigia={resumo} sites={naBarra} sair={signOut}>
+    <Shell
+      email={user.email}
+      vigia={resumo}
+      inicio={{
+        href: '/',
+        label: 'Sites',
+        icone: 'sites',
+        exato: true,
+        contagem: sites.filter((site) => site.worstSeverity !== null).length,
+      }}
+      globais={[{ href: '/sites/new', label: 'Adicionar site', icone: 'mais', exato: true }]}
+      grupo="Os seus sites"
+      sites={naBarra}
+      sair={signOut}
+    >
       {children}
     </Shell>
   )

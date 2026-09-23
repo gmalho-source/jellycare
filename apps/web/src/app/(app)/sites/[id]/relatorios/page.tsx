@@ -1,27 +1,12 @@
 import { notFound } from 'next/navigation'
 import { latestReportRequest } from '@jellycare/db'
-import { Card, CardHeader, EmptyState, formatRelative } from '@/components/ui'
+import { Card, CardHeader, EmptyState, formatRelative, nomeDoMes } from '@/components/ui'
 import { getDb } from '@/lib/db'
 import { getSiteDetail } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { ReportPanel } from '../report-panel'
 
 export const dynamic = 'force-dynamic'
-
-const MONTHS = [
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
 
 export default async function RelatoriosPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -56,7 +41,7 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
                     href={`/api/reports/${report.id}`}
                     className="text-sm font-medium text-ink-900 hover:underline"
                   >
-                    {MONTHS[report.periodMonth - 1]} de {report.periodYear}
+                    {nomeDoMes(report.periodMonth)} de {report.periodYear}
                   </a>
                   <span className="mt-0.5 block truncate text-xs text-ink-400">
                     {report.highlights.summary[0] ?? ''}

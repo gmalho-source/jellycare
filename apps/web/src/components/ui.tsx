@@ -153,6 +153,26 @@ export function formatRelative(value: DateLike): string {
  * `toFixed` devolve sempre ponto, que num painel português se lê como um
  * separador de milhares e transforma 1,8 s em mil e oitocentos.
  */
+const MESES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
+
+/** O nome do mês a partir do número, 1 a 12. */
+export function nomeDoMes(mes: number): string {
+  return MESES[mes - 1] ?? String(mes)
+}
+
 export function formatNumero(valor: number, casas: number): string {
   return new Intl.NumberFormat('pt-PT', {
     minimumFractionDigits: casas,

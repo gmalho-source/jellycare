@@ -49,7 +49,7 @@ function Mostrador({ score }: { score: number }) {
   return (
     <div className="relative w-[124px] shrink-0">
       <svg viewBox="0 0 124 72" className="w-full" role="img" aria-label={`${score} em 100`}>
-        <path d={arco} fill="none" stroke="#eeeef1" strokeWidth={10} strokeLinecap="round" />
+        <path d={arco} fill="none" stroke="#f0ede8" strokeWidth={10} strokeLinecap="round" />
         <path
           d={arco}
           fill="none"

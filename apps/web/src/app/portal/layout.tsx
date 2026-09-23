@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Brand } from '@/components/brand'
+import { Shell, type SiteNaBarra } from '@/components/shell'
 import { getLegalState } from '@/lib/legal'
+import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { requireUser } from '@/lib/session'
 import { signOut } from '../(app)/actions'
 
@@ -17,12 +17,20 @@ import { signOut } from '../(app)/actions'
  *
  * A equipa da Jelly também pode entrar, de propósito: ver o que o cliente vê
  * antes de uma reunião vale mais do que qualquer descrição.
+ *
+ * Usa a mesma moldura do painel interno, **sem a pastilha do vigia**. Um
+ * agendador parado é falha nossa, não do site do cliente, e é a mesma regra
+ * que já esconde a faixa de aviso e a cobertura reduzida.
  */
-export default async function PortalLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+
+/** As secções que um cliente tem em cada site. */
+const SECCOES = [
+  { slug: '', label: 'Visão geral', icone: 'geral' },
+  { slug: 'desempenho', label: 'Desempenho', icone: 'desempenho' },
+  { slug: 'relatorios', label: 'Relatórios', icone: 'relatorios' },
+]
+
+export default async function PortalLayout({ children }: { children: ReactNode }) {
   const user = await requireUser()
 
   // Sem acordo de tratamento aceite, o portal abre no acordo.
@@ -42,40 +50,40 @@ export default async function PortalLayout({
     if (estado.missing.length > 0 && !estado.negotiatedRef) redirect('/legal/aceitar')
   }
 
+  const sites = ordenarPorGravidade(
+    await listSites(user.memberships.map((membership) => membership.organizationId)),
+  )
+
+  const naBarra: SiteNaBarra[] = sites.map((site) => ({
+    href: `/portal/sites/${site.id}`,
+    label: site.label,
+    severity: site.worstSeverity,
+    seccoes: SECCOES.map((seccao) => ({
+      href:
+        seccao.slug.length === 0
+          ? `/portal/sites/${site.id}`
+          : `/portal/sites/${site.id}/${seccao.slug}`,
+      label: seccao.label,
+      icone: seccao.icone,
+      exato: seccao.slug.length === 0,
+    })),
+  }))
+
   return (
-    <div className="min-h-screen bg-ink-50">
-      <header className="bg-ink-900">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
-          <Link href="/portal" className="flex min-w-0 items-center gap-2.5">
-            <Brand />
-            <span className="hidden text-xs text-shell-muted sm:inline">
-              manutenção e vigilância por Jelly
-            </span>
-          </Link>
+    <Shell
+      email={user.email}
+      inicio={{ href: '/portal', label: 'Os meus sites', icone: 'sites', exato: true }}
+      globais={[{ href: '/legal/aceitar', label: 'Tratamento de dados', icone: 'relatorios' }]}
+      grupo="Os seus sites"
+      sites={naBarra}
+      sair={signOut}
+    >
+      {children}
 
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/legal/aceitar" className="text-shell-muted hover:text-white">
-              Dados
-            </Link>
-            <span className="hidden text-shell-muted sm:inline">{user.email}</span>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="rounded-md px-2 py-1 text-shell-muted hover:bg-white/10 hover:text-white"
-              >
-                Sair
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
-
-      <footer className="mx-auto max-w-5xl px-4 pb-10 text-xs text-ink-400 sm:px-6">
-        Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o
-        nosso trabalho e explicá-los faz parte dele.
+      <footer className="mt-10 text-xs text-ink-400">
+        Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o nosso trabalho e
+        explicá-los faz parte dele.
       </footer>
-    </div>
+    </Shell>
   )
 }

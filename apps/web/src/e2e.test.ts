@@ -242,6 +242,20 @@ describeE2E('fluxo de entrada e painel', () => {
           },
         ])
 
+        // Uma medição de velocidade no site que o cliente vê. Números
+        // diferentes dos do site da equipa de propósito: se a página do
+        // portal fosse buscar os dados ao site errado, o teste passava na
+        // mesma com valores iguais.
+        await db.insert(schema.checkRuns).values({
+          siteId: siteVerificado,
+          checkType: 'page_speed',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 3 * 3600_000),
+          durationMs: 18_200,
+          metrics: { performanceScore: 42, lcpMs: 5400, cls: 0.21, tbtMs: 480 },
+        })
+
         // Um site WordPress ligado, com o core atrasado e um plugin por
         // atualizar. O core e os plugins são contas separadas no painel, e é
         // exatamente isso que este retrato serve para provar.
@@ -729,6 +743,30 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await cliente.isVisible('text=Verificações corridas')).toBe(true)
 
     // O que é nosso, não.
+    expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
+    await cliente.close()
+  }, 120_000)
+
+  it('dá ao cliente a velocidade do site dele, e a navegação para lá chegar', async () => {
+    // Estava só do lado interno. A pontuação e os vitals são factos sobre o
+    // site de quem paga, não sobre a nossa operação — e é a secção que ele
+    // leva a uma reunião.
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    await cliente.goto(`${baseUrl}/portal/sites/${siteVerificado}`)
+    await cliente.waitForSelector('h1')
+
+    // A navegação existe no portal e leva ao desempenho. Sem isto, a página
+    // podia existir e não haver caminho nenhum até ela.
+    await cliente.click('nav a[href$="/desempenho"]')
+    await cliente.waitForURL(`${baseUrl}/portal/sites/${siteVerificado}/desempenho`)
+
+    // Os números deste site e não os do site da equipa.
+    expect(await cliente.isVisible('[aria-label="42 em 100"]')).toBe(true)
+    expect(await cliente.isVisible('text=5,4 s')).toBe(true)
+    expect(await cliente.isVisible('text=Tempo de resposta do servidor')).toBe(true)
+
+    // Continua sem ver o que é falha nossa, aqui como na visão geral.
     expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
     await cliente.close()
   }, 120_000)

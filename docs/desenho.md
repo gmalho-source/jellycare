@@ -19,6 +19,12 @@ conteúdo pela cor e não por uma linha, e dá um sítio permanente ao estado do
 vigia. Durante a paragem de dezoito horas a única leitura disponível era
 «não vi nenhum aviso», que não é a mesma coisa que «vi que está a vigiar».
 
+No telemóvel a navegação fica **no fundo do ecrã** e não no topo. Um menu em
+cima obriga a mão a subir o telemóvel inteiro a cada mudança de secção, e num
+painel que se consulta de pé isso é a diferença entre olhar e não olhar. A
+barra respeita a área segura do aparelho e o conteúdo leva espaço em baixo
+para o último cartão não ficar por trás dela.
+
 **Os cartões têm sombra, não moldura.** Uma linha de 1px à volta de cada
 cartão desenha uma grelha que compete com o conteúdo. `shadow-card` para os
 cartões correntes, `shadow-raised` para os que são o assunto da página.
@@ -67,9 +73,15 @@ ponto, e num painel português `1.8 s` lê-se como mil e oitocentos.
 
 Em `apps/web/src/components`:
 
-- `shell.tsx` — a moldura e a coluna de navegação. A coluna muda com a rota,
-  lida no cliente: a moldura está acima do ramo do site na árvore e não
-  recebe os seus parâmetros. As secções chegam já calculadas do servidor.
+- `shell.tsx` — a moldura e a coluna de navegação, para os dois lados: o
+  painel interno e o portal do cliente. As ligações chegam prontas de quem a
+  usa — as duas vistas têm raízes diferentes (`/` e `/portal`) e secções
+  diferentes. A coluna muda com a rota, lida no cliente: a moldura está acima
+  do ramo do site na árvore e não recebe os seus parâmetros.
+
+  A pastilha do vigia é opcional e o portal não a leva. Um agendador parado é
+  falha nossa, não do site do cliente — a mesma regra que já esconde a faixa
+  de aviso e a cobertura reduzida.
 - `rail.tsx` — as peças da coluna: `RailList`, `RailLink`, `RailGrupo`,
   `RailContagem`.
 - `ui.tsx` — `Card`, `CardHeader`, `Stat`, `SeverityBadge`, `HealthBadge`,
@@ -80,7 +92,8 @@ Em `apps/web/src/components`:
 
 ## Regras que não se negoceiam
 
-- Alvos de toque com pelo menos 44px de altura.
+- Alvos de toque com pelo menos 44px de altura, e a navegação do telemóvel
+  ao alcance do polegar.
 - Texto a 4,5:1 de contraste (3:1 acima de 24px). O `ink-400` só sobre claro.
 - Um `<button>`, um `<a href>` ou um `<input>` a sério — nunca um `div` com
   `onClick`, que o teclado salta.
