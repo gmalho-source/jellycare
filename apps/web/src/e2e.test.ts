@@ -847,6 +847,76 @@ describeE2E('fluxo de entrada e painel', () => {
     }
   }, 120_000)
 
+  it('silenciar deixa de ser uma porta sem volta', async () => {
+    // Silenciar tirava o problema da lista e não havia ecrã nenhum onde o
+    // voltar a encontrar: a única ação da aplicação que só se desfazia na
+    // base de dados.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let findingId = ''
+    try {
+      const [criado] = await db
+        .insert(schema.findings)
+        .values({
+          siteId: siteVerificado,
+          checkType: 'security_headers',
+          fingerprint: `silenciar-${marca}`,
+          code: 'header_missing',
+          severity: 'low',
+          state: 'open',
+          title: `Cabeçalho de teste ${marca}`,
+          detail: 'Existe para este teste e mais nada.',
+          firstSeenAt: new Date(Date.now() - 3600_000),
+          lastSeenAt: new Date(),
+        })
+        .returning({ id: schema.findings.id })
+      findingId = criado!.id
+    } finally {
+      await close()
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    await equipa.waitForSelector('h1')
+    expect(await equipa.isVisible(`text=Cabeçalho de teste ${marca}`)).toBe(true)
+
+    const linha = equipa.locator('li', { hasText: `Cabeçalho de teste ${marca}` })
+    await linha.locator('button:has-text("Silenciar")').click()
+    await equipa.waitForSelector('summary:has-text("Silenciados")')
+
+    // Saiu da lista de abertos — o `details` está fechado, por isso o título
+    // deixa de estar visível.
+    expect(await equipa.isVisible(`text=Cabeçalho de teste ${marca}`)).toBe(false)
+
+    // Mas continua a haver por onde lhe chegar.
+    await equipa.click('summary:has-text("Silenciados")')
+    expect(await equipa.isVisible(`text=Cabeçalho de teste ${marca}`)).toBe(true)
+
+    await equipa
+      .locator('li', { hasText: `Cabeçalho de teste ${marca}` })
+      .locator('button:has-text("Reativar")')
+      .click()
+    await equipa.waitForSelector(`li:has-text("Cabeçalho de teste ${marca}") button:has-text("Silenciar")`)
+    await equipa.close()
+
+    // E voltou mesmo ao estado aberto, com o carimbo de quem o silenciou
+    // limpo: deixou de estar nas mãos de alguém.
+    const leitura = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const linhas = await leitura.db
+        .select({
+          state: schema.findings.state,
+          acknowledgedAt: schema.findings.acknowledgedAt,
+        })
+        .from(schema.findings)
+        .where(eq(schema.findings.id, findingId))
+      expect(linhas[0]?.state).toBe('open')
+      expect(linhas[0]?.acknowledgedAt).toBeNull()
+    } finally {
+      await leitura.close()
+    }
+  }, 120_000)
+
   it('trava o portal até o cliente aceitar o acordo, e guarda a prova', async () => {
     // O acordo do artigo 28.º é entre o cliente, que é o responsável pelo
     // tratamento, e a Jelly, que é a subcontratante. Quem aceita é o cliente:

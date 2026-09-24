@@ -242,12 +242,17 @@ export async function updateFindingState(formData: FormData): Promise<void> {
   assertMembership(user, finding.organizationId)
   if (!canManage(user, finding.organizationId)) return
 
+  // Voltar a abrir limpa quem reconheceu ou silenciou: o problema deixou de
+  // estar nas mãos de alguém e volta a ser tratado como qualquer outro —
+  // notifica se agravar, e é resolvido quando desaparecer.
+  const reabrir = parsed.data.state === 'open'
+
   await db
     .update(schema.findings)
     .set({
       state: parsed.data.state,
-      acknowledgedBy: user.id,
-      acknowledgedAt: new Date(),
+      acknowledgedBy: reabrir ? null : user.id,
+      acknowledgedAt: reabrir ? null : new Date(),
     })
     .where(eq(schema.findings.id, parsed.data.findingId))
 

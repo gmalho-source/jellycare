@@ -388,10 +388,20 @@ export async function getPageSpeedHistory(
   }
 }
 
-/** Só os problemas, para a secção que só mostra problemas. */
-export async function getSiteFindings(
-  siteId: string,
-): Promise<{ organizationId: string; findings: (typeof schema.findings.$inferSelect)[] } | null> {
+/**
+ * Os problemas de um site, para a secção que só mostra problemas.
+ *
+ * Traz também os silenciados, à parte. Silenciar era a única ação da
+ * aplicação sem volta: o problema saía da lista e não havia ecrã nenhum onde
+ * o voltar a encontrar, quanto mais reativar. Vêm separados e não misturados
+ * porque um problema silenciado não é um problema aberto — não conta, não
+ * notifica e não entra no relatório do cliente.
+ */
+export async function getSiteFindings(siteId: string): Promise<{
+  organizationId: string
+  findings: (typeof schema.findings.$inferSelect)[]
+  silenciados: (typeof schema.findings.$inferSelect)[]
+} | null> {
   const db = getDb()
 
   const sites = await db
@@ -402,20 +412,29 @@ export async function getSiteFindings(
   const site = sites[0]
   if (!site) return null
 
-  const findings = await db
+  const linhas = await db
     .select()
     .from(schema.findings)
     .where(
-      and(eq(schema.findings.siteId, siteId), inArray(schema.findings.state, [...OPEN_STATES])),
+      and(
+        eq(schema.findings.siteId, siteId),
+        inArray(schema.findings.state, [...OPEN_STATES, 'ignored']),
+      ),
     )
     .limit(200)
 
-  findings.sort((a, b) => {
+  const porGravidade = (
+    a: typeof schema.findings.$inferSelect,
+    b: typeof schema.findings.$inferSelect,
+  ) => {
     const bySeverity = severityRank(b.severity) - severityRank(a.severity)
     return bySeverity !== 0 ? bySeverity : b.lastSeenAt.getTime() - a.lastSeenAt.getTime()
-  })
+  }
 
-  return { organizationId: site.organizationId, findings }
+  const findings = linhas.filter((linha) => linha.state !== 'ignored').sort(porGravidade)
+  const silenciados = linhas.filter((linha) => linha.state === 'ignored').sort(porGravidade)
+
+  return { organizationId: site.organizationId, findings, silenciados }
 }
 
 export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> {
