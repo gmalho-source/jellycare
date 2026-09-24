@@ -135,7 +135,8 @@ próprio. É a mesma razão pela qual a batida não vive no Redis.
 ### Configurar o UptimeRobot
 
 Com a chave da conta — em [dashboard.uptimerobot.com](https://dashboard.uptimerobot.com)
-→ Settings → API, a **Main API key** e não uma de monitor, que só lê:
+→ **Integrations & API** na barra lateral → API. É a **Main API key** e não uma
+de monitor, que só lê:
 
 ```bash
 UPTIMEROBOT_API_KEY=... node scripts/uptimerobot.mjs            # mostra o que faria

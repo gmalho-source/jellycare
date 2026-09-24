@@ -12,8 +12,9 @@
  *
  *   UPTIMEROBOT_API_KEY=... node scripts/uptimerobot.mjs
  *
- * Tem de ser a chave **da conta** («Main API key», em Settings → API), e não
- * uma chave de um monitor: as chaves de monitor só leem.
+ * Tem de ser a chave **da conta** («Main API key»), e não uma chave de um
+ * monitor: as de monitor só leem. Está no painel deles, em «Integrations &
+ * API» na barra lateral → API.
  *
  * Opções:
  *   --url        endereço a vigiar (por omissão o de produção)
@@ -30,7 +31,7 @@ const CHAVE = process.env.UPTIMEROBOT_API_KEY
 if (!CHAVE) {
   console.error(
     'Falta UPTIMEROBOT_API_KEY no ambiente.\n' +
-      'A chave da conta está em https://dashboard.uptimerobot.com → Settings → API.',
+      'A chave da conta está em https://dashboard.uptimerobot.com → Integrations & API → API.',
   )
   process.exit(1)
 }
