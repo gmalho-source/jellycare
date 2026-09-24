@@ -166,6 +166,29 @@ workflow chama o mesmo endereço, mas corre dentro da mesma plataforma de que
 depende a nossa fila de agendamentos; o monitor externo bate de fora e avisa
 também quando *ele* não consegue lá chegar.
 
+### Provar que o alarme toca
+
+Um alarme que nunca foi disparado à experiência não se sabe se funciona.
+
+```bash
+UPTIMEROBOT_API_KEY=... node scripts/uptimerobot.mjs --testar
+```
+
+Aponta o monitor para um endereço que responde sempre 503, espera que o
+UptimeRobot dê por isso, confirma pela API deles que a paragem ficou
+registada, e **repõe o endereço aconteça o que acontecer** — deixá-lo a
+apontar para o endereço falso seria desligar o alarme em silêncio, que é pior
+do que nunca o ter testado.
+
+Não toca em produção: o agendador continua a correr e os sites dos clientes
+continuam a ser verificados. O que se testa é a metade da corrente que é do
+UptimeRobot — o contacto, o limiar, a entrega. A outra metade, «o endpoint
+responde 503 quando o agendador para», está coberta pelos testes automáticos.
+
+A última confirmação é sempre humana: o email tem de chegar mesmo à caixa de
+quem o vai ler. Vale a pena repetir isto depois de mexer no alarme ou nos
+contactos.
+
 **O que continua por cobrir:** um 503 diz que algo parou, não o quê. O corpo
 da resposta distingue (`status` em `stale`, `failing`, `unknown` ou
 `checks_late`), e é a primeira coisa a ler quando o alarme tocar.
