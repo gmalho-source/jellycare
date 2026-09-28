@@ -9,12 +9,14 @@ import { Card, CardHeader } from '@/components/ui'
 import { getDb } from '@/lib/db'
 import { getLegalState } from '@/lib/legal'
 import { getSiteDetail } from '@/lib/queries'
+import { listUmbrellaProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { AccessPanel } from '../access-panel'
 import { DangerPanel } from '../danger-panel'
 import { LegalPanel } from '../legal-panel'
 import { MaintenancePanel } from '../maintenance-panel'
 import { SettingsPanel } from '../settings-panel'
+import { UmbrellaLink } from '../umbrella-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +28,12 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
   if (!detail) notFound()
   assertMembership(user, detail.site.organizationId)
   const manageable = canManage(user, detail.site.organizationId)
+
+  // A lista de projetos é da conta da Jelly e só interessa a quem pode
+  // ligar — não se vai pedi-la à WP Umbrella para a deitar fora a seguir.
+  const umbrella = manageable
+    ? await listUmbrellaProjects()
+    : { projects: [], unavailable: undefined }
 
   const members = await listMembers(getDb(), detail.site.organizationId)
   const legal = await getLegalState(detail.site.organizationId)
@@ -57,6 +65,24 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
             expectedContent={detail.site.expectedContent}
             recipients={detail.site.reportRecipients}
             slaTarget={detail.site.slaTarget}
+          />
+        </Card>
+      ) : null}
+
+      {manageable ? (
+        <Card>
+          <CardHeader title="WordPress" />
+          <UmbrellaLink
+            siteId={detail.site.id}
+            linkedId={detail.connector?.externalId ?? null}
+            options={umbrella.projects.map((project) => ({
+              id: project.id,
+              name: project.name,
+              baseUrl: project.baseUrl,
+              connectivity: project.connectivity,
+            }))}
+            {...(umbrella.unavailable ? { unavailable: umbrella.unavailable } : {})}
+            canManage={manageable}
           />
         </Card>
       ) : null}

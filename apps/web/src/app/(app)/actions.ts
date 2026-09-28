@@ -62,6 +62,8 @@ const createSiteSchema = z.object({
     }, 'O endereço não é válido.'),
   method: z.enum(['dns_txt', 'http_file']),
   expectedContent: z.string().trim().max(200).optional(),
+  /** Projeto da WP Umbrella, quando o site é WordPress e já se sabe qual. */
+  projectId: z.string().trim().optional(),
 })
 
 export type ActionState = { error?: string; message?: string }
@@ -84,6 +86,7 @@ export async function createSite(
     url: formData.get('url'),
     method: formData.get('method'),
     expectedContent: formData.get('expectedContent') || undefined,
+    projectId: formData.get('projectId') || undefined,
   })
 
   if (!parsed.success) {
@@ -94,6 +97,20 @@ export async function createSite(
   assertMembership(user, input.organizationId)
   if (!canManage(user, input.organizationId)) {
     return { error: 'Não tem permissão para adicionar sites.' }
+  }
+
+  // O projeto é confrontado com a lista real ANTES de existir site nenhum.
+  // Um id que não existe faria o worker falhar todos os dias contra um
+  // projeto fantasma; e confirmar depois de criar deixava um site meio-feito
+  // sempre que a WP Umbrella estivesse em baixo.
+  let project: { id: number; name: string } | undefined
+  if (input.projectId) {
+    const { projects, unavailable } = await listUmbrellaProjects()
+    if (unavailable) {
+      return { error: `Não foi possível confirmar o projeto na WP Umbrella: ${unavailable}` }
+    }
+    project = projects.find((candidate) => String(candidate.id) === input.projectId)
+    if (!project) return { error: 'Esse projeto não existe na conta da WP Umbrella.' }
   }
 
   const parsedUrl = new URL(input.url)
@@ -118,6 +135,15 @@ export async function createSite(
     siteId = site!.id
   } catch {
     return { error: 'Não foi possível criar o site. Verifique se já existe.' }
+  }
+
+  if (project) {
+    await db.insert(schema.connectors).values({
+      siteId,
+      type: 'wp_umbrella',
+      externalId: String(project.id),
+      externalName: project.name,
+    })
   }
 
   const challenge = buildChallenge(input.method, parsedUrl.hostname)

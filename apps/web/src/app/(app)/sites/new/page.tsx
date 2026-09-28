@@ -2,6 +2,7 @@ import { schema } from '@jellycare/db'
 import { inArray } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { requireUser } from '@/lib/session'
+import { listUmbrellaProjects } from '@/lib/umbrella'
 import { NewSiteForm } from './form'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,8 @@ export default async function NewSitePage() {
           .orderBy(schema.organizations.name)
       : []
 
+  const umbrella = organizations.length > 0 ? await listUmbrellaProjects() : { projects: [] }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -37,7 +40,15 @@ export default async function NewSitePage() {
           Não tem permissão para adicionar sites em nenhuma organização.
         </div>
       ) : (
-        <NewSiteForm organizations={organizations} />
+        <NewSiteForm
+          organizations={organizations}
+          umbrella={umbrella.projects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            baseUrl: project.baseUrl,
+          }))}
+          {...(umbrella.unavailable ? { umbrellaUnavailable: umbrella.unavailable } : {})}
+        />
       )}
     </div>
   )

@@ -1473,6 +1473,29 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.close()
   }, 120_000)
 
+  it('põe a ligação ao WordPress nas definições, e o separador só depois de ligar', async () => {
+    // Guarda-costas do nó circular que isto desfez: a página do WordPress era
+    // a única com o seletor de projetos, e só aparece na navegação quando já
+    // há ligação — para ligar era preciso estar ligado. O seletor passou para
+    // onde se configura um site, e é lá que tem de continuar a estar.
+    //
+    // Não se liga aqui de verdade: a lista de projetos vem da conta real da
+    // WP Umbrella. Prova-se que o caminho existe num site sem ligação.
+    const page = await entrarComo(email)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
+
+    await expect
+      .poll(() => page.locator('h2', { hasText: 'WordPress' }).isVisible())
+      .toBe(true)
+
+    // E o separador continua escondido enquanto não houver ligação: sem ela
+    // não há inventário nenhum para mostrar.
+    expect(await page.isVisible('nav a:has-text("WordPress")')).toBe(false)
+
+    await page.close()
+  }, 90_000)
+
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()
     await anonima.goto(`${baseUrl}/`)

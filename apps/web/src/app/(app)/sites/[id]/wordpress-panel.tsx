@@ -1,15 +1,7 @@
 'use client'
 
-import { useActionState } from 'react'
 import { formatRelative } from '@/components/ui'
-import { linkUmbrellaProjectAction, type ConnectorState } from '../../actions'
-
-export interface UmbrellaOption {
-  id: number
-  name: string
-  baseUrl: string
-  connectivity: string | null
-}
+import { UmbrellaLink, type UmbrellaOption } from './umbrella-link'
 
 export interface WordPressComponent {
   kind: string
@@ -23,10 +15,9 @@ export interface WordPressComponent {
 /**
  * Profundidade WordPress, pela WP Umbrella.
  *
- * A ligação é escolhida à mão e não emparelhada por hostname: ligar o site
- * errado faz-nos reportar as vulnerabilidades de um cliente a outro, e um
- * endereço parecido chega para isso acontecer. Daí a lista mostrar o endereço
- * de cada projeto ao lado do nome.
+ * O inventário recolhido, e por baixo dele o seletor da ligação — o mesmo que
+ * vive nas definições do site, onde a ligação se cria. Aqui serve para trocar
+ * de projeto ou desligar sem sair de onde se está a ver o estrago.
  */
 export function WordPressPanel({
   siteId,
@@ -47,11 +38,6 @@ export function WordPressPanel({
   components: WordPressComponent[]
   canManage: boolean
 }) {
-  const [state, action, pending] = useActionState<ConnectorState, FormData>(
-    linkUmbrellaProjectAction,
-    {},
-  )
-
   const porAtualizar = components.filter((c) => c.latestVersion !== null)
 
   return (
@@ -114,55 +100,15 @@ export function WordPressPanel({
         </ul>
       ) : null}
 
-      {canManage ? (
-        <form action={action} className="border-t border-ink-100 px-5 py-4">
-          <input type="hidden" name="siteId" value={siteId} />
-
-          {unavailable ? (
-            <p className="text-xs text-ink-400">
-              Não foi possível obter a lista de projetos: {unavailable}
-            </p>
-          ) : (
-            <>
-              <label htmlFor="umbrella-project" className="block text-xs text-ink-400">
-                Projeto na WP Umbrella
-              </label>
-              <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <select
-                  id="umbrella-project"
-                  name="projectId"
-                  defaultValue={linked?.externalId ?? ''}
-                  className="min-w-[18rem] flex-1 rounded-lg border border-ink-200 px-3 py-2 text-sm focus:border-jelly-500 focus:outline-none"
-                >
-                  <option value="">Não ligado</option>
-                  {options.map((option) => (
-                    <option key={option.id} value={String(option.id)}>
-                      {option.name} — {option.baseUrl}
-                      {option.connectivity !== 'paired' ? ' (plugin sem resposta)' : ''}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
-                >
-                  {pending ? 'A guardar…' : 'Guardar'}
-                </button>
-              </div>
-
-              <p className="mt-2 text-xs text-ink-400">
-                Confirme o endereço e não só o nome. Ligar ao projeto errado faz-nos reportar a
-                este cliente as vulnerabilidades de outro.
-              </p>
-            </>
-          )}
-
-          {state.error ? <p className="mt-2 text-sm text-red-600">{state.error}</p> : null}
-          {state.message ? <p className="mt-2 text-sm text-ink-600">{state.message}</p> : null}
-        </form>
-      ) : null}
+      <div className="border-t border-ink-100">
+        <UmbrellaLink
+          siteId={siteId}
+          linkedId={linked?.externalId ?? null}
+          options={options}
+          {...(unavailable ? { unavailable } : {})}
+          canManage={canManage}
+        />
+      </div>
     </>
   )
 }

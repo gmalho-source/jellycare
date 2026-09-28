@@ -8,8 +8,12 @@ const inputClass =
 
 export function NewSiteForm({
   organizations,
+  umbrella,
+  umbrellaUnavailable,
 }: {
   organizations: { id: string; name: string }[]
+  umbrella: { id: number; name: string; baseUrl: string }[]
+  umbrellaUnavailable?: string
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(createSite, {})
 
@@ -77,6 +81,35 @@ export function NewSiteForm({
           Opcional, mas recomendado: um site comprometido ou com a base de dados em baixo responde
           200 na mesma. Sem isto, não distinguimos uma página branca de um site saudável.
         </p>
+      </div>
+
+      <div>
+        <label htmlFor="projectId" className="text-sm font-medium text-ink-900">
+          Projeto na WP Umbrella
+        </label>
+        {umbrellaUnavailable ? (
+          <p className="mt-1.5 text-xs text-ink-400">
+            Não foi possível obter a lista: {umbrellaUnavailable} Dá para ligar mais tarde, nas
+            definições do site.
+          </p>
+        ) : (
+          <>
+            <select id="projectId" name="projectId" className={inputClass} defaultValue="">
+              <option value="">Não é WordPress, ou ligo depois</option>
+              {umbrella.map((project) => (
+                <option key={project.id} value={String(project.id)}>
+                  {project.name} — {project.baseUrl}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-ink-400">
+              É a ligação que torna este site um site WordPress para o Jellycare: inventário de
+              plugins e temas, cópias de segurança e atualizações automáticas. Confirme o
+              endereço e não só o nome — ligar ao projeto errado faz-nos reportar a este cliente
+              as vulnerabilidades de outro.
+            </p>
+          </>
+        )}
       </div>
 
       <fieldset>
