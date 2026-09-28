@@ -1418,6 +1418,61 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.close()
   }, 90_000)
 
+  it('arquiva, reativa e apaga um site pela interface', async () => {
+    // O caminho todo, num browser: arquivar, desarquivar e apagar. Apagar
+    // existia e ninguém lhe chegava — era texto cinzento do tamanho de uma
+    // legenda no rodapé de outro cartão —, e não havia teste nenhum a passar
+    // por aqui, o que é como dizer que ninguém sabia se funcionava.
+    //
+    // Site próprio e descartável: os outros testes deste ficheiro contam com
+    // o site partilhado, e apagá-lo deixava-os sem chão.
+    const rotulo = `Site descartável ${Date.now()}`
+    const { siteId: descartavel } = await seed({
+      databaseUrl: DATABASE_URL as string,
+      email,
+      organizationName: `E2E ${Date.now()}`,
+      siteLabel: rotulo,
+      siteUrl: `https://descartavel-${Date.now()}.exemplo.pt`,
+    })
+
+    const page = await entrarComo(email)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${descartavel}/definicoes`)
+
+    // Arquivar e voltar atrás. Arquivar é a saída reversível, e se ela não
+    // funcionar a única alternativa é a que não tem volta.
+    await page.click('button:has-text("Arquivar site")')
+    await page.waitForSelector('text=Site arquivado')
+    await page.click('button:has-text("Reativar site")')
+    await page.waitForSelector('text=Site reativado')
+
+    await page.click('button:has-text("Apagar site")')
+
+    // Nome errado não apaga. É a única barreira entre um clique distraído e
+    // dados que não voltam.
+    await page.fill('input[name=confirmation]', 'outro nome qualquer')
+    await page.click('button:has-text("Apagar para sempre")')
+    await page.waitForSelector('text=Para apagar, escreva o nome do site')
+    expect(page.url()).toContain(descartavel)
+
+    await page.fill('input[name=confirmation]', rotulo)
+    await page.click('button:has-text("Apagar para sempre")')
+
+    // Volta à lista e o site desapareceu mesmo — da página e da base de dados.
+    await page.waitForURL(`${baseUrl}/`)
+    await expect.poll(() => page.isVisible(`text=${rotulo}`)).toBe(false)
+
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const restos = await db.select().from(schema.sites).where(eq(schema.sites.id, descartavel))
+      expect(restos).toHaveLength(0)
+    } finally {
+      await close()
+    }
+
+    await page.close()
+  }, 120_000)
+
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()
     await anonima.goto(`${baseUrl}/`)

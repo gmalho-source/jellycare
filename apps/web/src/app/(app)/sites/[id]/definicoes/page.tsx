@@ -11,6 +11,7 @@ import { getLegalState } from '@/lib/legal'
 import { getSiteDetail } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { AccessPanel } from '../access-panel'
+import { DangerPanel } from '../danger-panel'
 import { LegalPanel } from '../legal-panel'
 import { MaintenancePanel } from '../maintenance-panel'
 import { SettingsPanel } from '../settings-panel'
@@ -53,7 +54,6 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
             siteId={detail.site.id}
             label={detail.site.label}
             url={detail.site.url}
-            state={detail.site.state}
             expectedContent={detail.site.expectedContent}
             recipients={detail.site.reportRecipients}
             slaTarget={detail.site.slaTarget}
@@ -61,30 +61,16 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader title="Tratamento de dados" />
-        <LegalPanel
-          organizationId={detail.site.organizationId}
-          negotiatedRef={legal.negotiatedRef}
-          aceites={legal.accepted.map((aceite) => ({
-            title: aceite.title,
-            version: aceite.version,
-            acceptedAt: aceite.acceptedAt,
-            representedBy: aceite.representedBy,
-          }))}
-          emFalta={legal.missing.map((documento) => ({
-            title: documento.title,
-            version: documento.version,
-          }))}
-          oposicoes={objecoes.map((oposicao) => ({
-            id: oposicao.id,
-            reason: oposicao.reason,
-            createdAt: oposicao.createdAt,
-            documentTitle: oposicao.documentTitle,
-          }))}
-          canManage={manageable}
-        />
-      </Card>
+      {manageable ? (
+        <Card>
+          <CardHeader title="Arquivar ou apagar" />
+          <DangerPanel
+            siteId={detail.site.id}
+            label={detail.site.label}
+            state={detail.site.state}
+          />
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="Tratamento de dados" />
