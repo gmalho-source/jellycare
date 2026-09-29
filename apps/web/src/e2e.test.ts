@@ -1823,10 +1823,35 @@ describeE2E('fluxo de entrada e painel', () => {
     const antes = pedidosAoModelo.length
     await page.getByRole('button', { name: 'Preparar aviso ao cliente' }).click()
 
-    // O formulário abre preenchido: rascunho do assistente e destinatários do site.
+    // O formulário abre preenchido: rascunho do assistente, e já escolhidas as
+    // pessoas do cliente das duas origens — quem recebe o relatório e quem tem
+    // acesso ao portal.
     await page.waitForSelector('input[name=assunto]')
     expect(await page.inputValue('input[name=assunto]')).toBe(AVISO_DO_ASSISTENTE.assunto)
-    expect(await page.inputValue('input[name=destinatarios]')).toBe('contacto@cliente-e2e.pt')
+    const escolhidos = page.getByRole('list', { name: 'Destinatários' })
+    await expect
+      .poll(() => escolhidos.textContent(), { timeout: PRAZO_DE_ESPERA })
+      .toContain('contacto@cliente-e2e.pt')
+    expect(await escolhidos.textContent()).toContain('recebe relatórios')
+    expect(await escolhidos.textContent()).toContain(emailCliente)
+    expect(await escolhidos.textContent()).toContain('acesso ao portal')
+
+    // Tirar um: sai da lista e fica nas sugestões, para voltar com um clique.
+    await page.getByRole('button', { name: `Tirar ${emailCliente}` }).click()
+    expect(await escolhidos.textContent()).not.toContain(emailCliente)
+    await page.waitForSelector(`button[aria-label="Acrescentar ${emailCliente}"]`)
+
+    // Um endereço que não é endereço não entra.
+    await page.fill('input[name=novo-destinatario]', 'nao-e-email')
+    await page.getByRole('button', { name: 'Acrescentar', exact: true }).click()
+    await page.waitForSelector('text=Não é um endereço de email: nao-e-email')
+
+    // Qualquer outro acrescenta-se à mão.
+    await page.fill('input[name=novo-destinatario]', 'Outro@Parceiro-e2e.pt')
+    await page.keyboard.press('Enter')
+    await expect
+      .poll(() => escolhidos.textContent(), { timeout: PRAZO_DE_ESPERA })
+      .toContain('outro@parceiro-e2e.pt')
 
     // O pedido ao modelo foi ancorado na explicação revista deste código.
     const pedido = pedidosAoModelo[antes] as { messages: { content: string }[]; stream?: boolean }
@@ -1850,7 +1875,10 @@ describeE2E('fluxo de entrada e painel', () => {
         .where(eq(schema.clientNotifications.findingId, findingId))
       expect(registos).toHaveLength(1)
       expect(registos[0]!.body).toContain(`Revisto pela equipa ${marca}.`)
-      expect(registos[0]!.recipients).toEqual(['contacto@cliente-e2e.pt'])
+      // Quem foi tirado não aparece; quem foi acrescentado à mão, sim.
+      expect(registos[0]!.recipients).toContain('contacto@cliente-e2e.pt')
+      expect(registos[0]!.recipients).toContain('outro@parceiro-e2e.pt')
+      expect(registos[0]!.recipients).not.toContain(emailCliente)
       expect(registos[0]!.sentAt).toBeNull()
       expect(registos[0]!.error).toContain('RESEND_API_KEY')
     } finally {

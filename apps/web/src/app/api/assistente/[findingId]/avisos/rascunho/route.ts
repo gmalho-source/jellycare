@@ -2,7 +2,7 @@ import { AssistenteIndisponivel, descreverErro, redigirAviso } from '@jellycare/
 import { explicacaoDe } from '@jellycare/core'
 import { NextResponse, type NextRequest } from 'next/server'
 import { problemaParaQuemGere } from '@/lib/assistente'
-import { destinatariosDoSite } from '@/lib/aviso'
+import { sugestoesDeDestinatarios } from '@/lib/aviso'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +12,9 @@ const MAX_INSTRUCOES = 1000
 /**
  * Um rascunho de aviso ao cliente. Não envia nada.
  *
- * Devolve assunto, corpo e os destinatários habituais do site para o
- * formulário de revisão abrir já preenchido. Quem decide o que sai, e para
+ * Devolve assunto, corpo e as pessoas do cliente a quem faz sentido enviar —
+ * quem tem acesso ao portal e quem recebe o relatório — para o formulário de
+ * revisão abrir já preenchido. Quem decide o que sai, e para
  * quem, é a pessoa que o lê a seguir.
  */
 export async function POST(
@@ -37,18 +38,26 @@ export async function POST(
 
   const { problema } = acesso
   try {
-    const [rascunho, destinatarios] = await Promise.all([
+    const [rascunho, sugestoes] = await Promise.all([
       redigirAviso({
         contexto: problema.contexto,
         explicacao: explicacaoDe(problema.contexto.problema.code) ?? undefined,
         instrucoes,
         agora,
       }),
-      destinatariosDoSite(problema.siteId),
+      sugestoesDeDestinatarios(problema.siteId, problema.organizationId),
     ])
 
+    // Todos os sugeridos vêm já escolhidos: são as pessoas do cliente. Quem
+    // revê tira os que não interessam — é mais fácil ver quem está a mais do
+    // que lembrar-se de quem falta.
     return NextResponse.json(
-      { assunto: rascunho.assunto, corpo: rascunho.corpo, destinatarios },
+      {
+        assunto: rascunho.assunto,
+        corpo: rascunho.corpo,
+        destinatarios: sugestoes.map((sugestao) => sugestao.email),
+        sugestoes,
+      },
       { headers: { 'cache-control': 'no-store' } },
     )
   } catch (erro) {

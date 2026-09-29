@@ -1,5 +1,5 @@
 import { schema } from '@jellycare/db'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import type { EmailMontado } from './aviso-email'
 import { getDb } from './db'
 
@@ -31,14 +31,61 @@ export async function lerAvisos(findingId: string): Promise<AvisoRegistado[]> {
     .orderBy(desc(schema.clientNotifications.createdAt))
 }
 
-/** Os destinatários habituais do site: os do relatório mensal. */
-export async function destinatariosDoSite(siteId: string): Promise<string[]> {
-  const linhas = await getDb()
-    .select({ recipients: schema.sites.reportRecipients })
-    .from(schema.sites)
-    .where(eq(schema.sites.id, siteId))
-    .limit(1)
-  return linhas[0]?.recipients ?? []
+export interface SugestaoDeDestinatario {
+  email: string
+  /** Tem acesso ao portal do cliente. */
+  acesso: boolean
+  /** Recebe o relatório mensal deste site. */
+  relatorios: boolean
+}
+
+/**
+ * A quem faz sentido enviar um aviso sobre este site.
+ *
+ * Duas origens, que não são a mesma coisa: quem tem conta no portal do cliente
+ * e quem recebe o relatório mensal. Muitas vezes coincidem, e às vezes não —
+ * o relatório vai para a direção e quem entra no portal é quem trata do site.
+ * A lista diz de onde vem cada um para quem revê poder escolher.
+ *
+ * Só os papéis de cliente. A equipa da Jelly também pertence à organização, e
+ * mandar-lhe um aviso sobre o problema que ela própria está a tratar seria
+ * ruído na caixa de quem menos precisa dele.
+ */
+export async function sugestoesDeDestinatarios(
+  siteId: string,
+  organizationId: string,
+): Promise<SugestaoDeDestinatario[]> {
+  const db = getDb()
+  const [site, contas] = await Promise.all([
+    db
+      .select({ recipients: schema.sites.reportRecipients })
+      .from(schema.sites)
+      .where(eq(schema.sites.id, siteId))
+      .limit(1),
+    db
+      .select({ email: schema.users.email })
+      .from(schema.memberships)
+      .innerJoin(schema.users, eq(schema.users.id, schema.memberships.userId))
+      .where(
+        and(
+          eq(schema.memberships.organizationId, organizationId),
+          eq(schema.memberships.role, 'client'),
+        ),
+      ),
+  ])
+
+  const porEmail = new Map<string, SugestaoDeDestinatario>()
+  const juntar = (email: string, origem: 'acesso' | 'relatorios') => {
+    const chave = email.trim().toLowerCase()
+    if (!chave) return
+    const atual = porEmail.get(chave) ?? { email: chave, acesso: false, relatorios: false }
+    atual[origem] = true
+    porEmail.set(chave, atual)
+  }
+  for (const email of site[0]?.recipients ?? []) juntar(email, 'relatorios')
+  for (const conta of contas) juntar(conta.email, 'acesso')
+
+  return [...porEmail.values()].sort((a, b) => a.email.localeCompare(b.email))
 }
 
 export interface EnvioPeloResend {

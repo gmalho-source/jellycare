@@ -15,7 +15,137 @@ interface AvisoRegistado {
 interface Rascunho {
   assunto: string
   corpo: string
-  destinatarios: string
+  destinatarios: string[]
+}
+
+interface Sugestao {
+  email: string
+  acesso: boolean
+  relatorios: boolean
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function origem(sugestao: Sugestao | undefined): string | null {
+  if (!sugestao) return null
+  if (sugestao.acesso && sugestao.relatorios) return 'portal e relatórios'
+  if (sugestao.acesso) return 'acesso ao portal'
+  return 'recebe relatórios'
+}
+
+/**
+ * Para quem vai o aviso.
+ *
+ * Uma lista e não uma caixa de texto: cada pessoa sai com um clique, e diz de
+ * onde veio — quem tem acesso ao portal e quem recebe o relatório nem sempre
+ * são as mesmas pessoas, e é isso que se decide aqui. As sugestões tiradas
+ * ficam à vista por baixo para voltarem a entrar sem ter de as escrever, e
+ * qualquer outro endereço acrescenta-se à mão.
+ */
+function Destinatarios({
+  escolhidos,
+  sugestoes,
+  mudar,
+}: {
+  escolhidos: string[]
+  sugestoes: Sugestao[]
+  mudar: (proximos: string[]) => void
+}) {
+  const [novo, setNovo] = useState('')
+  const [invalido, setInvalido] = useState<string | null>(null)
+  const porEmail = new Map(sugestoes.map((sugestao) => [sugestao.email, sugestao]))
+  const porEscolher = sugestoes.filter((sugestao) => !escolhidos.includes(sugestao.email))
+
+  const acrescentar = () => {
+    const partes = novo
+      .split(/[\s,;]+/)
+      .map((parte) => parte.trim().toLowerCase())
+      .filter(Boolean)
+    if (partes.length === 0) return
+    const maus = partes.filter((parte) => !EMAIL.test(parte))
+    if (maus.length > 0) {
+      setInvalido(`Não é um endereço de email: ${maus.join(', ')}`)
+      return
+    }
+    mudar([...escolhidos, ...partes.filter((parte) => !escolhidos.includes(parte))])
+    setNovo('')
+    setInvalido(null)
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-ink-400">Para</p>
+      <ul className="mt-1 flex flex-wrap gap-2" aria-label="Destinatários">
+        {escolhidos.map((email) => (
+          <li
+            key={email}
+            className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-ink-50 py-1 pl-3 pr-1 text-sm text-ink-900"
+          >
+            {email}
+            {origem(porEmail.get(email)) ? (
+              <span className="text-xs text-ink-400">· {origem(porEmail.get(email))}</span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => mudar(escolhidos.filter((outro) => outro !== email))}
+              aria-label={`Tirar ${email}`}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-ink-400 hover:bg-ink-200 hover:text-ink-900"
+            >
+              ×
+            </button>
+          </li>
+        ))}
+        {escolhidos.length === 0 ? (
+          <li className="py-1 text-sm text-alarme">Ninguém escolhido ainda.</li>
+        ) : null}
+      </ul>
+
+      {porEscolher.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-400">
+          <span>Sugeridos:</span>
+          {porEscolher.map((sugestao) => (
+            <button
+              key={sugestao.email}
+              type="button"
+              onClick={() => mudar([...escolhidos, sugestao.email])}
+              aria-label={`Acrescentar ${sugestao.email}`}
+              className="rounded-full border border-dashed border-ink-200 px-2.5 py-1 text-ink-600 hover:border-ink-400 hover:text-ink-900"
+            >
+              + {sugestao.email} · {origem(sugestao)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          type="email"
+          name="novo-destinatario"
+          value={novo}
+          onChange={(evento) => {
+            setNovo(evento.target.value)
+            setInvalido(null)
+          }}
+          onKeyDown={(evento) => {
+            if (evento.key === 'Enter' || evento.key === ',') {
+              evento.preventDefault()
+              acrescentar()
+            }
+          }}
+          placeholder="Acrescentar outro email"
+          className="min-w-[14rem] flex-1 rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm focus:border-jelly-500 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={acrescentar}
+          className="inline-flex min-h-10 items-center rounded-lg border border-ink-200 px-3.5 text-sm text-ink-600 hover:bg-ink-100"
+        >
+          Acrescentar
+        </button>
+      </div>
+      {invalido ? <p className="mt-1 text-xs text-alarme">{invalido}</p> : null}
+    </div>
+  )
 }
 
 const DATA = new Intl.DateTimeFormat('pt-PT', {
@@ -41,6 +171,7 @@ const CAMPO =
 export function AvisoAoCliente({ findingId }: { findingId: string }) {
   const [avisos, setAvisos] = useState<AvisoRegistado[]>([])
   const [rascunho, setRascunho] = useState<Rascunho | null>(null)
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([])
   const [instrucoes, setInstrucoes] = useState('')
   const [aRedigir, setARedigir] = useState(false)
   const [aEnviar, setAEnviar] = useState(false)
@@ -72,6 +203,7 @@ export function AvisoAoCliente({ findingId }: { findingId: string }) {
           assunto?: string
           corpo?: string
           destinatarios?: string[]
+          sugestoes?: Sugestao[]
           detalhe?: string
         }
         if (!resposta.ok || corpo.assunto === undefined || corpo.corpo === undefined) {
@@ -83,8 +215,9 @@ export function AvisoAoCliente({ findingId }: { findingId: string }) {
         setRascunho((anterior) => ({
           assunto: corpo.assunto!,
           corpo: corpo.corpo!,
-          destinatarios: anterior?.destinatarios ?? (corpo.destinatarios ?? []).join(', '),
+          destinatarios: anterior?.destinatarios ?? corpo.destinatarios ?? [],
         }))
+        setSugestoes(corpo.sugestoes ?? [])
         setInstrucoes('')
       } catch {
         setErro('A ligação caiu enquanto o rascunho era preparado.')
@@ -109,7 +242,7 @@ export function AvisoAoCliente({ findingId }: { findingId: string }) {
       if (!resposta.ok) {
         setErro(corpo.detalhe ?? 'O envio falhou.')
       } else {
-        setEnviado(rascunho.destinatarios)
+        setEnviado(rascunho.destinatarios.join(', '))
         setRascunho(null)
       }
     } catch {
@@ -156,18 +289,11 @@ export function AvisoAoCliente({ findingId }: { findingId: string }) {
             da Jelly, tal como estiver aqui, e as respostas do cliente vêm para si.
           </p>
 
-          <label className="block text-xs text-ink-400">
-            Para
-            <input
-              name="destinatarios"
-              value={rascunho.destinatarios}
-              onChange={(evento) =>
-                setRascunho({ ...rascunho, destinatarios: evento.target.value })
-              }
-              placeholder="contacto@cliente.pt"
-              className={CAMPO}
-            />
-          </label>
+          <Destinatarios
+            escolhidos={rascunho.destinatarios}
+            sugestoes={sugestoes}
+            mudar={(proximos) => setRascunho({ ...rascunho, destinatarios: proximos })}
+          />
 
           <label className="block text-xs text-ink-400">
             Assunto
@@ -210,7 +336,7 @@ export function AvisoAoCliente({ findingId }: { findingId: string }) {
           <div className="flex flex-wrap items-center gap-3 border-t border-ink-100 pt-3">
             <button
               type="submit"
-              disabled={aEnviar || aRedigir}
+              disabled={aEnviar || aRedigir || rascunho.destinatarios.length === 0}
               className="inline-flex min-h-11 items-center rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-900/90 disabled:opacity-60"
             >
               {aEnviar ? 'A enviar…' : 'Enviar ao cliente'}

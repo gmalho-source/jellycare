@@ -49,8 +49,14 @@ export async function POST(
   const corpo = (await request.json().catch(() => ({}))) as Record<string, unknown>
   const assunto = typeof corpo.assunto === 'string' ? corpo.assunto.trim() : ''
   const texto = typeof corpo.corpo === 'string' ? corpo.corpo.trim() : ''
+  // Uma lista do formulário, ou texto separado por vírgulas para quem chame
+  // isto à mão. Os dois passam pela mesma limpeza e pela mesma validação.
   const destinatarios = lerDestinatarios(
-    typeof corpo.destinatarios === 'string' ? corpo.destinatarios : '',
+    Array.isArray(corpo.destinatarios)
+      ? corpo.destinatarios.filter((item): item is string => typeof item === 'string').join(',')
+      : typeof corpo.destinatarios === 'string'
+        ? corpo.destinatarios
+        : '',
   )
 
   if (!assunto || assunto.length > MAX_ASSUNTO) {

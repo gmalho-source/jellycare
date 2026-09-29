@@ -107,7 +107,11 @@ um fornecedor que só ele pode contactar. O que se pode resolver, resolve-se, e
 não se manda email nenhum; o prompt diz isso e o painel também.
 
 A revisão é obrigatória e não há atalho à volta dela. O rascunho abre num
-formulário com os destinatários do relatório mensal, o assunto e o texto; a
+formulário com o assunto, o texto e os destinatários já escolhidos: quem tem
+acesso ao portal do cliente e quem recebe o relatório mensal, cada um marcado
+com a origem — nem sempre são as mesmas pessoas. Cada destinatário sai com um
+clique e fica nas sugestões para voltar; qualquer outro endereço acrescenta-se
+à mão. A equipa da Jelly nunca é sugerida, mesmo pertencendo à organização. A
 pessoa altera o que quiser, pode pedir outra versão com instruções, e só sai
 quando carrega em «Enviar ao cliente». O endpoint de envio só aceita o que vem
 do formulário — não há caminho do modelo para a caixa do cliente.
