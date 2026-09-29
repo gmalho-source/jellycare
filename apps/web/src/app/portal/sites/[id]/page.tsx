@@ -1,3 +1,4 @@
+import { explicacaoDe } from '@jellycare/core'
 import { notFound } from 'next/navigation'
 import {
   Card,
@@ -100,18 +101,49 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
           </EmptyState>
         ) : (
           <ul className="divide-y divide-ink-100">
-            {abertos.map((finding) => (
-              <li key={finding.id} className="px-5 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <p className="font-medium text-ink-900">{finding.title}</p>
-                  <SeverityBadge severity={finding.severity} />
-                </div>
-                <p className="mt-1.5 text-sm text-ink-600">{finding.detail}</p>
-                <p className="mt-2 text-xs text-ink-400">
-                  Detetado {formatRelative(finding.firstSeenAt)}
-                </p>
-              </li>
-            ))}
+            {abertos.map((finding) => {
+              // O texto técnico é o que a equipa precisa de ler; a explicação
+              // é o que o cliente precisa. Quando há explicação escrita para
+              // este código, é ela que manda — o título técnico não chega a
+              // aparecer. A alternativa, mostrar os dois, obrigava o cliente a
+              // decidir em qual acreditar.
+              const explicacao = explicacaoDe(finding.code)
+              return (
+                <li key={finding.id} className="px-5 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <p className="font-medium text-ink-900">
+                      {explicacao?.titulo ?? finding.title}
+                    </p>
+                    <SeverityBadge severity={finding.severity} />
+                  </div>
+
+                  <p className="mt-1.5 text-sm text-ink-600">
+                    {explicacao?.oQueE ?? finding.detail}
+                  </p>
+
+                  {explicacao ? (
+                    <dl className="mt-3 space-y-2 border-l-2 border-ink-100 pl-3.5 text-sm">
+                      <div>
+                        <dt className="font-mono text-[0.6875rem] uppercase tracking-[0.12em] text-ink-400">
+                          Porque importa
+                        </dt>
+                        <dd className="mt-0.5 text-ink-600">{explicacao.porqueImporta}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-mono text-[0.6875rem] uppercase tracking-[0.12em] text-ink-400">
+                          O que fazemos
+                        </dt>
+                        <dd className="mt-0.5 text-ink-600">{explicacao.oQueFazemos}</dd>
+                      </div>
+                    </dl>
+                  ) : null}
+
+                  <p className="mt-3 text-xs text-ink-400">
+                    Detetado {formatRelative(finding.firstSeenAt)}
+                  </p>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>

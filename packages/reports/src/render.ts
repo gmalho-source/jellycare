@@ -1,4 +1,4 @@
-import type { Severity } from '@jellycare/core'
+import { explicacaoDe, type Severity } from '@jellycare/core'
 import type { ReportData } from './build.js'
 import { formatDuration, formatPercent } from './build.js'
 
@@ -151,16 +151,21 @@ function findingsSection(data: ReportData): string {
       ? '<p class="empty">Nenhum problema em aberto no fim do período.</p>'
       : `<ul class="findings">
           ${findings.highlights
-            .map(
-              (finding) => `<li>
+            .map((finding) => {
+              // O mesmo texto que o cliente lê no portal. O relatório é a
+              // versão em papel da mesma conversa, e dizer as duas coisas de
+              // maneiras diferentes obrigava-o a decidir em qual acreditar.
+              const explicacao = explicacaoDe(finding.code)
+              return `<li>
                 <div class="finding-head">${severityPill(finding.severity)}<strong>${escapeHtml(
-                  finding.title,
+                  explicacao?.titulo ?? finding.title,
                 )}</strong></div>
                 ${finding.discriminator ? `<div class="mono">${escapeHtml(finding.discriminator)}</div>` : ''}
-                ${finding.detail ? `<p>${escapeHtml(finding.detail)}</p>` : ''}
+                ${explicacao ? `<p>${escapeHtml(explicacao.oQueE)}</p>` : finding.detail ? `<p>${escapeHtml(finding.detail)}</p>` : ''}
+                ${explicacao ? `<p class="muted">${escapeHtml(explicacao.oQueFazemos)}</p>` : ''}
                 <div class="muted">Detetado em ${formatDate(finding.firstSeenAt)}</div>
-              </li>`,
-            )
+              </li>`
+            })
             .join('')}
         </ul>`
 
@@ -172,7 +177,9 @@ function findingsSection(data: ReportData): string {
            ${findings.resolvedHighlights
              .map(
                (finding) =>
-                 `<li>${severityPill(finding.severity)} ${escapeHtml(finding.title)}</li>`,
+                 `<li>${severityPill(finding.severity)} ${escapeHtml(
+                   explicacaoDe(finding.code)?.titulo ?? finding.title,
+                 )}</li>`,
              )
              .join('')}
          </ul>`

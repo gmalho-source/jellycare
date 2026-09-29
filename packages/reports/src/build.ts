@@ -1,4 +1,4 @@
-import { severityRank, type Severity } from '@jellycare/core'
+import { explicacaoDe, severityRank, type Severity } from '@jellycare/core'
 import type { ReportPeriod } from './period.js'
 import { summariseUptime, type UptimeSample, type UptimeSummary } from './uptime.js'
 
@@ -298,7 +298,11 @@ function buildRecommendations(findings: FindingsSummary, forms: FormsSummary): s
 
   for (const finding of findings.highlights) {
     if (severityRank(finding.severity) < severityRank('medium')) continue
-    recommendations.push(finding.title)
+    // O que a Jelly vai fazer, e não o nome técnico do problema. Uma lista de
+    // ações que diz «Falta o header Strict-Transport-Security» não é uma lista
+    // de ações: é a lista de problemas outra vez.
+    const explicacao = explicacaoDe(finding.code)
+    recommendations.push(explicacao?.oQueFazemos ?? finding.title)
     if (recommendations.length >= 5) break
   }
 

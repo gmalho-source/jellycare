@@ -77,8 +77,8 @@ isso, e duas pessoas a escrever ao mesmo tempo intercalavam turnos.
 
 ## Porque não há um para o cliente
 
-Os checks emitem 45 códigos distintos. É um conjunto fechado: quando um cliente
-pergunta «o que é isto?», a pergunta tem 45 respostas possíveis, que se escrevem
+Os checks emitem 67 códigos distintos. É um conjunto fechado: quando um cliente
+pergunta «o que é isto?», a pergunta tem 67 respostas possíveis, que se escrevem
 uma vez e se revêem. Isso é conteúdo, não é IA.
 
 Um assistente a falar com um cliente fala em nome da Jelly sobre a segurança do
@@ -87,9 +87,9 @@ onde uma alucinação custa mais. Calibrar para cima num cabeçalho em falta faz
 cliente entrar em pânico; calibrar para baixo em algo que depois é explorado é
 pior.
 
-O passo seguinte planeado é a explicação por código no portal e no relatório
-mensal, escrita e revista por gente. Um chat para o cliente, se vier, vem depois
-disso e assente nessas explicações.
+Essas explicações já existem: vivem em `packages/core/src/explicacoes.ts` e
+aparecem no portal e no relatório mensal. Um chat para o cliente, se vier, vem
+depois e assente nelas.
 
 ## Proteção de dados
 

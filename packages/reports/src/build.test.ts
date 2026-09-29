@@ -1,4 +1,4 @@
-import type { Severity } from '@jellycare/core'
+import { explicacaoDe, type Severity } from '@jellycare/core'
 import { describe, expect, it } from 'vitest'
 import {
   buildReport,
@@ -250,17 +250,21 @@ describe('buildReport — resumo executivo', () => {
 })
 
 describe('buildReport — recomendações', () => {
-  it('propõe os problemas mais graves como ações', () => {
+  it('propõe ações e não os nomes técnicos dos problemas', () => {
+    // Uma lista de ações que diz «Falta o header Strict-Transport-Security»
+    // não é uma lista de ações: é a lista de problemas repetida. O que entra
+    // aqui é o que a Jelly vai fazer, escrito para o cliente.
     const data = report({
       findings: [
-        finding({ severity: 'critical', title: 'Certificado expirado' }),
-        finding({ severity: 'low', title: 'Detalhe menor' }),
+        finding({ severity: 'critical', code: 'cert_expired', title: 'Certificado expirado' }),
+        finding({ severity: 'low', code: 'exposed_ds_store', title: 'Detalhe menor' }),
       ],
     })
 
-    expect(data.recommendations[0]).toBe('Certificado expirado')
+    expect(data.recommendations[0]).toBe(explicacaoDe('cert_expired')!.oQueFazemos)
+    expect(data.recommendations[0]).not.toContain('Certificado expirado')
     // Os de severidade baixa ficam no corpo do relatório, não nas ações.
-    expect(data.recommendations).not.toContain('Detalhe menor')
+    expect(data.recommendations).not.toContain(explicacaoDe('exposed_ds_store')!.oQueFazemos)
   })
 
   it('limita a lista a cinco ações', () => {

@@ -1,3 +1,4 @@
+import { explicacaoDe } from '@jellycare/core'
 import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { buildReport, type ReportInput } from './build.js'
@@ -98,8 +99,27 @@ describe('renderReportHtml', () => {
   it('separa o que ficou em aberto do que foi corrigido', () => {
     const html = renderReportHtml(COMPLETO())
 
-    expect(html).toContain('não gerou notificação por email')
+    expect(html).toContain(explicacaoDe('form_email_not_delivered')!.titulo)
     expect(html).toContain('Corrigido durante o mês')
+  })
+
+  it('fala ao cliente na língua dele e diz o que a Jelly faz', () => {
+    // O relatório é a versão em papel do que o cliente vê no portal. Antes
+    // levava o título técnico tal como a equipa o lê, o que num PDF que vai
+    // para o cliente é pior do que no painel: não há ninguém ao lado para
+    // explicar.
+    const html = renderReportHtml(COMPLETO())
+
+    // Um problema em aberto leva a explicação inteira.
+    const aberto = explicacaoDe('form_email_not_delivered')!
+    expect(html).toContain(aberto.titulo)
+    expect(html).toContain(aberto.oQueE)
+    expect(html).toContain(aberto.oQueFazemos)
+    expect(html).not.toContain('O formulário de contacto não gerou notificação por email')
+
+    // Um já corrigido leva só o título: não há nada a explicar nem a fazer.
+    expect(html).toContain(explicacaoDe('cert_expiring')!.titulo)
+    expect(html).not.toContain('O certificado expira em 12 dias')
   })
 
   it('traduz os tipos de verificação para linguagem do cliente', () => {
