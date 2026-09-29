@@ -14,7 +14,8 @@ import {
   schema,
   setNegotiatedDpaRef,
 } from '@jellycare/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { REPORT_SECTIONS, normaliseExcluded } from '@jellycare/reports/data'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -1196,4 +1197,156 @@ export async function requestPageSpeedAction(
   // Curta de propósito: a mensagem vive ao lado do botão, no cabeçalho do
   // cartão, e uma frase longa empurra o título para duas linhas.
   return { message: 'Pedido registado — a próxima passagem apanha-o.' }
+}
+
+export interface ReportContentState {
+  message?: string
+  error?: string
+}
+
+/**
+ * O site, se quem pede o gere. Os três pedidos da configuração do relatório
+ * precisam da mesma resposta à mesma pergunta.
+ */
+async function siteDoRelatorio(
+  siteId: string,
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const user = await requireUser()
+  if (!z.string().uuid().safeParse(siteId).success) return { ok: false, error: 'Site inválido.' }
+
+  const rows = await getDb()
+    .select({ organizationId: schema.sites.organizationId })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+  const site = rows[0]
+  if (!site) return { ok: false, error: 'Site não encontrado.' }
+
+  assertMembership(user, site.organizationId)
+  if (!canManage(user, site.organizationId)) {
+    return { ok: false, error: 'Não tem permissão para configurar o relatório deste site.' }
+  }
+  return { ok: true, userId: user.id }
+}
+
+/**
+ * Escolhe os módulos que entram no relatório deste site.
+ *
+ * O formulário manda os que ficam marcados, e grava-se o contrário — os que
+ * saem. É o que faz um módulo acrescentado amanhã aparecer já em todos os
+ * sites, em vez de nascer desligado em cada um.
+ */
+export async function setReportSectionsAction(
+  _previous: ReportContentState,
+  formData: FormData,
+): Promise<ReportContentState> {
+  const siteId = String(formData.get('siteId') ?? '')
+  const acesso = await siteDoRelatorio(siteId)
+  if (!acesso.ok) return { error: acesso.error }
+
+  const incluidas = new Set(formData.getAll('section').map(String))
+  const excluidas = normaliseExcluded(
+    REPORT_SECTIONS.map((section) => section.key).filter((key) => !incluidas.has(key)),
+  )
+
+  // Um relatório só com o resumo não diz nada que o resumo não dissesse
+  // melhor sozinho, e desmarcar tudo é quase sempre um clique a mais.
+  if (excluidas.length === REPORT_SECTIONS.length) {
+    return { error: 'O relatório tem de levar pelo menos um módulo.' }
+  }
+
+  await getDb()
+    .update(schema.sites)
+    .set({ reportExcludedSections: excluidas })
+    .where(eq(schema.sites.id, siteId))
+
+  revalidatePath(`/sites/${siteId}/relatorios`)
+  return {
+    message:
+      excluidas.length === 0
+        ? 'Guardado. O próximo relatório leva todos os módulos.'
+        : `Guardado. O próximo relatório sai sem ${excluidas.length === 1 ? 'um módulo' : `${excluidas.length} módulos`}.`,
+  }
+}
+
+const reportNoteSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, 'Escreva a nota.')
+    .max(4000, 'A nota tem no máximo 4000 caracteres.'),
+  mode: z.enum(['persistent', 'next_only'], { message: 'Escolha quando a nota segue.' }),
+})
+
+/**
+ * Acrescenta uma nota da equipa ao relatório.
+ *
+ * Sempre uma nota nova, nunca a edição de uma que já existe. Uma nota
+ * persistente sobre o contrato e uma nota sobre o que aconteceu este mês são
+ * coisas diferentes, e ter de escolher entre elas era o problema a resolver.
+ */
+export async function addReportNoteAction(
+  _previous: ReportContentState,
+  formData: FormData,
+): Promise<ReportContentState> {
+  const siteId = String(formData.get('siteId') ?? '')
+  const acesso = await siteDoRelatorio(siteId)
+  if (!acesso.ok) return { error: acesso.error }
+
+  const parsed = reportNoteSchema.safeParse({
+    body: formData.get('body') ?? '',
+    mode: formData.get('mode'),
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Nota inválida.' }
+
+  await getDb().insert(schema.reportNotes).values({
+    siteId,
+    body: parsed.data.body,
+    mode: parsed.data.mode,
+    createdBy: acesso.userId,
+  })
+
+  revalidatePath(`/sites/${siteId}/relatorios`)
+  return {
+    message:
+      parsed.data.mode === 'persistent'
+        ? 'Nota acrescentada. Segue em todos os relatórios até ser retirada.'
+        : 'Nota acrescentada. Segue só no próximo relatório.',
+  }
+}
+
+/**
+ * Retira uma nota. Fica guardada, marcada como retirada: é o registo do que
+ * já foi dito ao cliente, e apagá-la era perder isso.
+ *
+ * Só as que ainda estão ativas. Uma nota «só no próximo» que já seguiu faz
+ * parte de um relatório enviado, e retirá-la agora não desenviava nada.
+ */
+export async function archiveReportNoteAction(formData: FormData): Promise<void> {
+  const noteId = String(formData.get('noteId') ?? '')
+  if (!z.string().uuid().safeParse(noteId).success) return
+
+  const rows = await getDb()
+    .select({ siteId: schema.reportNotes.siteId })
+    .from(schema.reportNotes)
+    .where(eq(schema.reportNotes.id, noteId))
+    .limit(1)
+  const nota = rows[0]
+  if (!nota) return
+
+  const acesso = await siteDoRelatorio(nota.siteId)
+  if (!acesso.ok) return
+
+  await getDb()
+    .update(schema.reportNotes)
+    .set({ archivedAt: new Date() })
+    .where(
+      and(
+        eq(schema.reportNotes.id, noteId),
+        isNull(schema.reportNotes.archivedAt),
+        isNull(schema.reportNotes.reportId),
+      ),
+    )
+
+  revalidatePath(`/sites/${nota.siteId}/relatorios`)
 }

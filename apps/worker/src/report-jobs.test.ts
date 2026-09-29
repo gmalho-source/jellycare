@@ -311,6 +311,83 @@ describe('regenerateReport', () => {
 })
 
 
+describe('notas da equipa e módulos', () => {
+  async function nota(body: string, mode: 'persistent' | 'next_only', ajustes = {}) {
+    const [criada] = await db
+      .insert(schema.reportNotes)
+      .values({ siteId, body, mode, ...ajustes })
+      .returning({ id: schema.reportNotes.id })
+    return criada!.id
+  }
+
+  it('uma nota «só no próximo» entra uma vez e fica presa a esse relatório', async () => {
+    const id = await nota('Migrámos o site para o novo alojamento.', 'next_only')
+
+    const junho = await generateReport(deps(), siteId, PERIOD)
+    expect(junho.status === 'generated' && junho.notes).toEqual([id])
+
+    const [guardada] = await db.select().from(schema.reportNotes).where(eq(schema.reportNotes.id, id))
+    expect(guardada!.reportId).toBe(junho.status === 'generated' ? junho.reportId : null)
+
+    // O relatório seguinte já não a leva.
+    const julho = await generateReport(deps(), siteId, monthPeriod(2026, 7, TIME_ZONE))
+    expect(julho.status === 'generated' && julho.notes).toEqual([])
+  }, 120_000)
+
+  it('uma nota persistente entra em todos, e várias podem coexistir', async () => {
+    // Acrescentar uma nota nova nunca obriga a mexer numa persistente que já
+    // lá esteja: as duas entram, pela ordem em que foram escritas.
+    const contrato = await nota('O contrato inclui 2 horas mensais de alterações.', 'persistent')
+    const avulsa = await nota('Este mês corrigimos o formulário de orçamentos.', 'next_only')
+
+    const junho = await generateReport(deps(), siteId, PERIOD)
+    expect(junho.status === 'generated' && junho.notes).toEqual([contrato, avulsa])
+
+    const julho = await generateReport(deps(), siteId, monthPeriod(2026, 7, TIME_ZONE))
+    expect(julho.status === 'generated' && julho.notes).toEqual([contrato])
+  }, 120_000)
+
+  it('uma nota retirada não entra', async () => {
+    await nota('Já não se aplica.', 'persistent', { archivedAt: new Date() })
+    const junho = await generateReport(deps(), siteId, PERIOD)
+    expect(junho.status === 'generated' && junho.notes).toEqual([])
+  }, 120_000)
+
+  it('regenerar o relatório devolve-lhe a nota «só no próximo» em vez de a perder', async () => {
+    // Regenerar apaga o relatório e volta a gerá-lo. Sem o `set null`, a nota
+    // ficava presa a um relatório que já não existe e desaparecia da versão
+    // nova — que é precisamente a que o cliente vai receber.
+    const id = await nota('Nota do mês.', 'next_only')
+    await generateReport(deps(), siteId, PERIOD)
+
+    const outraVez = await regenerateReport(deps(), siteId, 2026, 6)
+    expect(outraVez.status === 'generated' && outraVez.notes).toEqual([id])
+    const [guardada] = await db.select().from(schema.reportNotes).where(eq(schema.reportNotes.id, id))
+    expect(guardada!.reportId).toBe(outraVez.status === 'generated' ? outraVez.reportId : null)
+  }, 120_000)
+
+  it('deixa de fora os módulos tirados no site', async () => {
+    await db
+      .update(schema.sites)
+      .set({ reportExcludedSections: ['desempenho', 'trabalho'] })
+      .where(eq(schema.sites.id, siteId))
+
+    const junho = await generateReport(deps(), siteId, PERIOD)
+    expect(junho.status === 'generated' && junho.sections).not.toContain('desempenho')
+    expect(junho.status === 'generated' && junho.sections).not.toContain('trabalho')
+    expect(junho.status === 'generated' && junho.sections).toContain('disponibilidade')
+  }, 120_000)
+
+  it('só leva o módulo de WordPress quando há ligação', async () => {
+    const sem = await generateReport(deps(), siteId, PERIOD)
+    expect(sem.status === 'generated' && sem.sections).not.toContain('wordpress')
+
+    await db.insert(schema.connectors).values({ siteId, type: 'wp_umbrella', externalId: '1' })
+    const com = await regenerateReport(deps(), siteId, 2026, 6)
+    expect(com.status === 'generated' && com.sections).toContain('wordpress')
+  }, 120_000)
+})
+
 describe('runReportRequests', () => {
   it('envia para o destinatário escolhido no pedido, e não para os configurados', async () => {
     // O caso de uso: mandar o relatório a um contacto novo do cliente, ou a

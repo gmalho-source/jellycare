@@ -1929,6 +1929,131 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 90_000)
 
+  it('escolhe os módulos do relatório e junta notas da equipa', async () => {
+    const marca = Date.now()
+    const page = await entrarComo(email)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${siteId}/relatorios`)
+
+    // Por omissão entra tudo. Tirar é a exceção.
+    const desempenho = page.locator('input[name=section][value=desempenho]')
+    await desempenho.waitFor()
+    expect(await page.locator('input[name=section]:not(:checked)').count()).toBe(0)
+
+    await desempenho.uncheck()
+    await page.click('button:has-text("Guardar módulos")')
+    await page.waitForSelector('text=O próximo relatório sai sem um módulo')
+
+    const excluidas = async () => {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        const [linha] = await db
+          .select({ fora: schema.sites.reportExcludedSections })
+          .from(schema.sites)
+          .where(eq(schema.sites.id, siteId))
+        return linha!.fora
+      } finally {
+        await close()
+      }
+    }
+    expect(await excluidas()).toEqual(['desempenho'])
+
+    // Desmarcar tudo não se grava: um relatório só com o resumo não é um
+    // relatório.
+    for (const caixa of await page.locator('input[name=section]').all()) await caixa.uncheck()
+    await page.click('button:has-text("Guardar módulos")')
+    await page.waitForSelector('text=O relatório tem de levar pelo menos um módulo')
+    expect(await excluidas()).toEqual(['desempenho'])
+
+    // Uma nota persistente, e depois uma avulsa com a persistente já lá — era
+    // este o caso que não podia exigir mexer na que já existia.
+    const persistente = `Contrato renovado até dezembro ${marca}`
+    const avulsa = `Este mês migrámos o alojamento ${marca}`
+
+    await page.fill('#report-note', persistente)
+    await page.check('input[name=mode][value=persistent]')
+    await page.click('button:has-text("Acrescentar nota")')
+    await page.waitForSelector('text=Segue em todos os relatórios até ser retirada')
+    await expect
+      .poll(() => page.inputValue('#report-note'), { timeout: PRAZO_DE_ESPERA })
+      .toBe('')
+
+    await page.fill('#report-note', avulsa)
+    await page.click('button:has-text("Acrescentar nota")')
+    await page.waitForSelector('text=Segue só no próximo relatório')
+
+    const ativas = page.locator('ul[aria-label="Notas no próximo relatório"] > li')
+    await expect.poll(() => ativas.count(), { timeout: PRAZO_DE_ESPERA }).toBe(2)
+    expect(await ativas.nth(0).textContent()).toContain('Em todos os relatórios')
+    expect(await ativas.nth(1).textContent()).toContain('Só no próximo')
+
+    // Retirar tira da lista do próximo relatório e deixa rasto.
+    await ativas.filter({ hasText: avulsa }).locator('button:has-text("Retirar")').click()
+    await expect.poll(() => ativas.count(), { timeout: PRAZO_DE_ESPERA }).toBe(1)
+    await page.click('summary:has-text("Notas anteriores")')
+    await page.waitForSelector(`details >> text=${avulsa}`)
+
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const notas = await db
+        .select({ body: schema.reportNotes.body, mode: schema.reportNotes.mode, fora: schema.reportNotes.archivedAt })
+        .from(schema.reportNotes)
+        .where(eq(schema.reportNotes.siteId, siteId))
+      const porTexto = new Map(notas.map((nota) => [nota.body, nota]))
+      expect(porTexto.get(persistente)).toMatchObject({ mode: 'persistent', fora: null })
+      expect(porTexto.get(avulsa)?.mode).toBe('next_only')
+      expect(porTexto.get(avulsa)?.fora).toBeInstanceOf(Date)
+
+      // O site partilhado volta como estava, para os outros testes.
+      await db
+        .update(schema.sites)
+        .set({ reportExcludedSections: [] })
+        .where(eq(schema.sites.id, siteId))
+      await db.delete(schema.reportNotes).where(eq(schema.reportNotes.siteId, siteId))
+    } finally {
+      await close()
+    }
+
+    await page.close()
+  }, 120_000)
+
+  it('não mostra a configuração do relatório a quem só é cliente daquele site', async () => {
+    // Um cliente puro nem chega aqui: o layout manda-o para o portal. O caso
+    // que sobra é o de quem é equipa noutra organização e cliente nesta —
+    // passa o layout, vê a página, e não pode ver nem mexer nas notas.
+    const marca = Date.now()
+    const misto = `misto-${marca}@exemplo.pt`
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [site] = await db
+        .select({ organizationId: schema.sites.organizationId })
+        .from(schema.sites)
+        .where(eq(schema.sites.id, siteId))
+      const [utilizador] = await db
+        .insert(schema.users)
+        .values({ email: misto })
+        .returning({ id: schema.users.id })
+      const [outra] = await db
+        .insert(schema.organizations)
+        .values({ name: `Agência ${marca}`, slug: `agencia-${marca}` })
+        .returning({ id: schema.organizations.id })
+      await db.insert(schema.memberships).values([
+        { organizationId: site!.organizationId, userId: utilizador!.id, role: 'client' },
+        { organizationId: outra!.id, userId: utilizador!.id, role: 'member' },
+      ])
+    } finally {
+      await close()
+    }
+
+    const page = await entrarComo(misto)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${siteId}/relatorios`)
+    await page.waitForSelector('h2:has-text("Relatórios mensais")')
+    expect(await page.isVisible('text=Notas da equipa')).toBe(false)
+    expect(await page.isVisible('text=O que entra no relatório')).toBe(false)
+    await page.close()
+  }, 90_000)
+
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()
     await anonima.goto(`${baseUrl}/`)

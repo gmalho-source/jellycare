@@ -1,5 +1,6 @@
 import { explicacaoDe, severityRank, type Severity } from '@jellycare/core'
 import type { ReportPeriod } from './period.js'
+import { includedSections, type ReportSectionKey } from './sections.js'
 import { summariseUptime, type UptimeSample, type UptimeSummary } from './uptime.js'
 
 /**
@@ -39,6 +40,29 @@ export interface ReportCheckRun {
   startedAt: Date
 }
 
+/** Uma medição de velocidade, telemóvel ou computador. */
+export interface ReportPageSpeedRun {
+  strategy: 'mobile' | 'desktop'
+  startedAt: Date
+  performanceScore: number | null
+  lcpMs: number | null
+  cls: number | null
+  tbtMs: number | null
+}
+
+export interface ReportWordPress {
+  /** O inventário à data do relatório, e não o do fim do período: não há histórico dele. */
+  components: { kind: string; name: string; version: string | null; latestVersion: string | null }[]
+  updates: {
+    name: string
+    fromVersion: string | null
+    toVersion: string | null
+    status: string
+    orderedAt: Date
+  }[]
+  backups: { startedAt: Date; finishedAt: Date | null; status: string }[]
+}
+
 export interface ReportInput {
   organizationName: string
   site: { label: string; url: string; hostname: string }
@@ -51,6 +75,38 @@ export interface ReportInput {
   expectedIntervalMs?: number
   /** Marca a apresentar no relatório. Por omissão, Jellycare. */
   brand?: { name: string; url: string }
+  /** Medições de velocidade do período. */
+  pageSpeedRuns?: readonly ReportPageSpeedRun[]
+  /** Só quando o site está ligado a uma ferramenta de manutenção. */
+  wordpress?: ReportWordPress | null
+  /** Os módulos que ficam de fora para este cliente. */
+  excludedSections?: readonly string[]
+  /** As notas da equipa que entram neste relatório. */
+  notes?: readonly string[]
+}
+
+export interface PageSpeedStrategySummary {
+  runs: number
+  latestScore: number | null
+  firstScore: number | null
+  lcpMs: number | null
+  cls: number | null
+  tbtMs: number | null
+}
+
+export interface PerformanceSummary {
+  mobile: PageSpeedStrategySummary | null
+  desktop: PageSpeedStrategySummary | null
+}
+
+export interface WordPressSummary {
+  updatesApplied: ReportWordPress['updates']
+  updatesFailed: number
+  pendingUpdates: number
+  coreOutdated: { version: string | null; latestVersion: string } | null
+  backups: number
+  backupsFailed: number
+  lastBackupAt: Date | null
 }
 
 export interface FindingsSummary {
@@ -88,6 +144,12 @@ export interface ReportData {
   findings: FindingsSummary
   forms: FormsSummary
   activity: ActivitySummary
+  performance: PerformanceSummary
+  wordpress: WordPressSummary | null
+  /** Os módulos que entram, pela ordem em que aparecem. */
+  sections: ReportSectionKey[]
+  /** Notas da equipa, tal como foram escritas. */
+  notes: string[]
   /** Resumo executivo, em linguagem de negócio. */
   summary: string[]
   recommendations: string[]
@@ -218,10 +280,15 @@ function buildSummary(
   uptime: UptimeSummary,
   findings: FindingsSummary,
   forms: FormsSummary,
+  sections: ReadonlySet<ReportSectionKey>,
 ): string[] {
   const lines: string[] = []
 
-  if (uptime.uptimePercent === null) {
+  // Cada frase do resumo pertence a um módulo e sai com ele. Um resumo que fala
+  // de uma secção que o cliente não vai encontrar mais abaixo lê-se como erro.
+  if (!sections.has('disponibilidade')) {
+    // nada a dizer sobre disponibilidade
+  } else if (uptime.uptimePercent === null) {
     lines.push('Não houve observações de disponibilidade neste período.')
   } else if (uptime.slaMet === null) {
     lines.push(
@@ -247,7 +314,7 @@ function buildSummary(
     )
   }
 
-  if (findings.resolved > 0) {
+  if (sections.has('seguranca') && findings.resolved > 0) {
     lines.push(
       findings.resolved === 1
         ? 'Foi corrigido 1 problema durante o mês.'
@@ -256,7 +323,9 @@ function buildSummary(
   }
 
   const criticos = findings.openBySeverity.critical + findings.openBySeverity.high
-  if (criticos > 0) {
+  if (!sections.has('seguranca')) {
+    // nada a dizer sobre problemas
+  } else if (criticos > 0) {
     lines.push(
       criticos === 1
         ? 'Fica 1 problema de gravidade elevada por resolver, detalhado adiante.'
@@ -272,7 +341,7 @@ function buildSummary(
     lines.push('Não ficou nenhum problema por resolver.')
   }
 
-  if (forms.submissions > 0) {
+  if (sections.has('formularios') && forms.submissions > 0) {
     const falhados = forms.submissionFailures + forms.notDelivered
     if (falhados > 0) {
       lines.push(
@@ -289,14 +358,24 @@ function buildSummary(
     }
   }
 
+  if (lines.length === 0) {
+    lines.push('Resumo do acompanhamento do site durante o mês.')
+  }
+
   return lines
 }
 
 /** Ações concretas, pela ordem em que valem a pena. */
-function buildRecommendations(findings: FindingsSummary, forms: FormsSummary): string[] {
+function buildRecommendations(
+  findings: FindingsSummary,
+  forms: FormsSummary,
+  sections: ReadonlySet<ReportSectionKey>,
+): string[] {
   const recommendations: string[] = []
 
-  for (const finding of findings.highlights) {
+  // Uma ação sobre um problema que o relatório não mostra obrigava o cliente a
+  // perguntar de onde vem. Sai com o módulo de onde nasceu.
+  for (const finding of sections.has('seguranca') ? findings.highlights : []) {
     if (severityRank(finding.severity) < severityRank('medium')) continue
     // O que a Jelly vai fazer, e não o nome técnico do problema. Uma lista de
     // ações que diz «Falta o header Strict-Transport-Security» não é uma lista
@@ -306,7 +385,7 @@ function buildRecommendations(findings: FindingsSummary, forms: FormsSummary): s
     if (recommendations.length >= 5) break
   }
 
-  if (forms.landedInSpam > 0 && recommendations.length < 5) {
+  if (sections.has('formularios') && forms.landedInSpam > 0 && recommendations.length < 5) {
     recommendations.push(
       'Alinhar SPF, DKIM e DMARC do domínio para que as notificações dos formulários deixem de ' +
         'ser classificadas como spam.',
@@ -322,6 +401,64 @@ function buildRecommendations(findings: FindingsSummary, forms: FormsSummary): s
   return recommendations
 }
 
+function summariseStrategy(
+  runs: readonly ReportPageSpeedRun[],
+): PageSpeedStrategySummary | null {
+  const comPontuacao = [...runs]
+    .filter((run) => run.performanceScore !== null)
+    .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+  if (comPontuacao.length === 0) return null
+  const ultima = comPontuacao[comPontuacao.length - 1]!
+  return {
+    runs: comPontuacao.length,
+    latestScore: ultima.performanceScore,
+    firstScore: comPontuacao[0]!.performanceScore,
+    lcpMs: ultima.lcpMs,
+    cls: ultima.cls,
+    tbtMs: ultima.tbtMs,
+  }
+}
+
+function summarisePerformance(
+  runs: readonly ReportPageSpeedRun[],
+  period: ReportPeriod,
+): PerformanceSummary {
+  const doPeriodo = runs.filter((run) => within(run.startedAt, period))
+  return {
+    mobile: summariseStrategy(doPeriodo.filter((run) => run.strategy === 'mobile')),
+    desktop: summariseStrategy(doPeriodo.filter((run) => run.strategy === 'desktop')),
+  }
+}
+
+function summariseWordPress(
+  wordpress: ReportWordPress | null | undefined,
+  period: ReportPeriod,
+): WordPressSummary | null {
+  if (!wordpress) return null
+  const atualizacoes = wordpress.updates.filter((update) => within(update.orderedAt, period))
+  const copias = wordpress.backups.filter((backup) => within(backup.startedAt, period))
+  const concluidas = copias
+    .filter((backup) => backup.status === 'FINISHED' && backup.finishedAt)
+    .map((backup) => backup.finishedAt!)
+    .sort((a, b) => b.getTime() - a.getTime())
+  const core = wordpress.components.find((component) => component.kind === 'core')
+
+  return {
+    updatesApplied: atualizacoes.filter((update) => update.status === 'succeeded'),
+    updatesFailed: atualizacoes.filter((update) => update.status === 'failed').length,
+    pendingUpdates: wordpress.components.filter(
+      (component) => component.kind !== 'core' && component.latestVersion !== null,
+    ).length,
+    coreOutdated:
+      core && core.latestVersion
+        ? { version: core.version, latestVersion: core.latestVersion }
+        : null,
+    backups: concluidas.length,
+    backupsFailed: copias.filter((backup) => backup.status === 'ERROR').length,
+    lastBackupAt: concluidas[0] ?? null,
+  }
+}
+
 export function buildReport(input: ReportInput): ReportData {
   const uptime = summariseUptime(input.uptimeSamples, {
     period: input.period,
@@ -334,6 +471,14 @@ export function buildReport(input: ReportInput): ReportData {
   const findings = summariseFindings(input.findings, input.period)
   const forms = summariseForms(input.formRuns, input.period)
   const activity = summariseActivity(input.checkRuns, input.period)
+  const performance = summarisePerformance(input.pageSpeedRuns ?? [], input.period)
+  const wordpress = summariseWordPress(input.wordpress, input.period)
+
+  // Um módulo sem nada que o sustente não entra, esteja ou não ligado: o do
+  // WordPress num site que não é WordPress seria uma secção vazia a dizer que
+  // não há nada, e isso lê-se como falha.
+  const pedidos = includedSections(input.excludedSections ?? [])
+  if (!wordpress) pedidos.delete('wordpress')
 
   return {
     organizationName: input.organizationName,
@@ -344,8 +489,12 @@ export function buildReport(input: ReportInput): ReportData {
     findings,
     forms,
     activity,
-    summary: buildSummary(uptime, findings, forms),
-    recommendations: buildRecommendations(findings, forms),
+    performance,
+    wordpress,
+    sections: [...pedidos],
+    notes: (input.notes ?? []).map((nota) => nota.trim()).filter((nota) => nota.length > 0),
+    summary: buildSummary(uptime, findings, forms, pedidos),
+    recommendations: buildRecommendations(findings, forms, pedidos),
     generatedAt: new Date(),
   }
 }

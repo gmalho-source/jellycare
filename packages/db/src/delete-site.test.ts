@@ -14,6 +14,7 @@ import {
   notificationDeliveries,
   notificationTargets,
   organizations,
+  reportNotes,
   reportRequests,
   reports,
   siteVerifications,
@@ -206,6 +207,10 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
     },
   })
   await db.insert(reportRequests).values({ siteId })
+  const [nota] = await db
+    .insert(reportNotes)
+    .values({ siteId, body: 'Renovámos o contrato de alojamento.', mode: 'persistent' })
+    .returning({ id: reportNotes.id })
 
   await db.delete(sites).where(eq(sites.id, siteId))
 
@@ -232,6 +237,8 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
   expect(
     await db.select().from(assistantMessages).where(eq(assistantMessages.threadId, thread!.id)),
   ).toHaveLength(0)
+
+  expect(await db.select().from(reportNotes).where(eq(reportNotes.id, nota!.id))).toHaveLength(0)
 
   await db.delete(organizations).where(eq(organizations.id, organizationId))
   await db.delete(users).where(eq(users.id, pessoa!.id))

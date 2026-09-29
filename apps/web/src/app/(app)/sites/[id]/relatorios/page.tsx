@@ -1,10 +1,13 @@
 import { notFound } from 'next/navigation'
 import { latestReportRequest } from '@jellycare/db'
+import { REPORT_SECTIONS } from '@jellycare/reports/data'
 import { Card, CardHeader, EmptyState, formatRelative, nomeDoMes } from '@/components/ui'
 import { getDb } from '@/lib/db'
 import { getSiteDetail } from '@/lib/queries'
+import { lerNotasDoRelatorio } from '@/lib/relatorio-conteudo'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { ReportPanel } from '../report-panel'
+import { ModulosDoRelatorio, NotasDaEquipa } from './conteudo'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,10 +19,14 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
   if (!detail) notFound()
   assertMembership(user, detail.site.organizationId)
   const manageable = canManage(user, detail.site.organizationId)
-  const lastRequest = await latestReportRequest(getDb(), detail.site.id)
+  const [lastRequest, notas] = await Promise.all([
+    latestReportRequest(getDb(), detail.site.id),
+    manageable ? lerNotasDoRelatorio(detail.site.id) : null,
+  ])
 
   return (
-    <Card>
+    <>
+      <Card>
         <CardHeader
           title="Relatórios mensais"
           action={
@@ -72,5 +79,35 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
           />
         ) : null}
       </Card>
+
+      {/* Configuração do que o cliente recebe. Só para quem gere: as notas
+          são a voz da equipa, e um cliente a ver as do mês seguinte antes de
+          serem enviadas não é o que ele contratou. */}
+      {manageable && notas ? (
+        <>
+          <Card>
+            <CardHeader
+              title="O que entra no relatório"
+              action={<span className="text-xs text-ink-400">Vale a partir do próximo</span>}
+            />
+            <ModulosDoRelatorio
+              siteId={detail.site.id}
+              modulos={REPORT_SECTIONS}
+              excluidas={detail.site.reportExcludedSections}
+              temWordPress={detail.connector !== null}
+            />
+          </Card>
+
+          <Card>
+            <CardHeader title="Notas da equipa" />
+            <NotasDaEquipa
+              siteId={detail.site.id}
+              ativas={notas.ativas}
+              anteriores={notas.anteriores}
+            />
+          </Card>
+        </>
+      ) : null}
+    </>
   )
 }

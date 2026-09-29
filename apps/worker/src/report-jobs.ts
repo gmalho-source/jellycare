@@ -12,9 +12,11 @@ import {
   reportFileName,
   zonedYearMonth,
   type ReportData,
+  type ReportPageSpeedRun,
   type ReportPeriod,
+  type ReportWordPress,
 } from '@jellycare/reports'
-import { and, eq, gte, lt } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, lt, or } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 
 /**
@@ -43,7 +45,15 @@ export interface ReportMessage {
 }
 
 export type ReportOutcome =
-  | { status: 'generated'; reportId: string; sentTo: string[] }
+  | {
+      status: 'generated'
+      reportId: string
+      sentTo: string[]
+      /** As notas da equipa que entraram, pela ordem em que aparecem. */
+      notes: string[]
+      /** Os módulos que entraram. */
+      sections: string[]
+    }
   | { status: 'skipped'; reason: string }
 
 const DEFAULT_TIME_ZONE = 'Europe/Lisbon'
@@ -83,6 +93,88 @@ function messageFor(data: ReportData, fileName: string, pdf: Buffer, to: string[
  * Devolve `skipped` quando o relatório já existe: é o caminho normal quando a
  * rotina corre de hora a hora, não um erro.
  */
+/** As medições de velocidade do período, a partir das execuções já lidas. */
+function velocidades(
+  runs: { checkType: string; startedAt: Date; metrics: Record<string, number> }[],
+): ReportPageSpeedRun[] {
+  const numero = (valor: number | undefined) => (typeof valor === 'number' ? valor : null)
+  return runs
+    .filter((run) => run.checkType === 'page_speed' || run.checkType === 'page_speed_desktop')
+    .map((run) => ({
+      strategy: run.checkType === 'page_speed_desktop' ? ('desktop' as const) : ('mobile' as const),
+      startedAt: run.startedAt,
+      performanceScore: numero(run.metrics.performanceScore),
+      lcpMs: numero(run.metrics.lcpMs),
+      cls: numero(run.metrics.cls),
+      tbtMs: numero(run.metrics.tbtMs),
+    }))
+}
+
+/**
+ * O WordPress do site, ou `null` quando não há ligação.
+ *
+ * Sem ligação não há secção: o inventário que estivesse na tabela seria o
+ * retrato de uma ligação que já não existe, e um relatório não pode dizer ao
+ * cliente o estado de plugins que ninguém está a recolher.
+ */
+async function lerWordPress(
+  db: Database,
+  siteId: string,
+  period: ReportPeriod,
+): Promise<ReportWordPress | null> {
+  const conectores = await db
+    .select({ id: schema.connectors.id })
+    .from(schema.connectors)
+    .where(eq(schema.connectors.siteId, siteId))
+    .limit(1)
+  if (!conectores[0]) return null
+
+  const [componentes, atualizacoes, copias] = await Promise.all([
+    db
+      .select({
+        kind: schema.wpComponents.kind,
+        name: schema.wpComponents.name,
+        version: schema.wpComponents.version,
+        latestVersion: schema.wpComponents.latestVersion,
+      })
+      .from(schema.wpComponents)
+      .where(eq(schema.wpComponents.siteId, siteId)),
+    db
+      .select({
+        name: schema.wpUpdates.name,
+        fromVersion: schema.wpUpdates.fromVersion,
+        toVersion: schema.wpUpdates.toVersion,
+        status: schema.wpUpdates.status,
+        orderedAt: schema.wpUpdates.orderedAt,
+      })
+      .from(schema.wpUpdates)
+      .where(
+        and(
+          eq(schema.wpUpdates.siteId, siteId),
+          gte(schema.wpUpdates.orderedAt, period.start),
+          lt(schema.wpUpdates.orderedAt, period.end),
+        ),
+      )
+      .orderBy(asc(schema.wpUpdates.orderedAt)),
+    db
+      .select({
+        startedAt: schema.wpBackups.startedAt,
+        finishedAt: schema.wpBackups.finishedAt,
+        status: schema.wpBackups.status,
+      })
+      .from(schema.wpBackups)
+      .where(
+        and(
+          eq(schema.wpBackups.siteId, siteId),
+          gte(schema.wpBackups.startedAt, period.start),
+          lt(schema.wpBackups.startedAt, period.end),
+        ),
+      ),
+  ])
+
+  return { components: componentes, updates: atualizacoes, backups: copias }
+}
+
 export async function generateReport(
   deps: ReportJobDeps,
   siteId: string,
@@ -165,6 +257,7 @@ export async function generateReport(
         checkType: schema.checkRuns.checkType,
         status: schema.checkRuns.status,
         startedAt: schema.checkRuns.startedAt,
+        metrics: schema.checkRuns.metrics,
       })
       .from(schema.checkRuns)
       .where(
@@ -174,6 +267,30 @@ export async function generateReport(
           lt(schema.checkRuns.startedAt, period.end),
         ),
       ),
+  ])
+
+  const [wordpress, notas] = await Promise.all([
+    lerWordPress(db, siteId, period),
+    // As notas que entram agora: as persistentes que ninguém retirou, e as de
+    // «só no próximo» que ainda não foram levadas por nenhum relatório.
+    db
+      .select({
+        id: schema.reportNotes.id,
+        body: schema.reportNotes.body,
+        mode: schema.reportNotes.mode,
+      })
+      .from(schema.reportNotes)
+      .where(
+        and(
+          eq(schema.reportNotes.siteId, siteId),
+          isNull(schema.reportNotes.archivedAt),
+          or(
+            eq(schema.reportNotes.mode, 'persistent'),
+            and(eq(schema.reportNotes.mode, 'next_only'), isNull(schema.reportNotes.reportId)),
+          ),
+        ),
+      )
+      .orderBy(asc(schema.reportNotes.createdAt)),
   ])
 
   const data = buildReport({
@@ -207,7 +324,15 @@ export async function generateReport(
       deliveryLatencyMs: row.deliveryLatencyMs,
       landedInSpam: row.landedInSpam,
     })),
-    checkRuns: checkRunRows,
+    checkRuns: checkRunRows.map((row) => ({
+      checkType: row.checkType,
+      status: row.status,
+      startedAt: row.startedAt,
+    })),
+    pageSpeedRuns: velocidades(checkRunRows),
+    wordpress,
+    excludedSections: site.reportExcludedSections,
+    notes: notas.map((nota) => nota.body),
     ...(organization.brandName
       ? {
           brand: {
@@ -250,11 +375,24 @@ export async function generateReport(
 
   if (!inserted) return { status: 'skipped', reason: 'Relatório gerado por outra instância' }
 
+  // As notas de «só no próximo» ficam presas a este relatório e não voltam a
+  // entrar. Só as que ainda estavam livres: outra instância pode ter chegado
+  // primeiro, e uma nota não passa de um relatório para outro.
+  const soNoProximo = notas.filter((nota) => nota.mode === 'next_only').map((nota) => nota.id)
+  if (soNoProximo.length > 0) {
+    await db
+      .update(schema.reportNotes)
+      .set({ reportId: inserted.id })
+      .where(and(inArray(schema.reportNotes.id, soNoProximo), isNull(schema.reportNotes.reportId)))
+  }
+
+  const incluido = { notes: notas.map((nota) => nota.id), sections: data.sections }
+
   const recipients = (recipientsOverride ?? site.reportRecipients).filter((value) =>
     value.includes('@'),
   )
   if (recipients.length === 0 || !deps.sendReport) {
-    return { status: 'generated', reportId: inserted.id, sentTo: [] }
+    return { status: 'generated', reportId: inserted.id, sentTo: [], ...incluido }
   }
 
   try {
@@ -263,7 +401,7 @@ export async function generateReport(
       .update(schema.reports)
       .set({ sentAt: deps.now ?? new Date(), sentTo: recipients })
       .where(eq(schema.reports.id, inserted.id))
-    return { status: 'generated', reportId: inserted.id, sentTo: recipients }
+    return { status: 'generated', reportId: inserted.id, sentTo: recipients, ...incluido }
   } catch (error) {
     // O relatório fica gerado e acessível no painel mesmo quando o email
     // falha; perder o relatório por causa do envio seria o pior dos dois.
@@ -271,7 +409,7 @@ export async function generateReport(
       .update(schema.reports)
       .set({ sendError: error instanceof Error ? error.message : String(error) })
       .where(eq(schema.reports.id, inserted.id))
-    return { status: 'generated', reportId: inserted.id, sentTo: [] }
+    return { status: 'generated', reportId: inserted.id, sentTo: [], ...incluido }
   }
 }
 

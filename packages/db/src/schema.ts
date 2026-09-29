@@ -158,6 +158,18 @@ export const sites = pgTable(
     /** Quem recebe o relatório mensal deste site. */
     reportRecipients: jsonb('report_recipients').$type<string[]>().notNull().default([]),
     /**
+     * Os módulos do relatório que ficam de fora para este cliente.
+     *
+     * Guarda-se o que sai e não o que entra, de propósito: um módulo novo
+     * passa a aparecer em todos os relatórios sem ninguém ter de o ligar site
+     * a site. Com uma lista do que entra, cada módulo acrescentado ao
+     * relatório nascia desligado em todos os sites já configurados.
+     */
+    reportExcludedSections: jsonb('report_excluded_sections')
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /**
      * Páginas onde o administrador declara existirem formulários a testar.
      *
      * A descoberta automática continua a inventariar o site, mas deixou de
@@ -983,4 +995,39 @@ export const clientNotifications = pgTable(
     error: text('error'),
   },
   (table) => [index('client_notifications_finding_idx').on(table.findingId, table.createdAt)],
+)
+
+export const reportNoteModeEnum = pgEnum('report_note_mode', ['persistent', 'next_only'])
+
+/**
+ * Notas da equipa que entram no relatório mensal.
+ *
+ * Duas espécies: as persistentes vão em todos os relatórios até alguém as
+ * retirar; as de «só no próximo» vão no relatório seguinte e mais nenhum. Pode
+ * haver várias de cada, e acrescentar uma nova nunca exige mexer nas que já
+ * existem — uma nota persistente sobre o contrato não impede uma nota avulsa
+ * sobre o que aconteceu este mês.
+ *
+ * Uma nota «só no próximo» fica presa ao relatório que a levou. Com `set null`
+ * no apagar, regenerar esse relatório — que o apaga e volta a gerar — devolve
+ * a nota à fila e ela entra na versão nova. Sem isso, pedir o relatório outra
+ * vez fazia a nota desaparecer.
+ */
+export const reportNotes = pgTable(
+  'report_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    mode: reportNoteModeEnum('mode').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** O relatório que levou uma nota «só no próximo». Nulo enquanto espera. */
+    reportId: uuid('report_id').references(() => reports.id, { onDelete: 'set null' }),
+    /** Retirada por alguém. Fica guardada: diz o que já foi dito ao cliente. */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+  },
+  (table) => [index('report_notes_site_idx').on(table.siteId, table.createdAt)],
 )

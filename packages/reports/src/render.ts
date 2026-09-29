@@ -1,5 +1,5 @@
 import { explicacaoDe, type Severity } from '@jellycare/core'
-import type { ReportData } from './build.js'
+import type { PageSpeedStrategySummary, ReportData } from './build.js'
 import { formatDuration, formatPercent } from './build.js'
 
 /**
@@ -282,6 +282,139 @@ function activitySection(data: ReportData): string {
   </section>`
 }
 
+
+/** Os limiares da Google: 90 para cima é bom, abaixo de 50 é mau. */
+function scoreClass(score: number | null): string {
+  if (score === null) return ''
+  if (score >= 90) return 'ok'
+  if (score < 50) return 'bad'
+  return ''
+}
+
+function strategyRow(label: string, summary: PageSpeedStrategySummary | null): string {
+  if (!summary || summary.latestScore === null) {
+    return `<tr><td>${label}</td><td class="right" colspan="4"><span class="muted">sem medições no mês</span></td></tr>`
+  }
+  const delta =
+    summary.firstScore !== null && summary.runs > 1 ? summary.latestScore - summary.firstScore : null
+  const tendencia =
+    delta === null ? '' : delta === 0 ? ' <span class="muted">(igual)</span>' : ` <span class="muted">(${delta > 0 ? '+' : ''}${delta} no mês)</span>`
+  const segundos = (ms: number | null) =>
+    ms === null ? '—' : `${(ms / 1000).toLocaleString('pt-PT', { maximumFractionDigits: 1 })} s`
+  return `<tr>
+    <td>${label}</td>
+    <td class="right"><span class="${scoreClass(summary.latestScore)}">${summary.latestScore}</span>/100${tendencia}</td>
+    <td class="right">${segundos(summary.lcpMs)}</td>
+    <td class="right">${summary.cls === null ? '—' : summary.cls.toLocaleString('pt-PT', { maximumFractionDigits: 2 })}</td>
+    <td class="right">${summary.tbtMs === null ? '—' : `${Math.round(summary.tbtMs)} ms`}</td>
+  </tr>`
+}
+
+function performanceSection(data: ReportData): string {
+  const { mobile, desktop } = data.performance
+  if (!mobile && !desktop) {
+    return `<section class="block">
+      <h2>Desempenho</h2>
+      <p class="empty">Não houve medições de velocidade neste período.</p>
+    </section>`
+  }
+
+  return `<section class="block">
+    <h2>Desempenho</h2>
+    <p class="note">
+      Pontuação de velocidade medida como a Google a mede, de 0 a 100. A partir de 90 é bom;
+      abaixo de 50, a lentidão já pesa na posição do site na pesquisa e faz visitantes
+      desistirem antes de a página abrir.
+    </p>
+    <table>
+      <thead><tr>
+        <th>Dispositivo</th><th class="right">Pontuação</th>
+        <th class="right">Maior elemento</th><th class="right">Estabilidade</th><th class="right">Bloqueio</th>
+      </tr></thead>
+      <tbody>
+        ${strategyRow('Telemóvel', mobile)}
+        ${strategyRow('Computador', desktop)}
+      </tbody>
+    </table>
+  </section>`
+}
+
+function wordpressSection(data: ReportData): string {
+  const wp = data.wordpress
+  if (!wp) return ''
+
+  const linhas: string[] = []
+  linhas.push(
+    wp.updatesApplied.length === 0
+      ? 'Não foi aplicada nenhuma atualização durante o mês.'
+      : `Foram aplicadas <strong>${wp.updatesApplied.length}</strong> ${wp.updatesApplied.length === 1 ? 'atualização' : 'atualizações'}.`,
+  )
+  if (wp.updatesFailed > 0) {
+    linhas.push(
+      `${wp.updatesFailed} ${wp.updatesFailed === 1 ? 'atualização falhou e foi revista' : 'atualizações falharam e foram revistas'} pela equipa.`,
+    )
+  }
+  linhas.push(
+    wp.backups === 0
+      ? '<span class="bad">Não houve nenhuma cópia de segurança concluída durante o mês.</span>'
+      : `Foram feitas <strong>${wp.backups}</strong> ${wp.backups === 1 ? 'cópia' : 'cópias'} de segurança; a última a ${formatDate(wp.lastBackupAt!)}.`,
+  )
+  if (wp.coreOutdated) {
+    linhas.push(
+      `O WordPress está na versão ${escapeHtml(wp.coreOutdated.version ?? '?')}; a mais recente é a ${escapeHtml(wp.coreOutdated.latestVersion)}.`,
+    )
+  }
+  linhas.push(
+    wp.pendingUpdates === 0
+      ? 'Todos os plugins e temas estão atualizados à data deste relatório.'
+      : `Ficam ${wp.pendingUpdates} ${wp.pendingUpdates === 1 ? 'plugin ou tema' : 'plugins ou temas'} por atualizar à data deste relatório.`,
+  )
+
+  const tabela =
+    wp.updatesApplied.length === 0
+      ? ''
+      : `<table>
+      <thead><tr><th>Componente</th><th>De</th><th>Para</th><th class="right">Data</th></tr></thead>
+      <tbody>
+        ${wp.updatesApplied
+          .slice(0, 15)
+          .map(
+            (update) => `<tr>
+              <td>${escapeHtml(update.name)}</td>
+              <td>${escapeHtml(update.fromVersion ?? '—')}</td>
+              <td>${escapeHtml(update.toVersion ?? '—')}</td>
+              <td class="right">${formatDate(update.orderedAt)}</td>
+            </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>`
+
+  return `<section class="block">
+    <h2>WordPress</h2>
+    ${linhas.map((linha) => `<p class="note">${linha}</p>`).join('')}
+    ${tabela}
+  </section>`
+}
+
+/**
+ * As notas da equipa, logo a seguir ao resumo.
+ *
+ * É a voz de uma pessoa num documento que é todo gerado, e é por isso que vem
+ * primeiro: o que a equipa quis dizer ao cliente este mês não pode ficar
+ * enterrado depois da tabela de verificações. O texto vai tal como foi
+ * escrito, com as quebras de linha, e escapado.
+ */
+function notesSection(data: ReportData): string {
+  if (data.notes.length === 0) return ''
+  return `<section class="block team-notes">
+    <h2>${data.notes.length === 1 ? 'Nota da equipa' : 'Notas da equipa'}</h2>
+    ${data.notes
+      .map((nota) => `<p>${escapeHtml(nota).replace(/\n/g, '<br>')}</p>`)
+      .join('')}
+  </section>`
+}
+
 export function renderReportHtml(data: ReportData): string {
   return `<!doctype html>
 <html lang="pt-PT">
@@ -321,6 +454,11 @@ export function renderReportHtml(data: ReportData): string {
   .summary { background: #f8f8f9; border-left: 3px solid #dd364a; padding: 14px 16px; }
   .summary p { margin: 0 0 6px; }
   .summary p:last-child { margin-bottom: 0; }
+
+  .team-notes { border: 1px solid #dcdce2; border-radius: 6px; padding: 14px 16px; }
+  .team-notes h2 { margin-top: 0; }
+  .team-notes p { margin: 0 0 8px; }
+  .team-notes p:last-child { margin-bottom: 0; }
 
   .metrics { display: flex; gap: 10px; margin-bottom: 14px; }
   .metric {
@@ -374,17 +512,33 @@ export function renderReportHtml(data: ReportData): string {
     ${data.summary.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}
   </section>
 
-  ${uptimeSection(data)}
-  ${findingsSection(data)}
-  ${formsSection(data)}
-  ${activitySection(data)}
+  ${notesSection(data)}
 
-  <section class="block">
+  ${data.sections
+    .map((section) => {
+      switch (section) {
+        case 'disponibilidade':
+          return uptimeSection(data)
+        case 'seguranca':
+          return findingsSection(data)
+        case 'desempenho':
+          return performanceSection(data)
+        case 'formularios':
+          return formsSection(data)
+        case 'wordpress':
+          return wordpressSection(data)
+        case 'trabalho':
+          return activitySection(data)
+        case 'proximos':
+          return `<section class="block">
     <h2>Próximos passos</h2>
     <ul class="recommendations">
       ${data.recommendations.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
     </ul>
-  </section>
+  </section>`
+      }
+    })
+    .join('\n')}
 
   <footer>
     Relatório gerado automaticamente por ${escapeHtml(data.brand.name)} em

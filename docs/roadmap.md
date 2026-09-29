@@ -57,7 +57,8 @@ Ao fim da Fase 2 o produto está completo para venda como serviço gerido.
 
 Estado: o relatório mensal está implementado de ponta a ponta — agregação com
 SLA, PDF white-label, geração idempotente no dia configurado, envio por email
-com o PDF anexado e acesso a partir do painel.
+com o PDF anexado e acesso a partir do painel. Os módulos e as notas da equipa
+configuram-se por site; ver `docs/relatorio.md`.
 
 O portal do cliente vive em `/portal`, na mesma aplicação e com a mesma
 autenticação por ligação de uso único. Quem só tem papel `client` aterra lá e
