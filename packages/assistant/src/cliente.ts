@@ -27,6 +27,26 @@ export interface RespostaDoAssistente {
 export class AssistenteIndisponivel extends Error {}
 
 /**
+ * O que correu mal, em texto, para quem está a olhar para o painel.
+ *
+ * Os erros do SDK trazem o estado HTTP e a mensagem da API, e é isso que
+ * distingue «a chave está errada» de «acabou o crédito» de «o pedido ia
+ * malformado». Numa superfície que só a equipa vê, esconder isso não protege
+ * ninguém — só obriga a ir aos registos da máquina de produção para saber
+ * porque é que o painel disse «houve um erro».
+ *
+ * Vive aqui e não na aplicação web porque é aqui que o SDK vive: o painel não
+ * tem de saber que existe uma Anthropic do outro lado.
+ */
+export function descreverErro(erro: unknown): string {
+  if (erro instanceof Anthropic.APIError) {
+    return `a API respondeu ${erro.status ?? '?'} — ${erro.message}`
+  }
+  if (erro instanceof Error) return erro.message
+  return String(erro)
+}
+
+/**
  * Uma resposta do assistente, em streaming.
  *
  * O contexto do problema vai numa mensagem do utilizador e não no prompt de
@@ -69,7 +89,7 @@ export function responder(options: {
   async function* pedacos(): AsyncIterable<string> {
     const fluxo = cliente.messages.stream({
       model: MODELO,
-      max_tokens: 4096,
+      max_tokens: 16_000,
       // O prompt de sistema é grande e nunca muda: é exatamente o que a cache
       // serve a um décimo do preço, e o que torna uma conversa de vários
       // turnos barata em vez de cara.

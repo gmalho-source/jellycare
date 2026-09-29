@@ -62,7 +62,19 @@ function anthropicFalso(resposta: string) {
       corpo += pedaco
     })
     pedido.on('end', () => {
-      recebidos.push(JSON.parse(corpo || '{}'))
+      const enviado = JSON.parse(corpo || '{}')
+      recebidos.push(enviado)
+
+      // Uma palavra na pergunta faz o falso responder com erro. É a única
+      // forma de exercitar o caminho da falha sem esperar que a API verdadeira
+      // se porte mal — e esse caminho já apareceu em produção uma vez, a dizer
+      // «houve um erro» e mais nada.
+      if (JSON.stringify(enviado).includes('REBENTA')) {
+        resultado.writeHead(401, { 'content-type': 'application/json' })
+        resultado.end(JSON.stringify({ error: { message: 'invalid x-api-key' } }))
+        return
+      }
+
       resultado.writeHead(200, { 'content-type': 'text/event-stream' })
       const evento = (tipo: string, dados: unknown) =>
         resultado.write(`event: ${tipo}\ndata: ${JSON.stringify(dados)}\n\n`)
@@ -1685,6 +1697,48 @@ describeE2E('fluxo de entrada e painel', () => {
 
     await cliente.close()
   }, 90_000)
+
+  it('diz o que correu mal quando o assistente falha', async () => {
+    // Em produção isto apareceu como «[A resposta foi interrompida por um erro
+    // do assistente.]» e mais nada — numa ferramenta interna, é o mesmo que
+    // não dizer nada: quem está a ver é a equipa, tem de poder agir, e a
+    // alternativa era ir aos registos da máquina.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      await db.insert(schema.findings).values({
+        siteId: siteVerificado,
+        checkType: 'security_headers',
+        fingerprint: `erro-${marca}`,
+        code: 'missing_csp',
+        severity: 'low',
+        state: 'open',
+        title: `Erro a pedir apoio ${marca}`,
+        firstSeenAt: new Date(),
+        lastSeenAt: new Date(),
+      })
+    } finally {
+      await close()
+    }
+
+    const page = await entrarComo(email)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    const linha = page.locator('li', { hasText: `Erro a pedir apoio ${marca}` })
+    await linha.getByRole('button', { name: 'Pedir apoio' }).click()
+    // A primeira resposta corre bem: é a segunda pergunta que leva a palavra
+    // que faz o falso responder 401.
+    await page.waitForSelector('text=O HSTS diz ao browser')
+
+    await page.fill('input[placeholder^="Perguntar mais"]', 'REBENTA por favor')
+    await page.getByRole('button', { name: 'Perguntar' }).click()
+
+    // O estado e a mensagem da API chegam ao ecrã.
+    await expect.poll(() => page.textContent('body')).toContain('401')
+    expect(await page.textContent('body')).toContain('invalid x-api-key')
+
+    await page.close()
+  }, 120_000)
 
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()

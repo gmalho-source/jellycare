@@ -1,4 +1,9 @@
-import { AssistenteIndisponivel, PRIMEIRA_PERGUNTA, responder } from '@jellycare/assistant'
+import {
+  AssistenteIndisponivel,
+  PRIMEIRA_PERGUNTA,
+  descreverErro,
+  responder,
+} from '@jellycare/assistant'
 import { schema } from '@jellycare/db'
 import { eq } from 'drizzle-orm'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -96,7 +101,13 @@ export async function POST(
         // O erro vai pelo corpo e não por um estado HTTP: quando ele acontece
         // os cabeçalhos já foram enviados. Sem isto, o painel ficava a olhar
         // para uma resposta truncada sem saber que foi truncada.
-        const aviso = '\n\n[A resposta foi interrompida por um erro do assistente.]'
+        //
+        // E vai com a razão dentro. A primeira versão dizia só «houve um
+        // erro», o que numa ferramenta interna é o mesmo que não dizer nada:
+        // quem está a ver isto é a equipa, tem de poder agir, e a alternativa
+        // era ir aos registos da máquina de produção para saber se foi a
+        // chave, o crédito, ou um pedido malformado.
+        const aviso = `\n\n[A resposta foi interrompida: ${descreverErro(erro)}]`
         texto += aviso
         controller.enqueue(encoder.encode(aviso))
         console.error('[assistente] fluxo interrompido', erro)

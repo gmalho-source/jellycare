@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ContextoDoProblema } from './contexto.js'
-import { AssistenteIndisponivel, responder } from './cliente.js'
+import Anthropic from '@anthropic-ai/sdk'
+import { AssistenteIndisponivel, descreverErro, responder } from './cliente.js'
 
 const AGORA = new Date('2026-09-29T10:00:00Z')
 
@@ -144,5 +145,27 @@ describe('responder', () => {
 
     const sistema = pedidos[0]!.system as { text: string }[]
     expect(sistema[0]!.text).not.toContain('missing_hsts')
+  })
+})
+
+describe('descreverErro', () => {
+  it('diz o estado e a mensagem de um erro da API', () => {
+    // É o que distingue «a chave está errada» de «acabou o crédito» de «o
+    // pedido ia malformado». Sem isto, o painel dizia «houve um erro» e a
+    // única forma de saber qual era ir aos registos da máquina de produção.
+    const erro = new Anthropic.AuthenticationError(
+      401,
+      { error: { message: 'invalid x-api-key' } },
+      'invalid x-api-key',
+      new Headers(),
+    )
+
+    expect(descreverErro(erro)).toContain('401')
+    expect(descreverErro(erro)).toContain('invalid x-api-key')
+  })
+
+  it('aguenta o que não é um erro da API', () => {
+    expect(descreverErro(new Error('a ligação caiu'))).toBe('a ligação caiu')
+    expect(descreverErro('qualquer coisa')).toBe('qualquer coisa')
   })
 })
