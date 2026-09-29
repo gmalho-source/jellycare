@@ -330,7 +330,8 @@ desativar por formulário.
 - validação de conteúdo esperado, não só de HTTP 200 — um site hackeado
   responde 200 lindamente
 - tempo de resposta e evolução histórica
-- Core Web Vitals via PageSpeed Insights, com histórico
+- Core Web Vitals via PageSpeed Insights, com histórico, e as outras categorias
+  do Lighthouse (acessibilidade, práticas recomendadas, SEO, navegação com agência)
 - páginas com erro 5xx detetadas durante o crawl
 
 ### Telemóvel e computador são duas verificações
@@ -348,6 +349,31 @@ mostrado, mas não gera findings: ligá-lo faria nascer um problema novo em
 todos os sites com computador lento no dia em que a verificação entrou, e uma
 enxurrada de avisos no primeiro dia ensina a ignorá-los. É um booleano em
 `packages/checks/src/page-speed.ts` quando quisermos mudar de ideias.
+
+### As cinco categorias do Lighthouse
+
+Cada medição pede à PageSpeed as mesmas cinco categorias que a página dela
+mostra: desempenho, acessibilidade, práticas recomendadas, SEO e navegação com
+agência. As quatro primeiras são pontuações de 0 a 100 com os limiares da
+Google (90 e 50). Ficam nas métricas da execução (`performanceScore`,
+`accessibilityScore`, `bestPracticesScore`, `seoScore`).
+
+**Só o desempenho abre problemas.** As outras três são mostradas e não geram
+findings — pela mesma razão do computador: uma verificação nova a abrir
+problemas em todos os sites no primeiro dia ensina a ignorá-los.
+
+A **navegação com agência** (`agentic-browsing`, Lighthouse 13.3) avalia se um
+agente de IA consegue ler e usar a página: árvore de acessibilidade, WebMCP,
+estabilidade visual, `llms.txt`. Não tem pontuação — a Google mostra uma fração
+de auditorias passadas sobre as aplicáveis, porque a categoria ainda está em
+desenvolvimento — e aqui também não (`agenticPassed`, `agenticTotal`). A
+fração é contada como a do relatório do Lighthouse
+(`ReportUtils.calculateCategoryFraction`): não contam as auditorias escondidas,
+manuais, não aplicáveis ou informativas, e passa quem tem 0,9 ou mais.
+
+A documentação da API ainda não lista esta categoria. Se a API a recusar, o
+check volta a pedir só as quatro clássicas: perde-se o indicador experimental,
+não a medição.
 
 ### Pedir uma medição fora de horas
 

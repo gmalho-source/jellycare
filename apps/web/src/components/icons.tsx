@@ -39,6 +39,12 @@ const TRACOS: Record<string, React.ReactNode> = {
     </>
   ),
   seguranca: <path d="m2.4 4.8 1.5 1.5L6.4 3.8M2.4 11.2l1.5 1.5 2.5-2.5M8.8 5h4.8M8.8 11.5h4.8" />,
+  escudo: (
+    <>
+      <path d="M8 1.8 13 3.6v4.1c0 3.1-2.1 5.4-5 6.5-2.9-1.1-5-3.4-5-6.5V3.6z" />
+      <path d="m5.8 8 1.6 1.6 2.9-3" />
+    </>
+  ),
   formularios: (
     <>
       <rect x="2" y="3" width="12" height="10" rx="2.2" />

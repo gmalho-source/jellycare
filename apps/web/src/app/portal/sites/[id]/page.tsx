@@ -8,10 +8,12 @@ import {
   formatRelative,
   formatUptime,
 } from '@/components/ui'
+import { EstadoDoSite } from '@/components/estado-do-site'
 import { SiteDashboard } from '@/components/site-dashboard'
 import { checkMeta } from '@/lib/checks'
 import { getSiteDashboard } from '@/lib/dashboard'
-import { getSiteDetail, getUptime } from '@/lib/queries'
+import { lerDesempenho, lerSeguranca } from '@/lib/estado-do-site'
+import { getPageSpeedHistory, getSiteDetail, getUptime } from '@/lib/queries'
 import { assertMembership, requireUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +41,10 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
   // Só depois de verificado, tal como no painel interno: antes disso não há
   // verificações de segurança nem inventário, e um painel a zeros diria menos
   // do que a frase que fica no lugar.
-  const dashboard = detail.verified ? await getSiteDashboard(id) : null
+  const [dashboard, velocidade] = await Promise.all([
+    detail.verified ? getSiteDashboard(id) : null,
+    getPageSpeedHistory(id, 'page_speed'),
+  ])
   // Sem painel, ainda assim há disponibilidade para mostrar — é o que
   // monitorizamos desde o primeiro dia.
   const uptime = dashboard ? null : await getUptime(id, 30)
@@ -49,6 +54,13 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
 
   return (
     <>
+      <EstadoDoSite
+        seguranca={lerSeguranca(detail.findings, detail.verified)}
+        desempenho={lerDesempenho(velocidade.latest?.score ?? null)}
+        hrefSeguranca="#problemas"
+        hrefDesempenho={`/portal/sites/${id}/desempenho`}
+      />
+
       {dashboard ? <SiteDashboard data={dashboard} audiencia="cliente" /> : null}
 
       {/* Exatamente um dos dois existe: ou há painel, ou há a leitura simples
@@ -93,7 +105,7 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
         </div>
       ) : null}
 
-      <Card>
+      <Card id="problemas" className="scroll-mt-6">
         <CardHeader title="O que encontrámos" />
         {abertos.length === 0 ? (
           <EmptyState>

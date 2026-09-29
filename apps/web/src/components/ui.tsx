@@ -55,8 +55,21 @@ export function HealthBadge({
  * compete com o conteúdo; a sombra separa o cartão do papel sem acrescentar
  * mais uma linha ao ecrã.
  */
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-white shadow-card ${className}`}>{children}</div>
+export function Card({
+  children,
+  className = '',
+  id,
+}: {
+  children: ReactNode
+  className?: string
+  /** Para se poder ligar diretamente a um cartão, com `#id`. */
+  id?: string
+}) {
+  return (
+    <div id={id} className={`rounded-2xl bg-white shadow-card ${className}`}>
+      {children}
+    </div>
+  )
 }
 
 export function CardHeader({ title, action }: { title: string; action?: ReactNode }) {

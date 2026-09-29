@@ -314,6 +314,12 @@ export interface PageSpeedPoint {
   lcpMs: number | null
   cls: number | null
   tbtMs: number | null
+  /** As outras três categorias do Lighthouse, 0–100. Nulas em medições antigas. */
+  accessibility: number | null
+  bestPractices: number | null
+  seo: number | null
+  /** Navegação com agência: auditorias passadas sobre as aplicáveis. */
+  agentic: { passed: number; total: number } | null
 }
 
 export interface PageSpeedHistory {
@@ -375,6 +381,14 @@ export async function getPageSpeedHistory(
       lcpMs: numero(run.metrics.lcpMs),
       cls: numero(run.metrics.cls),
       tbtMs: numero(run.metrics.tbtMs),
+      accessibility: numero(run.metrics.accessibilityScore),
+      bestPractices: numero(run.metrics.bestPracticesScore),
+      seo: numero(run.metrics.seoScore),
+      agentic: (() => {
+        const passed = numero(run.metrics.agenticPassed)
+        const total = numero(run.metrics.agenticTotal)
+        return passed !== null && total !== null && total > 0 ? { passed, total } : null
+      })(),
     })
   }
 

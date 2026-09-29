@@ -8,10 +8,11 @@ import { createServer as createHttpServer, type Server } from 'node:http'
 import { explicacaoDe } from '@jellycare/core'
 import { createDatabase, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { lerSeguranca } from './lib/estado-do-site'
 
 /**
  * Fluxo de entrada e painel, num browser real contra o servidor Next.
@@ -229,7 +230,17 @@ describeE2E('fluxo de entrada e painel', () => {
             region: 'eu-west',
             startedAt: new Date(Date.now() - 2 * 3600_000),
             durationMs: 19_400,
-            metrics: { performanceScore: 63, lcpMs: 3200, cls: 0.06, tbtMs: 150 },
+            metrics: {
+              performanceScore: 63,
+              lcpMs: 3200,
+              cls: 0.06,
+              tbtMs: 150,
+              accessibilityScore: 95,
+              bestPracticesScore: 100,
+              seoScore: 82,
+              agenticPassed: 2,
+              agenticTotal: 3,
+            },
           },
         ])
         await db.insert(schema.uptimeSamples).values([
@@ -830,7 +841,15 @@ describeE2E('fluxo de entrada e painel', () => {
     // A pontuação da última medição, em 0–100. Pelo rótulo do mostrador e não
     // por «63» em texto: «63» aparece dentro de qualquer número maior, e um
     // teste que passa com «163» na página não está a provar nada.
-    expect(await equipa.isVisible('[aria-label="63 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label^="Desempenho: 63 em 100"]')).toBe(true)
+    // As outras três categorias e a navegação com agência, como a PageSpeed as
+    // mostra. Uma medição antiga sem elas mostraria um traço, não um zero.
+    expect(await equipa.isVisible('[aria-label^="Acessibilidade: 95 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label^="Práticas recomendadas: 100 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label^="SEO: 82 em 100"]')).toBe(true)
+    expect(
+      await equipa.locator('[data-categoria="Navegação com agência"]').textContent(),
+    ).toContain('2/3')
 
     // A tendência face à primeira medição do período: 63 menos 51.
     expect(await equipa.isVisible('text=+12 pontos')).toBe(true)
@@ -904,7 +923,49 @@ describeE2E('fluxo de entrada e painel', () => {
 
     // O que é nosso, não.
     expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
+
+    // Segurança e desempenho num relance, no topo. O desempenho vem da última
+    // medição em telemóvel deste site — 42, abaixo de 50, é «Fraca» — e leva
+    // ao separador onde está o detalhe.
+    const desempenho = cliente.locator('[data-estado="Desempenho"]')
+    expect(await desempenho.getAttribute('data-semaforo')).toBe('vermelho')
+    expect(await desempenho.textContent()).toContain('Fraca')
+    expect(await desempenho.textContent()).toContain('42/100')
+    expect(await desempenho.getAttribute('href')).toBe(`/portal/sites/${siteVerificado}/desempenho`)
+
+    // O semáforo de segurança é o que a base de dados diz, contado da mesma
+    // maneira — e, com o domínio provado, nunca o cinzento de «por verificar».
+    const seguranca = cliente.locator('[data-estado="Segurança"]')
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const abertos = await db
+        .select({ checkType: schema.findings.checkType, severity: schema.findings.severity })
+        .from(schema.findings)
+        .where(
+          and(
+            eq(schema.findings.siteId, siteVerificado),
+            inArray(schema.findings.state, ['open', 'acknowledged']),
+          ),
+        )
+      expect(await seguranca.getAttribute('data-semaforo')).toBe(
+        lerSeguranca(abertos, true).semaforo,
+      )
+    } finally {
+      await close()
+    }
+    expect(await seguranca.getAttribute('data-semaforo')).not.toBe('cinzento')
     await cliente.close()
+
+    // Num domínio por provar, não há verde: nenhuma verificação de segurança
+    // correu ainda.
+    const outro = await entrarComo(emailCliente)
+    await outro.waitForURL(`${baseUrl}/portal`)
+    await outro.goto(`${baseUrl}/portal/sites/${siteId}`)
+    await outro.waitForSelector('h1')
+    const porVerificar = outro.locator('[data-estado="Segurança"]')
+    expect(await porVerificar.getAttribute('data-semaforo')).toBe('cinzento')
+    expect(await porVerificar.textContent()).toContain('Por verificar')
+    await outro.close()
   }, 120_000)
 
   it('dá ao cliente a velocidade do site dele, e a navegação para lá chegar', async () => {
@@ -922,7 +983,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.waitForURL(`${baseUrl}/portal/sites/${siteVerificado}/desempenho`)
 
     // Os números deste site e não os do site da equipa.
-    expect(await cliente.isVisible('[aria-label="42 em 100"]')).toBe(true)
+    expect(await cliente.isVisible('[aria-label^="Desempenho: 42 em 100"]')).toBe(true)
     expect(await cliente.isVisible('text=5,4 s')).toBe(true)
     expect(await cliente.isVisible('text=Tempo de resposta do servidor')).toBe(true)
 
@@ -937,15 +998,15 @@ describeE2E('fluxo de entrada e painel', () => {
     await equipa.waitForSelector('h1')
 
     // Telemóvel primeiro: é o que a Google usa para indexar.
-    expect(await equipa.isVisible('[aria-label="42 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label^="Desempenho: 42 em 100"]')).toBe(true)
 
     await equipa.click('a:has-text("Computador")')
     await equipa.waitForURL(`${baseUrl}/sites/${siteVerificado}/desempenho?vista=computador`)
 
     // Outro número, da outra verificação. Se o seletor não trocasse de fonte,
     // continuava aqui o 42.
-    expect(await equipa.isVisible('[aria-label="88 em 100"]')).toBe(true)
-    expect(await equipa.isVisible('[aria-label="42 em 100"]')).toBe(false)
+    expect(await equipa.isVisible('[aria-label^="Desempenho: 88 em 100"]')).toBe(true)
+    expect(await equipa.isVisible('[aria-label^="Desempenho: 42 em 100"]')).toBe(false)
 
     // E a explicação ao lado acompanha: dizer «medido em telemóvel» por cima
     // de uma medição de computador é a forma mais rápida de alguém citar o

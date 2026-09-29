@@ -8,9 +8,13 @@ import {
 } from './page-speed.js'
 import { mockFetch, testSite, type MockRoutes } from './test-utils.js'
 
-const ENDPOINT =
+const CLASSICAS =
   'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' +
-  '?url=https%3A%2F%2Fcliente.pt&key=chave-teste&strategy=mobile&category=performance'
+  '?url=https%3A%2F%2Fcliente.pt&key=chave-teste&strategy=mobile' +
+  '&category=performance&category=accessibility&category=best-practices&category=seo'
+
+/** O pedido como sai: as quatro categorias clássicas e a navegação com agência. */
+const ENDPOINT = `${CLASSICAS}&category=agentic-browsing`
 
 const CONFIG: PageSpeedConfig = { apiKey: 'chave-teste' }
 
@@ -60,6 +64,34 @@ describe('pageSpeedCheck', () => {
     expect(outcome.findings).toEqual([])
     expect(outcome.metrics.performanceScore).toBe(95)
     expect(outcome.metrics.lcpMs).toBe(1800)
+  })
+
+  it('guarda as outras categorias junto da de desempenho', async () => {
+    const outcome = await run({
+      [ENDPOINT]: {
+        body: JSON.stringify({
+          lighthouseResult: {
+            categories: {
+              performance: { score: 0.95 },
+              accessibility: { score: 0.88 },
+              'best-practices': { score: 0.96 },
+              seo: { score: 0.91 },
+              'agentic-browsing': { auditRefs: [{ id: 'llms-txt', weight: 1 }] },
+            },
+            audits: { 'llms-txt': { score: 1, scoreDisplayMode: 'binary' } },
+          },
+        }),
+      },
+    })
+
+    expect(outcome.metrics).toMatchObject({
+      performanceScore: 95,
+      accessibilityScore: 88,
+      bestPracticesScore: 96,
+      seoScore: 91,
+      agenticPassed: 1,
+      agenticTotal: 1,
+    })
   })
 
   it('guarda a pontuação em 0–100 e não em 0–1', async () => {
@@ -217,6 +249,88 @@ describe('measurePageSpeed', () => {
     expect(medicao.score).toBe(80)
     expect(medicao.lcpMs).toBeNull()
     expect(medicao.cls).toBeNull()
+    // As outras categorias também: uma que não veio é nula, não é zero.
+    expect(medicao.accessibility).toBeNull()
+    expect(medicao.agentic).toBeNull()
+  })
+
+  it('lê as quatro pontuações e a fração da navegação com agência', async () => {
+    const fetch = mockFetch({
+      [ENDPOINT]: {
+        body: JSON.stringify({
+          lighthouseResult: {
+            categories: {
+              performance: { score: 0.72 },
+              accessibility: { score: 0.95 },
+              'best-practices': { score: 1 },
+              seo: { score: 1 },
+              'agentic-browsing': {
+                score: null,
+                auditRefs: [
+                  { id: 'agent-accessibility-tree', weight: 1, group: 'agent-accessibility' },
+                  { id: 'webmcp-form-coverage', weight: 1, group: 'webmcp' },
+                  { id: 'webmcp-schema-validity', weight: 1, group: 'webmcp' },
+                  { id: 'cumulative-layout-shift', weight: 1 },
+                  { id: 'llms-txt', weight: 1, group: 'agent-discoverability' },
+                  { id: 'ard-schema', weight: 1, group: 'hidden' },
+                ],
+              },
+            },
+            audits: {
+              'agent-accessibility-tree': { score: 1, scoreDisplayMode: 'binary' },
+              // Um site sem formulários anotados: não aplicável, não conta.
+              'webmcp-form-coverage': { score: null, scoreDisplayMode: 'notApplicable' },
+              'webmcp-schema-validity': { score: null, scoreDisplayMode: 'notApplicable' },
+              // O CLS entra com a nota numérica: 0,9 ou mais é passar.
+              'cumulative-layout-shift': { score: 0.93, scoreDisplayMode: 'numeric' },
+              'llms-txt': { score: 0, scoreDisplayMode: 'binary' },
+              'ard-schema': { score: 0, scoreDisplayMode: 'binary' },
+            },
+          },
+        }),
+      },
+    })
+
+    const medicao = await measurePageSpeed('https://cliente.pt', 'chave-teste', 'mobile', fetch, 5000)
+
+    expect(medicao.score).toBe(72)
+    expect(medicao.accessibility).toBe(95)
+    expect(medicao.bestPractices).toBe(100)
+    expect(medicao.seo).toBe(100)
+    // Três aplicáveis e visíveis — árvore, CLS e llms.txt —, duas passadas.
+    expect(medicao.agentic).toEqual({ passed: 2, total: 3 })
+  })
+
+  it('mede na mesma quando a API ainda não conhece a navegação com agência', async () => {
+    // A documentação da API ainda não lista a categoria. Se a recusar, perde-se
+    // o indicador experimental e não a medição inteira.
+    const fetch = mockFetch({
+      [ENDPOINT]: {
+        status: 400,
+        body: JSON.stringify({
+          error: { message: 'Invalid value at \'category[4]\' (TYPE_ENUM), "agentic-browsing"' },
+        }),
+      },
+      [CLASSICAS]: { body: resposta({ score: 0.9 }) },
+    })
+
+    const medicao = await measurePageSpeed('https://cliente.pt', 'chave-teste', 'mobile', fetch, 5000)
+
+    expect(medicao.score).toBe(90)
+    expect(medicao.agentic).toBeNull()
+    expect(fetch.calls).toHaveLength(2)
+  })
+
+  it('não repete o pedido quando a recusa não tem nada a ver com a categoria nova', async () => {
+    const fetch = mockFetch({
+      [ENDPOINT]: { status: 400, body: JSON.stringify({ error: { message: 'Invalid url' } }) },
+      [CLASSICAS]: { body: resposta({ score: 0.9 }) },
+    })
+
+    await expect(
+      measurePageSpeed('https://cliente.pt', 'chave-teste', 'mobile', fetch, 5000),
+    ).rejects.toThrow('Invalid url')
+    expect(fetch.calls).toHaveLength(1)
   })
 
   it('desiste ao fim do tempo em vez de ficar pendurado', async () => {

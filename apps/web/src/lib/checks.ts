@@ -1,5 +1,5 @@
 import { CHECK_REGISTRY } from '@jellycare/checks'
-import { CONNECTOR_CHECKS } from '@jellycare/connectors'
+import { CONNECTOR_CHECKS, WP_INVENTORY_CHECK } from '@jellycare/connectors'
 import { FORM_CHECKS } from '@jellycare/forms'
 
 export interface CheckMeta {
@@ -57,3 +57,21 @@ export function checkMeta(type: string): CheckMeta | undefined {
  */
 export const MIN_CHECK_INTERVAL_MINUTES = 5
 export const MAX_CHECK_INTERVAL_MINUTES = 60 * 24 * 30
+
+/**
+ * As verificações que contam para o semáforo de segurança.
+ *
+ * Certificado, cabeçalhos, autenticação do email, reputação, ficheiros
+ * expostos e vulnerabilidades WordPress. Ficam de fora a disponibilidade, a
+ * velocidade, os links partidos e os formulários: são problemas reais, mas
+ * não são ameaças, e um semáforo de segurança vermelho por uma página lenta
+ * ensinava o cliente a não acreditar nele.
+ */
+export const SECURITY_CHECK_TYPES: ReadonlySet<string> = new Set([
+  'tls',
+  'security_headers',
+  'email_auth',
+  'reputation',
+  'exposed_files',
+  WP_INVENTORY_CHECK,
+])

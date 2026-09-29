@@ -40,36 +40,112 @@ const PALAVRA: Record<keyof typeof COR_ESTADO, string> = {
   sem: 'sem dados',
 }
 
-/** Um mostrador em arco. Meia-volta chega: o valor é sempre de 0 a 100. */
-function Mostrador({ score }: { score: number }) {
-  const estado = estadoScore(score)
-  const raio = 52
-  const perimetro = Math.PI * raio
-  const arco = `M 10 62 A ${raio} ${raio} 0 0 1 114 62`
+/**
+ * Um mostrador circular, como os da PageSpeed.
+ *
+ * Os mesmos quatro que a Google mostra, com os mesmos limiares — 90 e 50. O
+ * cliente que abre a PageSpeed ao lado tem de ver os mesmos números nas mesmas
+ * cores, ou passa a desconfiar dos dois.
+ */
+function Mostrador({ nome, score }: { nome: string; score: number | null }) {
+  const estado = score === null ? 'sem' : estadoScore(score)
+  const raio = 30
+  const perimetro = 2 * Math.PI * raio
 
   return (
-    <div className="relative w-[124px] shrink-0">
-      <svg viewBox="0 0 124 72" className="w-full" role="img" aria-label={`${score} em 100`}>
-        <path d={arco} fill="none" stroke="#f0ede8" strokeWidth={10} strokeLinecap="round" />
-        <path
-          d={arco}
-          fill="none"
-          stroke={COR_ESTADO[estado]}
-          strokeWidth={10}
-          strokeLinecap="round"
-          strokeDasharray={`${((score / 100) * perimetro).toFixed(1)} ${perimetro.toFixed(1)}`}
-        />
-      </svg>
-      <div className="absolute inset-x-0 bottom-0 text-center">
+    <li className="flex w-[30%] flex-col items-center gap-2 text-center sm:w-auto" data-categoria={nome}>
+      <div className="relative h-[76px] w-[76px]">
+        <svg
+          viewBox="0 0 76 76"
+          className="h-full w-full -rotate-90"
+          role="img"
+          aria-label={score === null ? `${nome}: sem medição` : `${nome}: ${score} em 100, ${PALAVRA[estado]}`}
+        >
+          <circle cx="38" cy="38" r={raio} fill="none" stroke="#f0ede8" strokeWidth={6} />
+          {score !== null ? (
+            <circle
+              cx="38"
+              cy="38"
+              r={raio}
+              fill="none"
+              stroke={COR_ESTADO[estado]}
+              strokeWidth={6}
+              strokeLinecap="round"
+              strokeDasharray={`${((score / 100) * perimetro).toFixed(1)} ${perimetro.toFixed(1)}`}
+            />
+          ) : null}
+        </svg>
         <span
-          className="text-3xl font-semibold tracking-tight"
+          className="absolute inset-0 flex items-center justify-center text-xl font-semibold tabular-nums tracking-tight"
           style={{ color: COR_ESTADO[estado] }}
         >
-          {score}
+          {score ?? '—'}
         </span>
-        <span className="text-sm text-ink-400">/100</span>
       </div>
-    </div>
+      <span className="text-xs leading-tight text-ink-600">{nome}</span>
+    </li>
+  )
+}
+
+/**
+ * A navegação com agência: quão bem um agente de IA lê e usa a página.
+ *
+ * Não é uma pontuação e não se desenha como uma. A própria Google mostra uma
+ * fração — auditorias passadas sobre as aplicáveis — porque a categoria ainda
+ * está em desenvolvimento e os critérios vão mudar. Um mostrador de 0 a 100
+ * aqui inventava uma precisão que a medição não tem.
+ */
+function NavegacaoComAgencia({ agentic }: { agentic: PageSpeedPoint['agentic'] }) {
+  const estado: keyof typeof COR_ESTADO =
+    agentic === null
+      ? 'sem'
+      : agentic.passed === agentic.total
+        ? 'bom'
+        : agentic.passed === 0
+          ? 'mau'
+          : 'medio'
+
+  return (
+    <li
+      className="flex w-[30%] flex-col items-center gap-2 text-center sm:w-auto"
+      data-categoria="Navegação com agência"
+    >
+      <div className="flex h-[76px] items-center">
+        <span
+          className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold tabular-nums"
+          style={{ color: COR_ESTADO[estado], backgroundColor: `${COR_ESTADO[estado]}1a` }}
+          title={
+            agentic === null
+              ? 'Ainda sem medição'
+              : `${agentic.passed} de ${agentic.total} verificações passadas`
+          }
+        >
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_ESTADO[estado] }} />
+          {agentic === null ? '—' : `${agentic.passed}/${agentic.total}`}
+        </span>
+      </div>
+      <span className="text-xs leading-tight text-ink-600">Navegação com agência</span>
+    </li>
+  )
+}
+
+/** Os intervalos das cores, para a cor nunca ser a única pista. */
+function Legenda() {
+  return (
+    <p className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-ink-400">
+      {(
+        [
+          ['mau', '0–49'],
+          ['medio', '50–89'],
+          ['bom', '90–100'],
+        ] as const
+      ).map(([estado, intervalo]) => (
+        <span key={estado} className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_ESTADO[estado] }} />
+          {intervalo}
+        </span>
+      ))}
+    </p>
   )
 }
 
@@ -180,30 +256,44 @@ export function PageSpeedPanel({
 
   return (
     <div className="px-5 py-4">
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-        <Mostrador score={latest.score} />
+      <ul
+        className="flex flex-wrap justify-center gap-x-2 gap-y-5 sm:grid sm:grid-cols-5"
+        aria-label="Pontuações do Lighthouse"
+      >
+        <Mostrador nome="Desempenho" score={latest.score} />
+        <Mostrador nome="Acessibilidade" score={latest.accessibility} />
+        <Mostrador nome="Práticas recomendadas" score={latest.bestPractices} />
+        <Mostrador nome="SEO" score={latest.seo} />
+        <NavegacaoComAgencia agentic={latest.agentic} />
+      </ul>
+      <Legenda />
+      {/* As medições de antes de o painel pedir as cinco categorias só têm a
+          de desempenho. Sem esta linha, três traços pareciam avaria. */}
+      {latest.accessibility === null && latest.seo === null ? (
+        <p className="mt-2 text-center text-xs text-ink-400">
+          Acessibilidade, práticas recomendadas, SEO e navegação com agência aparecem a partir
+          da próxima medição.
+        </p>
+      ) : null}
 
-        <div className="min-w-0 flex-1">
-          {/* A frase muda com o que está a ser medido. Dizer «medido em
-              telemóvel» por cima de uma medição de computador é a forma mais
-              rápida de alguém citar o número errado numa reunião. */}
-          <p className="text-sm text-ink-600">
-            {vista === 'computador'
-              ? 'Medido em computador. Não é o que a Google usa para indexar, mas é o que vê quem trabalha com o site a partir de uma secretária.'
-              : 'Medido em telemóvel, que é como a Google indexa. A velocidade conta para a posição na pesquisa e para quem desiste antes de a página abrir.'}
-          </p>
-          <p className="mt-1 text-xs text-ink-400">
-            Última medição a {dataCurta(latest.measuredAt)}
-            {trend !== null && trend !== 0 && (
-              <>
-                {' '}
-                · {trend > 0 ? '+' : ''}
-                {trend} pontos face a {points[0] ? dataCurta(points[0].measuredAt) : 'há 30 dias'}
-              </>
-            )}
-          </p>
-        </div>
-      </div>
+      {/* A frase muda com o que está a ser medido. Dizer «medido em
+          telemóvel» por cima de uma medição de computador é a forma mais
+          rápida de alguém citar o número errado numa reunião. */}
+      <p className="mt-5 text-sm text-ink-600">
+        {vista === 'computador'
+          ? 'Medido em computador. Não é o que a Google usa para indexar, mas é o que vê quem trabalha com o site a partir de uma secretária.'
+          : 'Medido em telemóvel, que é como a Google indexa. A velocidade conta para a posição na pesquisa e para quem desiste antes de a página abrir.'}
+      </p>
+      <p className="mt-1 text-xs text-ink-400">
+        Última medição a {dataCurta(latest.measuredAt)}
+        {trend !== null && trend !== 0 && (
+          <>
+            {' '}
+            · desempenho {trend > 0 ? '+' : ''}
+            {trend} pontos face a {points[0] ? dataCurta(points[0].measuredAt) : 'há 30 dias'}
+          </>
+        )}
+      </p>
 
       {/* A série fica à largura toda e não ao lado do mostrador: espremida na
           coluna do texto, no telemóvel, lia-se como um risco solto em vez de
