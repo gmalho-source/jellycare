@@ -953,3 +953,34 @@ export const assistantMessages = pgTable(
   },
   (table) => [index('assistant_messages_thread_idx').on(table.threadId, table.createdAt)],
 )
+
+/**
+ * Cada aviso que saiu para um cliente sobre um problema.
+ *
+ * O registo é do que foi mesmo enviado — assunto e corpo tal como saíram,
+ * depois de a pessoa os ter revisto — e não do rascunho que o assistente
+ * propôs. São coisas diferentes e é a segunda que não interessa: o que é
+ * preciso saber daqui a seis meses é o que o cliente leu.
+ *
+ * Guardado mesmo quando o envio falha, com o erro. Um aviso que não saiu é
+ * precisamente o que ninguém se lembra de ter tentado enviar.
+ */
+export const clientNotifications = pgTable(
+  'client_notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    /** Quem reviu e mandou. `set null` porque o registo continua a valer depois de a pessoa sair. */
+    sentBy: uuid('sent_by').references(() => users.id, { onDelete: 'set null' }),
+    recipients: jsonb('recipients').$type<string[]>().notNull(),
+    subject: text('subject').notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Nulo enquanto falhou. É o que distingue enviado de tentado. */
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (table) => [index('client_notifications_finding_idx').on(table.findingId, table.createdAt)],
+)

@@ -5,6 +5,7 @@ import {
   assistantMessages,
   assistantThreads,
   checkConfigs,
+  clientNotifications,
   checkRuns,
   connectors,
   findings,
@@ -180,6 +181,15 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
     { threadId: thread!.id, role: 'assistant', content: 'É o header HSTS.' },
   ])
 
+  await db.insert(clientNotifications).values({
+    findingId: finding!.id,
+    sentBy: pessoa!.id,
+    recipients: ['cliente@acpa.pt'],
+    subject: 'Encontrámos uma coisa no seu site',
+    body: 'O site não redireciona para HTTPS.',
+    sentAt: new Date(),
+  })
+
   await db.insert(reports).values({
     siteId,
     periodYear: 2026,
@@ -212,6 +222,12 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
   ).toHaveLength(0)
   expect(
     await db.select().from(assistantThreads).where(eq(assistantThreads.id, thread!.id)),
+  ).toHaveLength(0)
+  expect(
+    await db
+      .select()
+      .from(clientNotifications)
+      .where(eq(clientNotifications.findingId, finding!.id)),
   ).toHaveLength(0)
   expect(
     await db.select().from(assistantMessages).where(eq(assistantMessages.threadId, thread!.id)),
