@@ -40,6 +40,12 @@ oposição no portal. É a Cláusula 7.ª a funcionar sozinha.
   (`apps/worker/src/wp-update-jobs.ts`). Se uma delas for relaxada no código,
   esta cláusula passa a estar errada.
 
+- **Subcontratantes v2** — acrescenta a Anthropic, pelo assistente técnico da
+  equipa (`docs/assistente.md`). Publicada a 29/09/2026 com `effectiveAt` a
+  29/10/2026: o pré-aviso de 30 dias da Cláusula 7.ª. O DPA não muda de versão
+  — acrescentar um subcontratante é precisamente o que a Cláusula 7.ª prevê
+  sem nova aceitação.
+
 ## Por fazer
 
 - Confirmar, no acordo de cada fornecedor, a entidade contratante, a região

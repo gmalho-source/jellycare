@@ -61,16 +61,22 @@ export const LEGAL_DOCUMENTS: readonly LegalDocumentSpec[] = [
   {
     kind: 'subprocessors',
     locale: 'pt',
-    version: 1,
+    // v2: acrescenta a Anthropic (assistente técnico da equipa). Pré-aviso de
+    // 30 dias da Cláusula 7.ª a contar da publicação, a 29/09/2026.
+    version: 2,
     title: 'Subcontratantes ulteriores',
     file: 'subprocessors.pt.md',
+    effectiveAt: '2026-10-29T00:00:00Z',
   },
   {
     kind: 'subprocessors',
     locale: 'en',
-    version: 1,
+    // v2: acrescenta a Anthropic (assistente técnico da equipa). Pré-aviso de
+    // 30 dias da Cláusula 7.ª a contar da publicação, a 29/09/2026.
+    version: 2,
     title: 'Sub-processors',
     file: 'subprocessors.en.md',
+    effectiveAt: '2026-10-29T00:00:00Z',
   },
   // `terms` está no enum e não tem documento. Os Termos & Condições regulam o
   // negócio — preço, prazos, SLA, rescisão — e essas são decisões da Jelly,

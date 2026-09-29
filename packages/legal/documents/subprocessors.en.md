@@ -16,6 +16,7 @@ date is a notice period: the previous list stays in force until then.
 | **Resend** ([entity to confirm]) | Sending alerts and reports, and receiving test messages in the canary inbox | Email addresses of the recipients nominated by the Client, and the content of messages sent | [to confirm] | [to confirm — Standard Contractual Clauses likely required] |
 | **Cloudflare** ([entity to confirm]) | DNS and network layer | Traffic metadata, including IP addresses of dashboard and portal users | [to confirm] | [to confirm] |
 | **WP Umbrella** ([entity to confirm]) | WordPress component inventory and known vulnerabilities | Site hostname, installed plugins, themes and versions | [to confirm] | [to confirm] |
+| **Anthropic** ([entity to confirm]) | Technical assistant for Jelly's team: explaining detected issues and drafting notices to the Client, always reviewed by a person before anything is sent | Site name and address, technical details of the issue and of the evidence collected (headers, responses, certificates, metrics), WordPress inventory where available, and the questions written by the team. Recipients' email addresses are not sent. Invoked only on request by a team member, one issue at a time | [to confirm] | [to confirm — Standard Contractual Clauses likely required] |
 
 **Note on the WordPress chain.** The vulnerability data presented by WP
 Umbrella originates, wholly or in part, from a third-party database

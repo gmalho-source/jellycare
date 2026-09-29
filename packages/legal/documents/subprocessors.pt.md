@@ -16,6 +16,7 @@ pré-aviso: a lista anterior continua a valer até lá.
 | **Resend** ([entidade a confirmar]) | Envio de alertas e relatórios, e receção das mensagens de teste na caixa canária | Endereços de email dos destinatários indicados pelo Cliente e conteúdo das mensagens enviadas | [a confirmar] | [a confirmar — provável necessidade de Cláusulas Contratuais-Tipo] |
 | **Cloudflare** ([entidade a confirmar]) | DNS e camada de rede | Metadados de tráfego, incluindo endereços IP de quem acede ao painel e ao portal | [a confirmar] | [a confirmar] |
 | **WP Umbrella** ([entidade a confirmar]) | Inventário e vulnerabilidades conhecidas de componentes WordPress | Nome de anfitrião do sítio, plugins, temas e versões instaladas | [a confirmar] | [a confirmar] |
+| **Anthropic** ([entidade a confirmar]) | Assistente técnico da equipa da Jelly: explicação de problemas detetados e rascunho de avisos ao Cliente, sempre revistos por uma pessoa antes de qualquer envio | Nome e endereço do sítio, dados técnicos do problema e da evidência recolhida (cabeçalhos, respostas, certificados, métricas), inventário WordPress quando existe, e as perguntas escritas pela equipa. Não recebe os endereços de email dos destinatários. Só é acionado a pedido de uma pessoa da equipa, problema a problema | [a confirmar] | [a confirmar — provável necessidade de Cláusulas Contratuais-Tipo] |
 
 **Nota sobre a cadeia WordPress.** Os dados de vulnerabilidades apresentados
 pela WP Umbrella têm origem, no todo ou em parte, em base de dados de
