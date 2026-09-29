@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm'
 import { afterAll, expect, it } from 'vitest'
 import { createDatabase } from './client.js'
 import {
+  assistantMessages,
+  assistantThreads,
   checkConfigs,
   checkRuns,
   connectors,
@@ -15,6 +17,7 @@ import {
   reports,
   siteVerifications,
   sites,
+  users,
   uptimeSamples,
   wpBackups,
   wpComponents,
@@ -162,6 +165,21 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
     startedAt: new Date(),
   })
 
+  // A conversa do assistente pende do problema, não do site: são dois saltos
+  // até à linha do site, e é o tipo de tabela nova que o cascade esquece.
+  const [pessoa] = await db
+    .insert(users)
+    .values({ email: `apagar-${marca}@jelly.pt` })
+    .returning({ id: users.id })
+  const [thread] = await db
+    .insert(assistantThreads)
+    .values({ findingId: finding!.id, openedBy: pessoa!.id })
+    .returning({ id: assistantThreads.id })
+  await db.insert(assistantMessages).values([
+    { threadId: thread!.id, role: 'user', content: 'O que é isto?' },
+    { threadId: thread!.id, role: 'assistant', content: 'É o header HSTS.' },
+  ])
+
   await db.insert(reports).values({
     siteId,
     periodYear: 2026,
@@ -192,6 +210,13 @@ it('apaga um site com linhas em todas as tabelas que dependem dele', async () =>
       .from(notificationDeliveries)
       .where(eq(notificationDeliveries.id, delivery!.id)),
   ).toHaveLength(0)
+  expect(
+    await db.select().from(assistantThreads).where(eq(assistantThreads.id, thread!.id)),
+  ).toHaveLength(0)
+  expect(
+    await db.select().from(assistantMessages).where(eq(assistantMessages.threadId, thread!.id)),
+  ).toHaveLength(0)
 
   await db.delete(organizations).where(eq(organizations.id, organizationId))
+  await db.delete(users).where(eq(users.id, pessoa!.id))
 })

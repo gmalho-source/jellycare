@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
+import { createServer as createHttpServer, type Server } from 'node:http'
 import { createDatabase, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
 import { and, eq } from 'drizzle-orm'
@@ -21,6 +22,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  */
 
 const INBOX_SECRET = 'segredo-de-teste-da-inbox'
+const RESPOSTA_DO_ASSISTENTE =
+  'O HSTS diz ao browser para nunca mais falar HTTP com este domínio.\n\n```nginx\nadd_header Strict-Transport-Security "max-age=63072000" always;\n```\n\nCuidado: com preload isto é praticamente irreversível durante meses.'
 const DATABASE_URL = process.env.TEST_DATABASE_URL
 const BUILD_PRESENT = existsSync(join(process.cwd(), '.next', 'BUILD_ID'))
 
@@ -39,6 +42,71 @@ async function freePort(): Promise<number> {
   })
 }
 
+
+/**
+ * Um Claude falso que fala mesmo o protocolo de streaming da Anthropic.
+ *
+ * Existe para o percurso ser exercitado de ponta a ponta — browser, endpoint,
+ * SDK, fluxo, base de dados — sem gastar dinheiro nem depender da rede. Um
+ * duplo do SDK provava só o que o nosso código chama; isto prova que os
+ * pedaços chegam ao ecrã e que a conversa fica gravada.
+ *
+ * Guarda os corpos recebidos, que é como se afirma o que foi mesmo enviado
+ * para fora.
+ */
+function anthropicFalso(resposta: string) {
+  const recebidos: Record<string, unknown>[] = []
+  const servidor = createHttpServer((pedido, resultado) => {
+    let corpo = ''
+    pedido.on('data', (pedaco) => {
+      corpo += pedaco
+    })
+    pedido.on('end', () => {
+      recebidos.push(JSON.parse(corpo || '{}'))
+      resultado.writeHead(200, { 'content-type': 'text/event-stream' })
+      const evento = (tipo: string, dados: unknown) =>
+        resultado.write(`event: ${tipo}\ndata: ${JSON.stringify(dados)}\n\n`)
+
+      evento('message_start', {
+        type: 'message_start',
+        message: {
+          id: 'msg_falso',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-opus-5-5',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1200, output_tokens: 0, cache_read_input_tokens: 900 },
+        },
+      })
+      evento('content_block_start', {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'text', text: '' },
+      })
+      // Em dois pedaços de propósito: é o que prova que o painel vai
+      // acumulando em vez de esperar pela resposta inteira.
+      for (const pedaco of [resposta.slice(0, 10), resposta.slice(10)]) {
+        evento('content_block_delta', {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: pedaco },
+        })
+      }
+      evento('content_block_stop', { type: 'content_block_stop', index: 0 })
+      evento('message_delta', {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: { output_tokens: 300 },
+      })
+      evento('message_stop', { type: 'message_stop' })
+      resultado.end()
+    })
+  })
+  return { servidor, recebidos }
+}
+
 describeE2E('fluxo de entrada e painel', () => {
   let child: ChildProcess
   let browser: Browser
@@ -46,6 +114,8 @@ describeE2E('fluxo de entrada e painel', () => {
   let logPath: string
   let logBuffer = ''
   let siteId: string
+  let anthropic: Server
+  let pedidosAoModelo: Record<string, unknown>[]
 
   const email = `e2e-${Date.now()}@jelly.pt`
   const emailCliente = `cliente-${Date.now()}@exemplo.pt`
@@ -311,6 +381,18 @@ describeE2E('fluxo de entrada e painel', () => {
       }
     }
 
+    // O Claude falso arranca antes do servidor, para o endereço dele já
+    // existir quando o Next arrancar.
+    {
+      const falso = anthropicFalso(RESPOSTA_DO_ASSISTENTE)
+      anthropic = falso.servidor
+      pedidosAoModelo = falso.recebidos
+      const porta = await freePort()
+      await new Promise<void>((resolve) => anthropic.listen(porta, '127.0.0.1', resolve))
+      process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${porta}`
+      process.env.ANTHROPIC_API_KEY = 'chave-de-teste'
+    }
+
     const port = await freePort()
     // `localhost` em ambos os lados: o cookie de sessão é por host, e servir em
     // 127.0.0.1 enquanto se navega para localhost fá-lo-ia desaparecer.
@@ -322,6 +404,8 @@ describeE2E('fluxo de entrada e painel', () => {
         ...process.env,
         DATABASE_URL: DATABASE_URL as string,
         JELLYCARE_APP_URL: baseUrl,
+        ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL as string,
+        ANTHROPIC_API_KEY: 'chave-de-teste',
         CANARY_INBOX_WEBHOOK_SECRET: INBOX_SECRET,
         // Sem chave de email, a ligação de entrada é escrita na consola — é
         // dali que este teste a lê.
@@ -359,6 +443,7 @@ describeE2E('fluxo de entrada e painel', () => {
   afterAll(async () => {
     await browser?.close()
     child?.kill('SIGTERM')
+    await new Promise<void>((resolve) => anthropic?.close(() => resolve()))
   })
 
   function loginLink(): string {
@@ -1494,6 +1579,111 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await page.isVisible('nav a:has-text("WordPress")')).toBe(false)
 
     await page.close()
+  }, 90_000)
+
+  it('dá apoio técnico sobre um problema, e guarda a conversa', async () => {
+    // O percurso todo: o botão, o contexto montado a partir da base de dados,
+    // os pedaços a chegarem ao ecrã, e a conversa a sobreviver a um refresh.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      await db.insert(schema.findings).values({
+        siteId: siteVerificado,
+        checkType: 'security_headers',
+        fingerprint: `apoio-${marca}`,
+        code: 'missing_hsts',
+        severity: 'medium',
+        state: 'open',
+        title: `Falta o HSTS ${marca}`,
+        detail: 'Existe para este teste.',
+        evidence: { server: 'nginx/1.24.0' },
+        firstSeenAt: new Date(Date.now() - 8 * 24 * 3600_000),
+        lastSeenAt: new Date(),
+      })
+    } finally {
+      await close()
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    const linha = equipa.locator('li', { hasText: `Falta o HSTS ${marca}` })
+    await linha.getByRole('button', { name: 'Pedir apoio' }).click()
+
+    // A resposta chega ao ecrã, e o bloco de configuração fica em `pre` para
+    // se poder copiar sem apanhar quebras a mais.
+    await equipa.waitForSelector('text=O HSTS diz ao browser')
+    await expect
+      .poll(() => equipa.locator('pre code').first().textContent())
+      .toContain('Strict-Transport-Security')
+
+    // O que foi mesmo enviado para fora: o prompt de sistema marcado para
+    // cache, e o contexto do problema no turno do utilizador. É a parte que
+    // prova que o assistente está a olhar para este problema e não a falar de
+    // HSTS em geral.
+    const pedido = pedidosAoModelo.at(-1) as {
+      system: { text: string; cache_control?: unknown }[]
+      messages: { role: string; content: string }[]
+    }
+    expect(pedido.system[0]!.cache_control).toEqual({ type: 'ephemeral' })
+    const ultima = pedido.messages.at(-1)!
+    expect(ultima.content).toContain('missing_hsts')
+    expect(ultima.content).toContain('nginx/1.24.0')
+    expect(ultima.content).toContain('há 8 dias')
+
+    // Uma segunda pergunta leva a conversa anterior atrás.
+    await equipa.fill('input[placeholder^="Perguntar mais"]', 'E em Apache?')
+    await equipa.getByRole('button', { name: 'Perguntar' }).click()
+    await expect.poll(() => pedidosAoModelo.length).toBeGreaterThan(1)
+    const segundo = pedidosAoModelo.at(-1) as { messages: { content: string }[] }
+    expect(segundo.messages.length).toBeGreaterThan(2)
+    expect(segundo.messages.at(-1)!.content).toContain('E em Apache?')
+
+    // E sobrevive a recarregar a página: está gravada, não está no browser.
+    await equipa.reload()
+    const outraVez = equipa.locator('li', { hasText: `Falta o HSTS ${marca}` })
+    await outraVez.getByRole('button', { name: 'Pedir apoio' }).click()
+    await equipa.waitForSelector('text=E em Apache?')
+
+    await equipa.close()
+  }, 120_000)
+
+  it('não deixa um cliente chegar ao assistente técnico', async () => {
+    // O assistente fala em termos técnicos e diz o que está exposto e como.
+    // Um cliente pertence à organização e passaria numa verificação de
+    // pertença — por isso a verificação é a de gestão, e tem de aguentar um
+    // pedido feito à mão ao endpoint.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let findingId = ''
+    try {
+      const [criado] = await db
+        .insert(schema.findings)
+        .values({
+          siteId: siteVerificado,
+          checkType: 'security_headers',
+          fingerprint: `cliente-${marca}`,
+          code: 'missing_csp',
+          severity: 'low',
+          state: 'open',
+          title: `Sem CSP ${marca}`,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        })
+        .returning({ id: schema.findings.id })
+      findingId = criado!.id
+    } finally {
+      await close()
+    }
+
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+
+    const resposta = await cliente.request.post(`${baseUrl}/api/assistente/${findingId}`, {
+      data: { pergunta: 'Explica.' },
+    })
+    expect(resposta.status()).toBe(404)
+
+    await cliente.close()
   }, 90_000)
 
   it('exige sessão para ver o painel', async () => {

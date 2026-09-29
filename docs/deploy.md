@@ -152,6 +152,19 @@ fly secrets set WP_UMBRELLA_TOKEN=... -a jellycare-web
 Sem o token, o check de WordPress não corre e o painel diz que não consegue
 obter a lista. Nenhuma das duas coisas parte o resto.
 
+### 3b. Anthropic
+
+Chave da API em console.anthropic.com. Só o dashboard precisa dela — o
+assistente técnico corre a pedido de uma pessoa e o worker nunca lhe toca.
+
+```
+fly secrets set ANTHROPIC_API_KEY=... -a jellycare-web
+```
+
+Sem a chave, o botão «Pedir apoio» continua à vista e o painel diz a razão em
+vez de falhar sem explicação. Ver `docs/assistente.md` para o que vai no
+contexto, quanto custa, e a nota sobre subcontratantes.
+
 ### 4. Resend
 
 Adicionar `jellycare.pt` como domínio de envio e publicar os registos DNS que o

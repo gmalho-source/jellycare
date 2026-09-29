@@ -884,3 +884,72 @@ export const schedulerHeartbeats = pgTable('scheduler_heartbeats', {
   lastError: text('last_error'),
   lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
 })
+
+/* -------------------------------------------------------------------------- */
+/* Assistente                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Uma conversa com o assistente sobre um problema concreto.
+ *
+ * Presa ao finding e não ao site: o que dá valor à conversa é ter à frente a
+ * evidência daquele problema, e uma conversa sem esse âmbito é um chatbot
+ * genérico que não sabe nada que não se soubesse já.
+ *
+ * Uma por problema e por pessoa. Partilhada dentro da equipa seria pior de
+ * duas maneiras: o histórico de outra pessoa entra no contexto do modelo sem
+ * ninguém esperar, e duas pessoas a escrever ao mesmo tempo intercalam turnos
+ * na mesma conversa.
+ *
+ * É guardada — e não só mantida no browser — porque a conversa sobrevive a um
+ * refresh, porque a equipa precisa de ver o que já foi perguntado sobre
+ * aquele problema antes de perguntar outra vez, e porque isto manda dados de
+ * um cliente para fora: tem de haver registo de o quê e a pedido de quem.
+ */
+export const assistantThreads = pgTable(
+  'assistant_threads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    /** Quem abriu. `set null` porque a conversa continua a interessar depois de a pessoa sair. */
+    openedBy: uuid('opened_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('assistant_threads_finding_user_idx').on(table.findingId, table.openedBy),
+    index('assistant_threads_finding_idx').on(table.findingId, table.lastMessageAt),
+  ],
+)
+
+export const assistantRoleEnum = pgEnum('assistant_role', ['user', 'assistant'])
+
+/**
+ * Cada turno da conversa, pela ordem em que aconteceu.
+ *
+ * O contexto do problema não é guardado aqui: é remontado a cada pedido a
+ * partir das tabelas de origem. É de propósito — um problema que agravou, ou
+ * que já foi resolvido, tem de entrar na conversa como está agora e não como
+ * estava quando alguém abriu o painel na semana passada.
+ *
+ * Os tokens ficam registados porque uma funcionalidade que custa dinheiro a
+ * cada utilização tem de poder ser medida sem ir à fatura.
+ */
+export const assistantMessages = pgTable(
+  'assistant_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    threadId: uuid('thread_id')
+      .notNull()
+      .references(() => assistantThreads.id, { onDelete: 'cascade' }),
+    role: assistantRoleEnum('role').notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cachedTokens: integer('cached_tokens'),
+  },
+  (table) => [index('assistant_messages_thread_idx').on(table.threadId, table.createdAt)],
+)

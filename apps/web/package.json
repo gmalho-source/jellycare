@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@jellycare/assistant": "workspace:*",
     "@jellycare/checks": "workspace:*",
     "@jellycare/connectors": "workspace:*",
     "@jellycare/core": "workspace:*",
