@@ -162,7 +162,12 @@ fly secrets set ANTHROPIC_API_KEY=... -a jellycare-web
 ```
 
 Sem a chave, o botão «Pedir apoio» continua à vista e o painel diz a razão em
-vez de falhar sem explicação. Ver `docs/assistente.md` para o que vai no
+vez de falhar sem explicação.
+
+Os avisos ao cliente saem pelo mesmo Resend, de `Jelly <avisos@jellycare.pt>`.
+Para outro remetente, `fly secrets set NOTICE_FROM_EMAIL=... -a jellycare-web` —
+de um domínio verificado no Resend, senão o envio é recusado e fica registado
+como falhado. Ver `docs/assistente.md` para o que vai no
 contexto, quanto custa, e a nota sobre subcontratantes.
 
 ### 4. Resend

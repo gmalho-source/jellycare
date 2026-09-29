@@ -2,6 +2,7 @@ import type { ContextoDoProblema, TurnoDaConversa } from '@jellycare/assistant'
 import { isInAnyMaintenanceWindow, schema } from '@jellycare/db'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { getDb } from './db'
+import { canManage, getCurrentUser } from './session'
 
 export interface ProblemaParaAssistente {
   organizationId: string
@@ -170,4 +171,28 @@ export async function lerConversa(threadId: string): Promise<TurnoDaConversa[]> 
     .orderBy(asc(schema.assistantMessages.createdAt))
 
   return linhas.map((linha) => ({ role: linha.role, content: linha.content }))
+}
+
+/**
+ * Quem pede, e o problema, se quem pede gere a organização dele.
+ *
+ * `null` quando não há sessão; `'nao_encontrado'` tanto quando o problema não
+ * existe como quando existe e não é de quem pede — confirmar a existência de
+ * um problema de outro cliente já é informação a mais. É a verificação de
+ * gestão e não a de pertença: um cliente pertence à organização e passaria na
+ * segunda.
+ */
+export async function problemaParaQuemGere(
+  findingId: string,
+  agora: Date,
+): Promise<
+  | null
+  | 'nao_encontrado'
+  | { user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; problema: ProblemaParaAssistente }
+> {
+  const user = await getCurrentUser()
+  if (!user) return null
+  const problema = await lerProblemaParaAssistente(findingId, agora)
+  if (!problema || !canManage(user, problema.organizationId)) return 'nao_encontrado'
+  return { user, problema }
 }

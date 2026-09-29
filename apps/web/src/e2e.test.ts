@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createServer as createHttpServer, type Server } from 'node:http'
+import { explicacaoDe } from '@jellycare/core'
 import { createDatabase, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
 import { and, eq } from 'drizzle-orm'
@@ -22,6 +23,23 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  */
 
 const INBOX_SECRET = 'segredo-de-teste-da-inbox'
+
+/**
+ * Quanto um `expect.poll` espera antes de desistir.
+ *
+ * O valor por omissão do vitest é um segundo. Chega quando o teste corre
+ * sozinho e falha quando corre com a bateria inteira à volta: a ida e volta
+ * ao servidor passa desse segundo, e o teste fica vermelho a medir velocidade
+ * em vez de comportamento. Aconteceu com o teste do erro do assistente, que
+ * passava sozinho e falhava em conjunto.
+ */
+const PRAZO_DE_ESPERA = 15_000
+const AVISO_DO_ASSISTENTE = {
+  assunto: 'O email do seu domínio precisa de uma autorização',
+  corpo:
+    'Os emails enviados a partir do seu domínio não trazem a autorização que os servidores de destino procuram.\n\n' +
+    'Precisamos que peça a quem gere o domínio que acrescente um registo. Enviamos o texto exato a seguir.',
+}
 const RESPOSTA_DO_ASSISTENTE =
   'O HSTS diz ao browser para nunca mais falar HTTP com este domínio.\n\n```nginx\nadd_header Strict-Transport-Security "max-age=63072000" always;\n```\n\nCuidado: com preload isto é praticamente irreversível durante meses.'
 const DATABASE_URL = process.env.TEST_DATABASE_URL
@@ -72,6 +90,25 @@ function anthropicFalso(resposta: string) {
       if (JSON.stringify(enviado).includes('REBENTA')) {
         resultado.writeHead(401, { 'content-type': 'application/json' })
         resultado.end(JSON.stringify({ error: { message: 'invalid x-api-key' } }))
+        return
+      }
+
+      // Sem `stream`, é o rascunho do aviso: uma resposta inteira com o JSON
+      // pedido pela saída estruturada, como a API a devolve.
+      if (!enviado.stream) {
+        resultado.writeHead(200, { 'content-type': 'application/json' })
+        resultado.end(
+          JSON.stringify({
+            id: 'msg_aviso',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-opus-5-5',
+            content: [{ type: 'text', text: JSON.stringify(AVISO_DO_ASSISTENTE) }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 900, output_tokens: 200, cache_read_input_tokens: 700 },
+          }),
+        )
         return
       }
 
@@ -477,7 +514,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(loginLink())
     await page.waitForURL(`${baseUrl}/`)
 
-    await expect.poll(() => page.textContent('h1')).toBe('Sites')
+    await expect.poll(() => page.textContent('h1'), { timeout: PRAZO_DE_ESPERA }).toBe('Sites')
     expect(await page.isVisible('text=Site de teste')).toBe(true)
 
     // A linha do site mostra o histórico agregado: disponibilidade das últimas
@@ -486,7 +523,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Restrito ao conteúdo: o mesmo nome aparece também na coluna de
     // navegação, e sem isto o localizador apanhava as duas entradas.
     const linha = page.locator('main li', { hasText: 'Site de teste' })
-    await expect.poll(() => linha.textContent()).toContain('50,00%')
+    await expect.poll(() => linha.textContent(), { timeout: PRAZO_DE_ESPERA }).toContain('50,00%')
     expect(await linha.textContent()).toMatch(/minuto|hora|segundo/)
 
     await page.close()
@@ -1557,7 +1594,7 @@ describeE2E('fluxo de entrada e painel', () => {
 
     // Volta à lista e o site desapareceu mesmo — da página e da base de dados.
     await page.waitForURL(`${baseUrl}/`)
-    await expect.poll(() => page.isVisible(`text=${rotulo}`)).toBe(false)
+    await expect.poll(() => page.isVisible(`text=${rotulo}`), { timeout: PRAZO_DE_ESPERA }).toBe(false)
 
     const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
     try {
@@ -1583,7 +1620,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
 
     await expect
-      .poll(() => page.locator('h2', { hasText: 'WordPress' }).isVisible())
+      .poll(() => page.locator('h2', { hasText: 'WordPress' }).isVisible(), { timeout: PRAZO_DE_ESPERA })
       .toBe(true)
 
     // E o separador continua escondido enquanto não houver ligação: sem ela
@@ -1625,7 +1662,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // se poder copiar sem apanhar quebras a mais.
     await equipa.waitForSelector('text=O HSTS diz ao browser')
     await expect
-      .poll(() => equipa.locator('pre code').first().textContent())
+      .poll(() => equipa.locator('pre code').first().textContent(), { timeout: PRAZO_DE_ESPERA })
       .toContain('Strict-Transport-Security')
 
     // O que foi mesmo enviado para fora: o prompt de sistema marcado para
@@ -1645,7 +1682,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // Uma segunda pergunta leva a conversa anterior atrás.
     await equipa.fill('input[placeholder^="Perguntar mais"]', 'E em Apache?')
     await equipa.getByRole('button', { name: 'Perguntar' }).click()
-    await expect.poll(() => pedidosAoModelo.length).toBeGreaterThan(1)
+    await expect.poll(() => pedidosAoModelo.length, { timeout: PRAZO_DE_ESPERA }).toBeGreaterThan(1)
     const segundo = pedidosAoModelo.at(-1) as { messages: { content: string }[] }
     expect(segundo.messages.length).toBeGreaterThan(2)
     expect(segundo.messages.at(-1)!.content).toContain('E em Apache?')
@@ -1733,12 +1770,136 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.fill('input[placeholder^="Perguntar mais"]', 'REBENTA por favor')
     await page.getByRole('button', { name: 'Perguntar' }).click()
 
-    // O estado e a mensagem da API chegam ao ecrã.
-    await expect.poll(() => page.textContent('body')).toContain('401')
-    expect(await page.textContent('body')).toContain('invalid x-api-key')
+    // O estado e a mensagem da API chegam ao ecrã. Espera pelo texto e não
+    // por um `expect.poll`: o prazo deste é de um segundo, e sob a carga da
+    // bateria inteira a ida e volta passava disso — o teste falhava a medir
+    // velocidade em vez de comportamento.
+    await page.waitForSelector('text=invalid x-api-key')
+    expect(await page.textContent('body')).toContain('401')
 
     await page.close()
   }, 120_000)
+
+  it('prepara um aviso ao cliente, e regista o que foi revisto e não o rascunho', async () => {
+    // O percurso da revisão obrigatória: o rascunho abre num formulário, a
+    // pessoa altera, e o que fica registado é o que ela deixou — não o que o
+    // modelo propôs. Sem chave do Resend no ambiente de teste, o envio falha,
+    // e isso prova a outra metade: uma tentativa que não saiu fica registada,
+    // com o erro, e aparece no painel.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let findingId = ''
+    try {
+      await db
+        .update(schema.sites)
+        .set({ reportRecipients: ['contacto@cliente-e2e.pt'] })
+        .where(eq(schema.sites.id, siteVerificado))
+      const [criado] = await db
+        .insert(schema.findings)
+        .values({
+          siteId: siteVerificado,
+          checkType: 'email_auth',
+          fingerprint: `aviso-${marca}`,
+          code: 'spf_missing',
+          severity: 'medium',
+          state: 'open',
+          title: `Sem SPF ${marca}`,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        })
+        .returning({ id: schema.findings.id })
+      findingId = criado!.id
+    } finally {
+      await close()
+    }
+
+    const page = await entrarComo(email)
+    await page.waitForURL(`${baseUrl}/`)
+    await page.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    const linha = page.locator('li', { hasText: `Sem SPF ${marca}` })
+    await linha.getByRole('button', { name: 'Pedir apoio' }).click()
+    await page.waitForSelector('text=O HSTS diz ao browser')
+
+    const antes = pedidosAoModelo.length
+    await page.getByRole('button', { name: 'Preparar aviso ao cliente' }).click()
+
+    // O formulário abre preenchido: rascunho do assistente e destinatários do site.
+    await page.waitForSelector('input[name=assunto]')
+    expect(await page.inputValue('input[name=assunto]')).toBe(AVISO_DO_ASSISTENTE.assunto)
+    expect(await page.inputValue('input[name=destinatarios]')).toBe('contacto@cliente-e2e.pt')
+
+    // O pedido ao modelo foi ancorado na explicação revista deste código.
+    const pedido = pedidosAoModelo[antes] as { messages: { content: string }[]; stream?: boolean }
+    expect(pedido.stream).toBeFalsy()
+    expect(pedido.messages[0]!.content).toContain(explicacaoDe('spf_missing')!.oQueE)
+
+    // A pessoa altera o texto antes de enviar.
+    const corpo = page.locator('textarea[name=corpo]')
+    await corpo.fill(`${await corpo.inputValue()}\n\nRevisto pela equipa ${marca}.`)
+    await page.getByRole('button', { name: 'Enviar ao cliente' }).click()
+
+    // Sem Resend configurado não sai — e diz porquê, e fica no registo.
+    await page.waitForSelector('text=RESEND_API_KEY')
+    await page.waitForSelector('text=Não saiu')
+
+    const verificacao = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const registos = await verificacao.db
+        .select()
+        .from(schema.clientNotifications)
+        .where(eq(schema.clientNotifications.findingId, findingId))
+      expect(registos).toHaveLength(1)
+      expect(registos[0]!.body).toContain(`Revisto pela equipa ${marca}.`)
+      expect(registos[0]!.recipients).toEqual(['contacto@cliente-e2e.pt'])
+      expect(registos[0]!.sentAt).toBeNull()
+      expect(registos[0]!.error).toContain('RESEND_API_KEY')
+    } finally {
+      await verificacao.close()
+    }
+
+    await page.close()
+  }, 120_000)
+
+  it('não deixa um cliente preparar nem enviar avisos', async () => {
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    let findingId = ''
+    try {
+      const [criado] = await db
+        .insert(schema.findings)
+        .values({
+          siteId: siteVerificado,
+          checkType: 'email_auth',
+          fingerprint: `aviso-cliente-${marca}`,
+          code: 'spf_missing',
+          severity: 'medium',
+          state: 'open',
+          title: `Aviso vedado ${marca}`,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        })
+        .returning({ id: schema.findings.id })
+      findingId = criado!.id
+    } finally {
+      await close()
+    }
+
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+
+    const rascunho = await cliente.request.post(
+      `${baseUrl}/api/assistente/${findingId}/avisos/rascunho`,
+      { data: {} },
+    )
+    expect(rascunho.status()).toBe(404)
+
+    const envio = await cliente.request.post(`${baseUrl}/api/assistente/${findingId}/avisos`, {
+      data: { assunto: 'x', corpo: 'y', destinatarios: 'alvo@exemplo.pt' },
+    })
+    expect(envio.status()).toBe(404)
+
+    await cliente.close()
+  }, 90_000)
 
   it('exige sessão para ver o painel', async () => {
     const anonima = await browser.newPage()

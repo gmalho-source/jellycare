@@ -97,3 +97,43 @@ Isto manda dados de sites de clientes para a Anthropic, o que a torna
 subcontratante. **Tem de constar da lista de subcontratantes e do DPA**, e os
 clientes com DPA negociado em papel têm de ser verificados um a um. Ver
 `docs/riscos.md` e o módulo legal.
+
+## Aviso ao cliente
+
+Dentro do painel de apoio, «Preparar aviso ao cliente» pede ao assistente um
+rascunho de email sobre aquele problema. É para os casos em que a resolução
+**não** está do lado da Jelly — um acesso que não temos, uma decisão do cliente,
+um fornecedor que só ele pode contactar. O que se pode resolver, resolve-se, e
+não se manda email nenhum; o prompt diz isso e o painel também.
+
+A revisão é obrigatória e não há atalho à volta dela. O rascunho abre num
+formulário com os destinatários do relatório mensal, o assunto e o texto; a
+pessoa altera o que quiser, pode pedir outra versão com instruções, e só sai
+quando carrega em «Enviar ao cliente». O endpoint de envio só aceita o que vem
+do formulário — não há caminho do modelo para a caixa do cliente.
+
+O rascunho é ancorado na explicação já revista daquele código
+(`packages/core/src/explicacoes.ts`), para o email dizer o mesmo que o cliente
+lê no portal em vez de reinventar o que o problema é.
+
+O email sai com a marca da Jelly e não da Jellycare — quem escreve ao cliente é a
+agência que ele contratou. Assina como «Equipa Jelly» e leva `reply_to` para quem
+enviou: a resposta do cliente chega a uma pessoa e não a um endereço de envio.
+
+### Registo
+
+Cada tentativa fica em `client_notifications`, com quem enviou, para quem, o
+assunto e o texto **tal como saíram** — o que foi revisto, não o rascunho. A
+linha é escrita antes de tentar enviar e atualizada depois: uma queda a meio
+deixa rasto em vez de um email na caixa do cliente de que a Jelly não sabe.
+Uma falha fica gravada com o erro e aparece no painel como «Não saiu». Não há
+reenvio automático, de propósito: é assim que o mesmo email chega três vezes.
+
+O registo vê-se por baixo do formulário, em cada problema. É o que diz a quem
+vai escrever que o cliente já foi avisado.
+
+### Configuração
+
+Usa o mesmo `RESEND_API_KEY` que já está nas duas apps. O remetente é
+`Jelly <avisos@jellycare.pt>` por omissão, e muda-se com `NOTICE_FROM_EMAIL` —
+tem de ser de um domínio verificado no Resend.

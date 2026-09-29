@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { AvisoAoCliente } from './aviso'
 
 interface Turno {
   role: 'user' | 'assistant'
@@ -220,6 +221,8 @@ export function Apoio({
           <p className="mt-2 text-xs text-ink-400">
             Quem confirma que ficou resolvido é a verificação, na passagem seguinte — não isto.
           </p>
+
+          <AvisoAoCliente findingId={findingId} />
         </div>
       ) : null}
     </>
