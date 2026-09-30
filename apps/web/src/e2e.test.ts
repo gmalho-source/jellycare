@@ -1264,6 +1264,60 @@ describeE2E('fluxo de entrada e painel', () => {
     }
   }, 120_000)
 
+  it('deixa ler o texto de uma lista de subcontratantes anunciada, antes de entrar em vigor', async () => {
+    // O pré-aviso da Cláusula 7.ª só vale se o cliente puder ler o que muda.
+    // A página mostrava a versão em vigor e mais nada: dizia que havia uma
+    // alteração e não deixava ler qual.
+    const marca = Date.now()
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    const ids: string[] = []
+    try {
+      const base = 900_000 + Math.floor(Math.random() * 90_000)
+      const linhas = await db
+        .insert(schema.legalDocuments)
+        .values([
+          {
+            kind: 'subprocessors',
+            locale: 'pt',
+            version: base,
+            title: 'Subcontratantes ulteriores',
+            body: `# Subcontratantes ulteriores\n\nLista em vigor ${marca}.`,
+            contentHash: 'b'.repeat(64),
+            effectiveAt: new Date(Date.now() - 60_000),
+          },
+          {
+            kind: 'subprocessors',
+            locale: 'pt',
+            version: base + 1,
+            title: 'Subcontratantes ulteriores',
+            body: `# Subcontratantes ulteriores\n\nLista nova com o fornecedor acrescentado ${marca}.`,
+            contentHash: 'c'.repeat(64),
+            effectiveAt: new Date(Date.now() + 30 * 24 * 3600_000),
+          },
+        ])
+        .returning({ id: schema.legalDocuments.id })
+      ids.push(...linhas.map((linha) => linha.id))
+
+      const anonimo = await browser.newPage()
+      await anonimo.goto(`${baseUrl}/legal/subcontratantes`)
+      await anonimo.waitForSelector('text=Alteração anunciada, ainda sem efeito')
+
+      // As duas: a que vale hoje e a que vai valer, esta com o link do aviso
+      // a apontar para ela.
+      expect(await anonimo.isVisible(`text=Lista em vigor ${marca}`)).toBe(true)
+      expect(
+        await anonimo.locator('#anunciada').textContent(),
+      ).toContain(`Lista nova com o fornecedor acrescentado ${marca}`)
+      expect(await anonimo.getAttribute('a:has-text("Ler a versão")', 'href')).toBe('#anunciada')
+      await anonimo.close()
+    } finally {
+      for (const id of ids) {
+        await db.delete(schema.legalDocuments).where(eq(schema.legalDocuments.id, id))
+      }
+      await close()
+    }
+  }, 90_000)
+
   it('muda a periodicidade de uma verificação e a nova vale já', async () => {
     // Existe por causa de um caso concreto: o teste de formulários corre uma
     // vez por dia, e num cliente cujo funil de contactos é o negócio isso são

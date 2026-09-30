@@ -60,7 +60,7 @@ export default async function PortalLegalPage() {
             A lista entra em vigor a {formatDateTime(estado.pendingSubprocessors.effectiveAt)},
             daqui a {daysUntil(estado.pendingSubprocessors.effectiveAt)}{' '}
             {daysUntil(estado.pendingSubprocessors.effectiveAt) === 1 ? 'dia' : 'dias'}.{' '}
-            <Link href="/legal/subcontratantes" className="underline underline-offset-2">
+            <Link href="/legal/subcontratantes#anunciada" className="underline underline-offset-2">
               Ver o que muda
             </Link>
             .

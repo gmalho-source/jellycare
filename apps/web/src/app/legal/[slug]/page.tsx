@@ -9,7 +9,7 @@ import { daysUntil, getLegalDocument, renderLegalMarkdown } from '@/lib/legal'
 export const dynamic = 'force-dynamic'
 
 /**
- * Um documento legal, na versão em vigor.
+ * Um documento legal, na versão em vigor — e na anunciada, quando há uma.
  *
  * O cabeçalho diz a versão e desde quando vale, porque é isso que distingue
  * um contrato de um texto num sítio. Quando há uma versão anunciada mas ainda
@@ -42,6 +42,14 @@ export default async function LegalDocumentPage({
             {daysUntil(anunciado.effectiveAt) === 1 ? 'dia' : 'dias'}. Até lá vale a versão
             anterior. Se for cliente e quiser opor-se, pode fazê-lo no portal.
           </p>
+          {atual ? (
+            <a
+              href="#anunciada"
+              className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+            >
+              Ler a versão {anunciado.version}
+            </a>
+          ) : null}
         </div>
       )}
 
@@ -60,6 +68,31 @@ export default async function LegalDocumentPage({
         className="legal-prose rounded-2xl bg-white shadow-card px-5 py-6"
         dangerouslySetInnerHTML={{ __html: renderLegalMarkdown(visivel.body) }}
       />
+
+      {/* O texto da versão anunciada, por baixo da que está em vigor. Sem
+          isto, o pré-aviso dizia que havia uma alteração e não deixava ler
+          qual — e é precisamente o texto novo que o cliente precisa de ler
+          para decidir se se opõe. */}
+      {anunciado && atual ? (
+        <section id="anunciada" className="scroll-mt-6 space-y-3">
+          <header className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <h2 className="font-display text-lg font-semibold tracking-tight text-amber-900">
+              {anunciado.title} — versão {anunciado.version}, anunciada
+            </h2>
+            <p className="mt-1 text-xs text-amber-900/80">
+              Entra em vigor a {formatDateTime(anunciado.effectiveAt)} · publicada a{' '}
+              {formatDateTime(anunciado.publishedAt)}
+            </p>
+            <p className="mt-1 break-all font-mono text-[11px] text-amber-900/70">
+              SHA-256 {anunciado.contentHash}
+            </p>
+          </header>
+          <div
+            className="legal-prose rounded-2xl bg-white shadow-card px-5 py-6"
+            dangerouslySetInnerHTML={{ __html: renderLegalMarkdown(anunciado.body) }}
+          />
+        </section>
+      ) : null}
 
       {historico.length > 1 && (
         <section className="rounded-2xl bg-white shadow-card px-5 py-4">
