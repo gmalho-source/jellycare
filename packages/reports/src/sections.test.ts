@@ -85,7 +85,7 @@ describe('módulos do relatório', () => {
     const html = renderReportHtml(relatorio({ excludedSections: ['disponibilidade', 'proximos'] }))
     expect(html).not.toContain('<h2>Disponibilidade</h2>')
     expect(html).not.toContain('<h2>Próximos passos</h2>')
-    expect(html).toContain('<h2>Segurança e qualidade</h2>')
+    expect(html).toContain('<h2>Pontos em aberto</h2>')
   })
 
   it('normaliseExcluded fica só com chaves conhecidas, sem repetidos, pela ordem da lista', () => {
@@ -113,7 +113,7 @@ describe('desempenho', () => {
 
     const html = renderReportHtml(data)
     expect(html).toContain('<h2>Desempenho</h2>')
-    expect(html).toContain('+15 no mês')
+    expect(html).toContain('+15 pontos')
     expect(html).toContain('3,2 s')
   })
 

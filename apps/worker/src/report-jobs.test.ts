@@ -7,6 +7,7 @@ import { createBrowserPool } from './browser-pool.js'
 import {
   generatePendingReports,
   generateReport,
+  lerAvisosEnviados,
   regenerateReport,
   runReportRequests,
   type ReportMessage,
@@ -536,5 +537,34 @@ describe('período sem monitorização e mês em curso', () => {
       [6, false],
       [7, true],
     ])
+  })
+})
+
+describe('avisos no registo de atividade', () => {
+  it('leva os avisos que saíram no período, e não os que falharam', async () => {
+    const [problema] = await db
+      .insert(schema.findings)
+      .values({
+        siteId,
+        checkType: 'email_auth',
+        fingerprint: `aviso-relatorio-${Date.now()}`,
+        code: 'dmarc_policy_none',
+        severity: 'low',
+        state: 'open',
+        title: 'DMARC',
+        firstSeenAt: new Date('2026-06-02T09:00:00Z'),
+        lastSeenAt: new Date('2026-06-02T09:00:00Z'),
+      })
+      .returning({ id: schema.findings.id })
+    await db.insert(schema.clientNotifications).values([
+      { findingId: problema!.id, recipients: ['a@b.pt'], subject: 'Saiu', body: 'x', sentAt: new Date('2026-06-10T09:00:00Z') },
+      // Tentado e falhado: não chegou ao cliente.
+      { findingId: problema!.id, recipients: ['a@b.pt'], subject: 'Falhou', body: 'x', error: 'Resend 500' },
+      // Fora do período.
+      { findingId: problema!.id, recipients: ['a@b.pt'], subject: 'Julho', body: 'x', sentAt: new Date('2026-07-02T09:00:00Z') },
+    ])
+
+    const avisos = await lerAvisosEnviados(db, siteId, PERIOD)
+    expect(avisos.map((a) => a.subject)).toEqual(['Saiu'])
   })
 })

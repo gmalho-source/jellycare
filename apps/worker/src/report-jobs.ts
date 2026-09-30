@@ -17,7 +17,7 @@ import {
   type ReportPeriod,
   type ReportWordPress,
 } from '@jellycare/reports'
-import { and, asc, eq, gte, inArray, isNull, lt, or } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 
 /**
@@ -108,6 +108,11 @@ function velocidades(
       lcpMs: numero(run.metrics.lcpMs),
       cls: numero(run.metrics.cls),
       tbtMs: numero(run.metrics.tbtMs),
+      accessibilityScore: numero(run.metrics.accessibilityScore),
+      bestPracticesScore: numero(run.metrics.bestPracticesScore),
+      seoScore: numero(run.metrics.seoScore),
+      agenticPassed: numero(run.metrics.agenticPassed),
+      agenticTotal: numero(run.metrics.agenticTotal),
     }))
 }
 
@@ -185,6 +190,32 @@ function semMonitorizacao(desde: Date, period: ReportPeriod): string {
     year: 'numeric',
   }).format(desde)
   return `O site só é acompanhado desde ${dia}: ${period.label} não tem dados. Peça o mês em curso.`
+}
+
+/**
+ * Os avisos ao cliente que saíram mesmo, no período, para o registo de
+ * atividade. Um que falhou não chegou ao cliente e não pode aparecer no
+ * relatório como enviado.
+ */
+export async function lerAvisosEnviados(
+  db: Database,
+  siteId: string,
+  period: ReportPeriod,
+): Promise<{ sentAt: Date; subject: string }[]> {
+  const linhas = await db
+    .select({ sentAt: schema.clientNotifications.sentAt, subject: schema.clientNotifications.subject })
+    .from(schema.clientNotifications)
+    .innerJoin(schema.findings, eq(schema.findings.id, schema.clientNotifications.findingId))
+    .where(
+      and(
+        eq(schema.findings.siteId, siteId),
+        isNotNull(schema.clientNotifications.sentAt),
+        gte(schema.clientNotifications.sentAt, period.start),
+        lt(schema.clientNotifications.sentAt, period.end),
+      ),
+    )
+    .orderBy(asc(schema.clientNotifications.sentAt))
+  return linhas.map((linha) => ({ sentAt: linha.sentAt!, subject: linha.subject }))
 }
 
 export async function generateReport(
@@ -295,7 +326,7 @@ export async function generateReport(
       ),
   ])
 
-  const [wordpress, notas] = await Promise.all([
+  const [wordpress, notas, avisos] = await Promise.all([
     lerWordPress(db, siteId, period),
     // As notas que entram agora: as persistentes que ninguém retirou, e as de
     // «só no próximo» que ainda não foram levadas por nenhum relatório.
@@ -317,6 +348,7 @@ export async function generateReport(
         ),
       )
       .orderBy(asc(schema.reportNotes.createdAt)),
+    lerAvisosEnviados(db, siteId, period),
   ])
 
   const data = buildReport({
@@ -354,7 +386,9 @@ export async function generateReport(
       checkType: row.checkType,
       status: row.status,
       startedAt: row.startedAt,
+      metrics: row.metrics,
     })),
+    notices: avisos,
     pageSpeedRuns: velocidades(checkRunRows),
     wordpress,
     excludedSections: site.reportExcludedSections,

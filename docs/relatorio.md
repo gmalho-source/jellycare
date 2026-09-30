@@ -29,6 +29,48 @@ cabeçalho, o painel e o portal marcam-no, e quando sai o do mês completo este
 toma-lhe o lugar em vez de ser impedido por ele. As notas «só no próximo» que
 o provisório levou voltam à fila e seguem no definitivo.
 
+## O que o relatório mostra
+
+**Primeira página — está tudo bem?** Os semáforos de segurança e de desempenho,
+com a mesma regra do portal (`@jellycare/core`, `lerSeguranca` e
+`lerDesempenho`): o PDF e o portal têm de dar a mesma cor ao mesmo site. Até
+quatro indicadores — disponibilidade, tempo de resposta, pontuação em
+telemóvel e pontos em aberto ou verificações corridas —, o resumo e as notas
+da equipa. O detalhe começa na página seguinte.
+
+**O que verificámos, e não só o que falhou.** Um mês sem incidentes é o melhor
+resultado possível, e um relatório que só fala de problemas mostra-o como «0,
+0, 0». A lista diz, verificação a verificação, o que foi visto e o resultado:
+ligação cifrada, certificado (com a data até quando é válido), autenticação
+do email, DMARC, ficheiros expostos, reputação, cabeçalhos, WordPress. Só
+entra o que correu com sucesso no período — um visto numa verificação que não
+correu seria afirmar que olhámos. O juízo vem dos problemas em aberto no fim
+do período (`packages/reports/src/detalhe.ts`).
+
+Sem nenhuma verificação de segurança no período, o semáforo fica cinzento, e
+não verde.
+
+**Gráficos.** Disponibilidade dia a dia, com os dias anteriores à entrada no
+acompanhamento juntos num bloco em vez de barras vazias; tempo de resposta
+diário; as cinco categorias do Lighthouse e a evolução da pontuação no mês. SVG
+escrito à mão (`graficos.ts`), sem bibliotecas: o PDF é gerado sem rede.
+
+**Pontos em aberto** com a explicação do portal — o que é e o que fazemos — e o
+que foi corrigido no mês.
+
+**Atividade registada.** A cronologia do mês: entrada no acompanhamento,
+problemas detetados e corrigidos (agrupados por dia), interrupções,
+atualizações WordPress aplicadas, avisos enviados ao cliente (só os que
+saíram) e a evolução da velocidade. No máximo 14 linhas; com mais, fica o
+princípio e o fim e uma linha a dizer quantas ficaram de fora. Ao lado, as
+verificações corridas por tipo.
+
+**Próximos passos.** O que a Jelly vai fazer, nunca o nome técnico do
+problema, sem repetir a mesma ação. Primeiro os problemas graves e médios; os
+de gravidade baixa só completam a lista até três.
+
+A linha de autoria vai no rodapé de cada página, ao lado da numeração.
+
 ## Módulos
 
 Por esta ordem, logo a seguir ao resumo e às notas da equipa:
@@ -36,11 +78,11 @@ Por esta ordem, logo a seguir ao resumo e às notas da equipa:
 | Chave | Módulo |
 |---|---|
 | `disponibilidade` | Tempo no ar, interrupções, SLA |
-| `seguranca` | Problemas em aberto e resolvidos |
+| `seguranca` | O que foi verificado, pontos em aberto e corrigidos |
 | `desempenho` | Velocidade em telemóvel e computador, e a evolução no mês |
 | `formularios` | Submissões de teste e entrega das notificações |
 | `wordpress` | Atualizações, cópias de segurança, o que falta atualizar |
-| `trabalho` | Verificações que correram |
+| `trabalho` | Atividade registada: cronologia e verificações corridas |
 | `proximos` | O que a Jelly faz a seguir |
 
 A lista vive num sítio só, `packages/reports/src/sections.ts`. O relatório

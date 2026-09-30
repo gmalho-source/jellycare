@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { WP_INVENTORY_CHECK } from '@jellycare/connectors'
+import { SECURITY_CHECK_TYPES } from '@jellycare/core'
 import { lerDesempenho, lerSeguranca } from './estado-do-site'
 
 describe('lerSeguranca', () => {
@@ -49,6 +51,11 @@ describe('lerSeguranca', () => {
       true,
     )
     expect(leitura.semaforo).toBe('verde')
+  })
+
+  it('a lista do core usa o mesmo nome que o conector WordPress', () => {
+    // Escrito à mão no core, que não pode depender do pacote dos conectores.
+    expect(SECURITY_CHECK_TYPES.has(WP_INVENTORY_CHECK)).toBe(true)
   })
 
   it('conta as vulnerabilidades WordPress', () => {

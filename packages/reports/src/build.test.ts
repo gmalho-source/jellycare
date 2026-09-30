@@ -249,7 +249,26 @@ describe('buildReport — resumo executivo', () => {
   })
 })
 
+/** Códigos com ações distintas: a mesma ação duas vezes na lista seria um erro. */
+const SERIOS = [
+  'cert_expired',
+  'missing_hsts',
+  'exposed_env',
+  'exposed_git',
+  'spf_missing',
+  'dmarc_missing',
+  'blacklisted_urlhaus',
+  'http_not_redirected',
+]
+
 describe('buildReport — recomendações', () => {
+  it('não repete a mesma ação quando vários problemas pedem a mesma coisa', () => {
+    const data = report({
+      findings: [finding({ severity: 'high' }), finding({ severity: 'high', discriminator: 'outra' })],
+    })
+    expect(data.recommendations).toHaveLength(1)
+  })
+
   it('propõe ações e não os nomes técnicos dos problemas', () => {
     // Uma lista de ações que diz «Falta o header Strict-Transport-Security»
     // não é uma lista de ações: é a lista de problemas repetida. O que entra
@@ -263,15 +282,32 @@ describe('buildReport — recomendações', () => {
 
     expect(data.recommendations[0]).toBe(explicacaoDe('cert_expired')!.oQueFazemos)
     expect(data.recommendations[0]).not.toContain('Certificado expirado')
-    // Os de severidade baixa ficam no corpo do relatório, não nas ações.
-    expect(data.recommendations).not.toContain(explicacaoDe('exposed_ds_store')!.oQueFazemos)
+  })
+
+  it('os pontos baixos só completam a lista até três, e depois dos sérios', () => {
+    const baixos = ['exposed_ds_store', 'missing_referrer_policy', 'missing_content_type_options'].map(
+      (code) => finding({ severity: 'low', code, title: code }),
+    )
+    const data = report({
+      findings: [finding({ severity: 'medium', code: 'missing_frame_protection' }), ...baixos],
+    })
+
+    expect(data.recommendations).toHaveLength(3)
+    expect(data.recommendations[0]).toBe(explicacaoDe('missing_frame_protection')!.oQueFazemos)
+
+    // Com cinco problemas sérios, nenhum baixo entra.
+    const serios = report({
+      findings: [
+        ...SERIOS.slice(0, 5).map((code) => finding({ severity: 'high', code })),
+        ...baixos,
+      ],
+    })
+    expect(serios.recommendations.join(' ')).not.toContain(explicacaoDe('exposed_ds_store')!.oQueFazemos)
   })
 
   it('limita a lista a cinco ações', () => {
     const data = report({
-      findings: Array.from({ length: 10 }, (_, index) =>
-        finding({ severity: 'high', title: `Problema ${index}` }),
-      ),
+      findings: SERIOS.map((code, index) => finding({ severity: 'high', code, title: `Problema ${index}` })),
     })
 
     expect(data.recommendations).toHaveLength(5)

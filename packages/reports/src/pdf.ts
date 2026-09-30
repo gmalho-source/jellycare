@@ -1,7 +1,7 @@
 import { launchBrowser, type BrowserOptions } from '@jellycare/forms/browser'
 import type { Browser } from 'playwright'
 import type { ReportData } from './build.js'
-import { renderReportHtml } from './render.js'
+import { escapeHtml, renderReportHtml, rodape } from './render.js'
 
 /**
  * Geração do PDF.
@@ -37,8 +37,9 @@ export async function renderReportPdf(
       preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: '<div></div>',
-      footerTemplate: `<div style="width:100%;font-size:8px;color:#8b8b96;padding:0 14mm;text-align:right;">
-        <span class="pageNumber"></span>/<span class="totalPages"></span>
+      footerTemplate: `<div style="width:100%;font-size:7px;color:#8b8b96;padding:0 14mm;display:flex;justify-content:space-between;">
+        <span>${escapeHtml(rodape(data))}</span>
+        <span><span class="pageNumber"></span>/<span class="totalPages"></span></span>
       </div>`,
     })
   } finally {

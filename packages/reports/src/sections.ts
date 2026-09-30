@@ -18,8 +18,8 @@ export const REPORT_SECTIONS = [
   },
   {
     key: 'seguranca',
-    label: 'Segurança e qualidade',
-    description: 'Problemas em aberto, por gravidade, e o que foi corrigido no mês.',
+    label: 'Segurança',
+    description: 'O que foi verificado e passou, os pontos em aberto e o que foi corrigido.',
   },
   {
     key: 'desempenho',
@@ -38,8 +38,8 @@ export const REPORT_SECTIONS = [
   },
   {
     key: 'trabalho',
-    label: 'Trabalho de monitorização',
-    description: 'Quantas verificações correram e de que tipo.',
+    label: 'Atividade registada',
+    description: 'O que aconteceu no mês, por ordem, e quantas verificações correram.',
   },
   {
     key: 'proximos',

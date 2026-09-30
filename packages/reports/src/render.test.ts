@@ -93,7 +93,7 @@ describe('renderReportHtml', () => {
 
     expect(html).toContain('Disponibilidade')
     expect(html).toContain('HTTP 503')
-    expect(html).toContain('Abaixo do objetivo')
+    expect(html).toContain('não cumprido')
   })
 
   it('separa o que ficou em aberto do que foi corrigido', () => {
@@ -225,5 +225,80 @@ describe('renderReportHtml — janela e parcial', () => {
 
     expect(html).toContain('acompanhamento desde 22 de setembro de 2026')
     expect(html).toContain('Relatório provisório')
+  })
+})
+
+describe('renderReportHtml — primeira página, verificações e atividade', () => {
+  const comSeguranca = () =>
+    report({
+      checkRuns: [
+        { checkType: 'security_headers', status: 'ok', startedAt: MEIO },
+        { checkType: 'email_auth', status: 'ok', startedAt: MEIO, metrics: { dkimSelectorsFound: 2 } },
+      ],
+      findings: [
+        {
+          checkType: 'security_headers',
+          code: 'missing_frame_protection',
+          severity: 'medium',
+          title: 'x',
+          state: 'open',
+          firstSeenAt: MEIO,
+          lastSeenAt: MEIO,
+        },
+      ],
+      pageSpeedRuns: [
+        { strategy: 'mobile', startedAt: MEIO, performanceScore: 68, lcpMs: 5500, cls: 0, tbtMs: 12, accessibilityScore: 95, bestPracticesScore: 100, seoScore: 100, agenticPassed: 3, agenticTotal: 3 },
+      ],
+    })
+
+  it('abre com os semáforos de segurança e de desempenho', () => {
+    const html = renderReportHtml(comSeguranca())
+    expect(html).toContain('<h2>Estado geral</h2>')
+    // Um problema médio de segurança: laranja, «A acompanhar». Desempenho 68: «A melhorar».
+    expect(html).toContain('A acompanhar')
+    expect(html).toContain('A melhorar')
+    expect(html).toContain('<h2>Indicadores do mês</h2>')
+  })
+
+  it('lista o que foi verificado, com o que passou e o que não passou', () => {
+    const html = renderReportHtml(comSeguranca())
+    expect(html).toContain('<h2>Segurança — o que verificámos</h2>')
+    expect(html).toContain('data-verificacao="https" data-estado="ok"')
+    expect(html).toContain('data-verificacao="cabecalhos" data-estado="aviso"')
+    expect(html).toContain('2 seletores')
+  })
+
+  it('mostra as cinco categorias do Lighthouse, a navegação com agência como fração', () => {
+    const html = renderReportHtml(comSeguranca())
+    expect(html).toContain('aria-label="Acessibilidade: 95 em 100"')
+    expect(html).toContain('aria-label="SEO: 100 em 100"')
+    expect(html).toContain('aria-label="Navegação com agência: 3 de 3"')
+  })
+
+  it('num site que entrou a meio, junta os dias anteriores num bloco em vez de barras vazias', () => {
+    const html = renderReportHtml(
+      report({ monitoredFrom: new Date(PERIOD.end.getTime() - 5 * 24 * 3_600_000), uptimeSamples: [
+        { observedAt: new Date(PERIOD.end.getTime() - 3_600_000), up: true, responseTimeMs: 200 },
+      ] }),
+    )
+    expect(html).toContain('antes do acompanhamento')
+    expect(html).toContain('O site entra em acompanhamento.')
+  })
+
+  it('sem nenhuma verificação de segurança no período, o semáforo não fica verde', () => {
+    const html = renderReportHtml(report())
+    expect(html).toContain('Por verificar')
+    expect(html).not.toContain('Sem ameaças')
+  })
+
+  it('tirar os módulos tira os semáforos e os indicadores correspondentes', () => {
+    const semModulos = renderReportHtml(
+      report({
+        excludedSections: ['seguranca', 'desempenho'],
+        pageSpeedRuns: [{ strategy: 'mobile', startedAt: MEIO, performanceScore: 68, lcpMs: null, cls: null, tbtMs: null }],
+      }),
+    )
+    expect(semModulos).not.toContain('<h2>Estado geral</h2>')
+    expect(semModulos).not.toContain('<span class="kpi-label">Desempenho</span>')
   })
 })

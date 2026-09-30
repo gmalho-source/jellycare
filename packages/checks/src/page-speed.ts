@@ -1,5 +1,5 @@
 import type { CheckContext, CheckDefinition, CheckResult, ObservedFinding } from '@jellycare/core'
-import { USER_AGENT } from '@jellycare/core'
+import { PONTUACAO_BOA, PONTUACAO_MA, USER_AGENT } from '@jellycare/core'
 
 export type PageSpeedStrategy = 'mobile' | 'desktop'
 
@@ -53,8 +53,8 @@ export class PageSpeedNotConfiguredError extends Error {
  */
 export const LIMIARES = {
   /** Pontuação de desempenho (0–100). Abaixo de 50 a Google chama-lhe má. */
-  scoreMau: 50,
-  scoreRazoavel: 90,
+  scoreMau: PONTUACAO_MA,
+  scoreRazoavel: PONTUACAO_BOA,
   /** Largest Contentful Paint, em milissegundos. */
   lcpMau: 4000,
   lcpRazoavel: 2500,

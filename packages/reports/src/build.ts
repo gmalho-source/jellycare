@@ -1,5 +1,21 @@
-import { explicacaoDe, severityRank, type Severity } from '@jellycare/core'
+import {
+  explicacaoDe,
+  lerDesempenho,
+  lerSeguranca,
+  SECURITY_CHECK_TYPES,
+  severityRank,
+  type Leitura,
+  type Severity,
+} from '@jellycare/core'
 import type { ReportPeriod } from './period.js'
+import {
+  buildDiario,
+  buildTimeline,
+  buildVerificacoes,
+  type ReportCheckItem,
+  type ReportDay,
+  type ReportEvent,
+} from './detalhe.js'
 import { includedSections, type ReportSectionKey } from './sections.js'
 import { summariseUptime, type UptimeSample, type UptimeSummary } from './uptime.js'
 
@@ -38,6 +54,8 @@ export interface ReportCheckRun {
   checkType: string
   status: 'ok' | 'failed'
   startedAt: Date
+  /** O que a execução mediu: dias de certificado, seletores DKIM, caminhos testados. */
+  metrics?: Record<string, number>
 }
 
 /** Uma medição de velocidade, telemóvel ou computador. */
@@ -48,6 +66,12 @@ export interface ReportPageSpeedRun {
   lcpMs: number | null
   cls: number | null
   tbtMs: number | null
+  /** As outras categorias do Lighthouse. Ausentes nas medições antigas. */
+  accessibilityScore?: number | null
+  bestPracticesScore?: number | null
+  seoScore?: number | null
+  agenticPassed?: number | null
+  agenticTotal?: number | null
 }
 
 export interface ReportWordPress {
@@ -89,12 +113,21 @@ export interface ReportInput {
    * vigiados, e não sobre dias em que ainda não estava na plataforma.
    */
   monitoredFrom?: Date
+  /** Avisos enviados ao cliente no período, para o registo de atividade. */
+  notices?: readonly { sentAt: Date; subject: string }[]
 }
 
 export interface PageSpeedStrategySummary {
   runs: number
   latestScore: number | null
   firstScore: number | null
+  /** As outras categorias do Lighthouse, na última medição que as trouxe. */
+  accessibility: number | null
+  bestPractices: number | null
+  seo: number | null
+  agentic: { passed: number; total: number } | null
+  /** A série da pontuação de desempenho no período, para o gráfico. */
+  series: { startedAt: Date; score: number }[]
   lcpMs: number | null
   cls: number | null
   tbtMs: number | null
@@ -158,6 +191,14 @@ export interface ReportData {
   sections: ReportSectionKey[]
   /** Notas da equipa, tal como foram escritas. */
   notes: string[]
+  /** Os semáforos da primeira página. Nulo quando o módulo não entra. */
+  estado: { seguranca: Leitura | null; desempenho: Leitura | null }
+  /** O que foi verificado e o resultado de cada coisa. */
+  verificacoes: ReportCheckItem[]
+  /** Um registo por dia do período: disponibilidade e tempo de resposta. */
+  diario: ReportDay[]
+  /** O que aconteceu no mês, por ordem. */
+  atividade: ReportEvent[]
   /** Resumo executivo, em linguagem de negócio. */
   summary: string[]
   recommendations: string[]
@@ -383,14 +424,25 @@ function buildRecommendations(
 
   // Uma ação sobre um problema que o relatório não mostra obrigava o cliente a
   // perguntar de onde vem. Sai com o módulo de onde nasceu.
-  for (const finding of sections.has('seguranca') ? findings.highlights : []) {
+  // O que a Jelly vai fazer, e não o nome técnico do problema. Uma lista de
+  // ações que diz «Falta o header Strict-Transport-Security» não é uma lista
+  // de ações: é a lista de problemas outra vez.
+  const acao = (finding: ReportFinding) => explicacaoDe(finding.code)?.oQueFazemos ?? finding.title
+  const destaques = sections.has('seguranca') ? findings.highlights : []
+
+  for (const finding of destaques) {
     if (severityRank(finding.severity) < severityRank('medium')) continue
-    // O que a Jelly vai fazer, e não o nome técnico do problema. Uma lista de
-    // ações que diz «Falta o header Strict-Transport-Security» não é uma lista
-    // de ações: é a lista de problemas outra vez.
-    const explicacao = explicacaoDe(finding.code)
-    recommendations.push(explicacao?.oQueFazemos ?? finding.title)
+    if (!recommendations.includes(acao(finding))) recommendations.push(acao(finding))
     if (recommendations.length >= 5) break
+  }
+
+  // Os de gravidade baixa só completam a lista até três, e sempre depois dos
+  // outros. Um mês só com pontos menores continua a ter um plano; um mês com
+  // problemas sérios não os vê diluídos por recomendações de endurecimento.
+  for (const finding of destaques) {
+    if (recommendations.length >= 3) break
+    if (severityRank(finding.severity) >= severityRank('medium')) continue
+    if (!recommendations.includes(acao(finding))) recommendations.push(acao(finding))
   }
 
   if (sections.has('formularios') && forms.landedInSpam > 0 && recommendations.length < 5) {
@@ -417,10 +469,25 @@ function summariseStrategy(
     .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
   if (comPontuacao.length === 0) return null
   const ultima = comPontuacao[comPontuacao.length - 1]!
+  // As outras categorias só existem nas medições feitas desde que o check as
+  // pede: vem a última que as trouxe, e não um nulo por a última ser antiga.
+  const comCategorias = [...comPontuacao].reverse().find((run) => typeof run.accessibilityScore === 'number')
+  const agentic =
+    comCategorias &&
+    typeof comCategorias.agenticPassed === 'number' &&
+    typeof comCategorias.agenticTotal === 'number' &&
+    comCategorias.agenticTotal > 0
+      ? { passed: comCategorias.agenticPassed, total: comCategorias.agenticTotal }
+      : null
   return {
     runs: comPontuacao.length,
     latestScore: ultima.performanceScore,
     firstScore: comPontuacao[0]!.performanceScore,
+    accessibility: comCategorias?.accessibilityScore ?? null,
+    bestPractices: comCategorias?.bestPracticesScore ?? null,
+    seo: comCategorias?.seoScore ?? null,
+    agentic,
+    series: comPontuacao.map((run) => ({ startedAt: run.startedAt, score: run.performanceScore! })),
     lcpMs: ultima.lcpMs,
     cls: ultima.cls,
     tbtMs: ultima.tbtMs,
@@ -499,6 +566,14 @@ export function buildReport(input: ReportInput): ReportData {
   const pedidos = includedSections(input.excludedSections ?? [])
   if (!wordpress) pedidos.delete('wordpress')
 
+  const noFim = input.findings.filter((finding) => openAtPeriodEnd(finding, input.period))
+  const execucoes = input.checkRuns.filter((run) => within(run.startedAt, input.period))
+  // Sem nenhuma verificação de segurança feita no período, o semáforo fica
+  // cinzento em vez de verde: não se pode dizer «sem ameaças» sem ter olhado.
+  const seguranca = execucoes.some(
+    (run) => run.status === 'ok' && SECURITY_CHECK_TYPES.has(run.checkType),
+  )
+
   return {
     organizationName: input.organizationName,
     site: input.site,
@@ -513,6 +588,23 @@ export function buildReport(input: ReportInput): ReportData {
     wordpress,
     sections: [...pedidos],
     notes: (input.notes ?? []).map((nota) => nota.trim()).filter((nota) => nota.length > 0),
+    estado: {
+      seguranca: pedidos.has('seguranca') ? lerSeguranca(noFim, seguranca) : null,
+      desempenho: pedidos.has('desempenho')
+        ? lerDesempenho(performance.mobile?.latestScore ?? null)
+        : null,
+    },
+    verificacoes: buildVerificacoes(execucoes, noFim, wordpress),
+    diario: buildDiario(input.period, monitoredFrom, input.uptimeSamples),
+    atividade: buildTimeline({
+      period: input.period,
+      monitoredFrom,
+      findings: input.findings,
+      incidents: uptime.incidents,
+      updates: wordpress?.updatesApplied ?? [],
+      notices: input.notices ?? [],
+      mobile: performance.mobile?.series ?? [],
+    }),
     summary: buildSummary(uptime, findings, forms, pedidos),
     recommendations: buildRecommendations(findings, forms, pedidos),
     generatedAt: new Date(),
