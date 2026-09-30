@@ -19,6 +19,11 @@ export interface ReportPeriod {
   month: number
   /** Rótulo em português, ex. "março de 2026". */
   label: string
+  /**
+   * O mês ainda não acabou: o período vai do dia 1 até ao instante do pedido.
+   * Um relatório parcial é provisório e dá lugar ao do mês completo.
+   */
+  partial?: boolean
 }
 
 export const DEFAULT_TIME_ZONE = 'Europe/Lisbon'
@@ -94,6 +99,26 @@ export function monthPeriod(
     month,
     label: `${MONTHS_PT[month - 1]} de ${year}`,
   }
+}
+
+/**
+ * O mês em curso, do dia 1 até agora.
+ *
+ * Para o envio imediato de um cliente novo: o último mês completo é de antes
+ * de ele chegar, e o único período com dados é este.
+ */
+export function monthToDate(
+  reference: Date = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): ReportPeriod {
+  const { year, month } = zonedYearMonth(reference, timeZone)
+  const mes = monthPeriod(year, month, timeZone)
+  const dia = new Intl.DateTimeFormat('pt-PT', {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+  }).format(reference)
+  return { ...mes, end: reference, label: `${mes.label} (até ${dia})`, partial: true }
 }
 
 /** O mês anterior ao instante de referência, no fuso do cliente. */

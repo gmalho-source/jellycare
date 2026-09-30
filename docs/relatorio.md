@@ -4,6 +4,31 @@ Gerado pelo worker no início de cada mês, para o mês anterior, e enviado aos
 destinatários do site com o PDF anexado. Configura-se por site, em
 **Relatórios**, só por quem gere a organização.
 
+## Período
+
+O relatório agendado cobre o mês anterior, no fuso do cliente, e sai no dia
+configurado na organização (`report_send_day`, dia 3 por omissão).
+
+**Um site que entrou a meio do mês é medido a partir do dia em que entrou.**
+O cabeçalho diz «acompanhamento desde 22 de setembro de 2026», e a cobertura e
+o SLA contam sobre os dias vigiados. Contados sobre o mês inteiro, nove dias
+bem medidos apareciam como trinta mal medidos — cobertura de 27% e nenhum juízo
+sobre o SLA.
+
+**Um mês em que o site ainda não existia não tem relatório.** Nem o agendado
+nem o pedido à mão: o PDF saía na mesma, a dizer que não houve observações, o
+que é verdade e se lê como avaria. O pedido fica concluído com a razão escrita
+no painel.
+
+**«Enviar agora» escolhe o período:** o último mês completo, ou o mês em curso
+até ao momento do pedido. Para um cliente novo o segundo é o único com dados,
+e o painel escolhe-o por ele — desliga o outro quando não teria nada.
+
+O do mês em curso é **provisório** (`reports.partial`). O PDF diz isso no
+cabeçalho, o painel e o portal marcam-no, e quando sai o do mês completo este
+toma-lhe o lugar em vez de ser impedido por ele. As notas «só no próximo» que
+o provisório levou voltam à fila e seguem no definitivo.
+
 ## Módulos
 
 Por esta ordem, logo a seguir ao resumo e às notas da equipa:

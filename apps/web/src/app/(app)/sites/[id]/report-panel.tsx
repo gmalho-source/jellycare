@@ -32,10 +32,19 @@ export function ReportPanel({
   siteId,
   configuredRecipients,
   lastRequest,
+  mesAnterior,
+  mesEmCurso,
+  mesAnteriorSemDados,
 }: {
   siteId: string
   configuredRecipients: string[]
   lastRequest: ReportRequest | null
+  /** Rótulo do último mês completo, ex. «agosto de 2026». */
+  mesAnterior: string
+  /** Rótulo do mês em curso, ex. «setembro de 2026 (até 30/09)». */
+  mesEmCurso: string
+  /** O site só entrou depois de o último mês acabar: esse mês não tem dados. */
+  mesAnteriorSemDados: boolean
 }) {
   const [state, action, pending] = useActionState<ReportRequestState, FormData>(
     requestReportAction,
@@ -47,6 +56,39 @@ export function ReportPanel({
   return (
     <form action={action} className="border-t border-ink-100 px-5 py-4">
       <input type="hidden" name="siteId" value={siteId} />
+
+      {/* Um cliente novo não tem mês anterior: o único período com dados é o
+          que está a decorrer. Por isso a escolha, e por isso o primeiro fica
+          desligado quando não teria nada — antes, gerava um PDF vazio. */}
+      <fieldset className="mb-3 flex flex-wrap gap-x-6 gap-y-2">
+        <legend className="sr-only">Período</legend>
+        <label
+          className={`flex items-center gap-2 text-sm ${mesAnteriorSemDados ? 'text-ink-400' : 'text-ink-900'}`}
+        >
+          <input
+            type="radio"
+            name="scope"
+            value="last_month"
+            defaultChecked={!mesAnteriorSemDados}
+            disabled={mesAnteriorSemDados}
+          />
+          Último mês completo ({mesAnterior})
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink-900">
+          <input
+            type="radio"
+            name="scope"
+            value="month_to_date"
+            defaultChecked={mesAnteriorSemDados}
+          />
+          Mês em curso ({mesEmCurso})
+        </label>
+      </fieldset>
+      {mesAnteriorSemDados ? (
+        <p className="-mt-1 mb-3 text-xs text-ink-400">
+          O site entrou depois do fim de {mesAnterior}: esse mês não tem dados para relatar.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[16rem] flex-1">
@@ -76,8 +118,9 @@ export function ReportPanel({
       </div>
 
       <p className="mt-2 text-xs text-ink-400">
-        Gera o relatório do último mês completo com os dados de agora e envia-o. Deixando o
-        campo vazio, vai para os destinatários configurados no site.
+        Gera o relatório do período escolhido com os dados de agora e envia-o. O do mês em
+        curso é provisório: o do mês completo substitui-o quando sair. Deixando o campo vazio,
+        vai para os destinatários configurados no site.
       </p>
 
       {state.error ? <p className="mt-2 text-sm text-red-600">{state.error}</p> : null}
@@ -91,8 +134,12 @@ export function ReportPanel({
 function LastRequest({ request }: { request: ReportRequest }) {
   const periodo =
     request.periodYear && request.periodMonth
-      ? `${MONTHS[request.periodMonth - 1]} de ${request.periodYear}`
-      : 'o último mês completo'
+      ? `${MONTHS[request.periodMonth - 1]} de ${request.periodYear}${
+          request.scope === 'month_to_date' ? ' (provisório)' : ''
+        }`
+      : request.scope === 'month_to_date'
+        ? 'o mês em curso'
+        : 'o último mês completo'
 
   if (!request.completedAt) {
     return (

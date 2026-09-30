@@ -82,7 +82,9 @@ function uptimeSection(data: ReportData): string {
 
   const slaLine =
     uptime.slaMet === null
-      ? `<span class="muted">Cobertura de ${formatPercent((uptime.coverage ?? 0) * 100)} do período — valor indicativo</span>`
+      ? `<span class="muted">Cobertura de ${formatPercent((uptime.coverage ?? 0) * 100)} do ${
+          data.monitoredFrom ? 'período acompanhado' : 'período'
+        } — valor indicativo</span>`
       : uptime.slaMet
         ? `<span class="ok">Objetivo de ${formatPercent(uptime.slaTarget)} cumprido</span>`
         : `<span class="bad">Abaixo do objetivo de ${formatPercent(uptime.slaTarget)}</span>`
@@ -505,7 +507,14 @@ export function renderReportHtml(data: ReportData): string {
   <header>
     <div class="brand">${escapeHtml(data.brand.name)} <span>relatório mensal</span></div>
     <h1>${escapeHtml(data.site.label)}</h1>
-    <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)} · ${escapeHtml(data.period.label)}</p>
+    <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)} · ${escapeHtml(data.period.label)}${
+      data.monitoredFrom ? ` · acompanhamento desde ${formatDate(data.monitoredFrom)}` : ''
+    }</p>
+    ${
+      data.period.partial
+        ? '<p class="subtitle muted">Relatório provisório: o mês ainda não acabou. O relatório do mês completo substitui este.</p>'
+        : ''
+    }
   </header>
 
   <section class="block summary">

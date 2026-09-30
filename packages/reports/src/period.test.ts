@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   monthPeriod,
+  monthToDate,
   periodDurationMs,
   previousMonth,
   startOfMonthUtc,
@@ -107,5 +108,19 @@ describe('periodDurationMs', () => {
 
   it('conta certo num mês sem mudança de hora', () => {
     expect(periodDurationMs(monthPeriod(2026, 6, LISBOA))).toBe(30 * 24 * 3_600_000)
+  })
+})
+
+describe('monthToDate', () => {
+  it('vai do dia 1 até ao instante do pedido, e diz que é parcial', () => {
+    const agora = new Date('2026-09-30T10:00:00Z')
+    const periodo = monthToDate(agora, 'Europe/Lisbon')
+
+    expect(periodo.year).toBe(2026)
+    expect(periodo.month).toBe(9)
+    expect(periodo.start).toEqual(monthPeriod(2026, 9, 'Europe/Lisbon').start)
+    expect(periodo.end).toEqual(agora)
+    expect(periodo.partial).toBe(true)
+    expect(periodo.label).toBe('setembro de 2026 (até 30/09)')
   })
 })

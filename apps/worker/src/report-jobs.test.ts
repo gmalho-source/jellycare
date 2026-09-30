@@ -448,3 +448,93 @@ describe('runReportRequests', () => {
     expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(0)
   }, 60_000)
 })
+
+describe('período sem monitorização e mês em curso', () => {
+  /** O site passa a ter entrado na plataforma neste instante. */
+  async function entrouEm(instante: Date) {
+    await db.update(schema.sites).set({ createdAt: instante }).where(eq(schema.sites.id, siteId))
+  }
+
+  it('não gera o relatório de um mês em que o site ainda não era acompanhado', async () => {
+    await entrouEm(new Date('2026-07-02T10:00:00Z'))
+
+    const outcome = await generateReport(deps(), siteId, PERIOD)
+
+    // O PDF saía na mesma, a dizer que não houve observações — verdade, e lida
+    // como avaria.
+    expect(outcome).toMatchObject({ status: 'skipped' })
+    expect(outcome.status === 'skipped' && outcome.reason).toContain('só é acompanhado desde 02/07/2026')
+    expect(await storedReports()).toHaveLength(0)
+  })
+
+  it('conta a disponibilidade sobre os dias vigiados de um site que entrou a meio do mês', async () => {
+    // Entrou a 22 de junho e foi vigiado sem falhas desde então.
+    const entrada = new Date('2026-06-22T08:00:00Z')
+    await entrouEm(entrada)
+    const total = Math.round((PERIOD.end.getTime() - entrada.getTime()) / INTERVAL)
+    const linhas = Array.from({ length: total }, (_, index) => ({
+      siteId,
+      region: 'eu-west',
+      observedAt: new Date(entrada.getTime() + index * INTERVAL),
+      up: true,
+      statusCode: 200,
+      responseTimeMs: 200,
+    }))
+    for (let index = 0; index < linhas.length; index += 1000) {
+      await db.insert(schema.uptimeSamples).values(linhas.slice(index, index + 1000))
+    }
+
+    await generateReport(deps(), siteId, PERIOD)
+
+    // Contado sobre o mês inteiro, nove dias dariam menos de metade de
+    // cobertura e nenhum juízo sobre o SLA.
+    const [relatorio] = await storedReports()
+    expect(relatorio?.highlights.slaMet).toBe(true)
+    expect(relatorio?.highlights.uptimePercent).toBe(100)
+  })
+
+  it('um pedido do último mês completo, sem monitorização, fica concluído com a razão e não apaga nada', async () => {
+    await entrouEm(new Date('2026-07-02T10:00:00Z'))
+    await requestReport(db, { siteId })
+
+    await runReportRequests(deps())
+
+    const pedido = await latestReportRequest(db, siteId)
+    expect(pedido?.completedAt).not.toBeNull()
+    expect(pedido?.error).toContain('Peça o mês em curso')
+    expect(sent).toHaveLength(0)
+  })
+
+  it('o mês em curso gera um relatório provisório, que o do mês completo substitui', async () => {
+    // A 30 de junho, o cliente novo pede o mês em curso.
+    await entrouEm(new Date('2026-06-22T08:00:00Z'))
+    await requestReport(db, { siteId, scope: 'month_to_date' })
+    await runReportRequests(deps({ now: new Date('2026-06-30T10:00:00Z') }))
+
+    const [provisorio] = await storedReports()
+    expect(provisorio).toMatchObject({ periodYear: 2026, periodMonth: 6, partial: true })
+    expect(sent[0]?.subject).toContain('junho de 2026 (até 30/06)')
+
+    // A 5 de julho sai o do mês completo — em vez de ser impedido pelo
+    // provisório, que era o que o índice único fazia.
+    await generatePendingReports(deps())
+
+    const depois = await storedReports()
+    expect(depois).toHaveLength(1)
+    expect(depois[0]).toMatchObject({ periodMonth: 6, partial: false })
+    expect(depois[0]?.id).not.toBe(provisorio?.id)
+  })
+
+  it('um relatório completo não é substituído por um pedido do mês em curso de outro mês', async () => {
+    await generateReport(deps(), siteId, PERIOD)
+    await requestReport(db, { siteId, scope: 'month_to_date' })
+    await runReportRequests(deps())
+
+    // O mês em curso a 5 de julho é julho: o de junho fica onde estava.
+    const guardados = await storedReports()
+    expect(guardados.map((r) => [r.periodMonth, r.partial]).sort()).toEqual([
+      [6, false],
+      [7, true],
+    ])
+  })
+})

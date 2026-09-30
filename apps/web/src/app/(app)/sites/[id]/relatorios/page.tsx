@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { latestReportRequest } from '@jellycare/db'
-import { REPORT_SECTIONS } from '@jellycare/reports/data'
+import { REPORT_SECTIONS, monthToDate, previousMonth } from '@jellycare/reports/data'
 import { Card, CardHeader, EmptyState, formatRelative, nomeDoMes } from '@/components/ui'
 import { getDb } from '@/lib/db'
 import { getSiteDetail } from '@/lib/queries'
@@ -19,6 +19,12 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
   if (!detail) notFound()
   assertMembership(user, detail.site.organizationId)
   const manageable = canManage(user, detail.site.organizationId)
+  // Só para os rótulos e para desligar a opção sem dados. Quem decide o
+  // período é o worker, com as mesmas funções.
+  const agora = new Date()
+  const mesAnterior = previousMonth(agora, 'Europe/Lisbon')
+  const mesEmCurso = monthToDate(agora, 'Europe/Lisbon')
+
   const [lastRequest, notas] = await Promise.all([
     latestReportRequest(getDb(), detail.site.id),
     manageable ? lerNotasDoRelatorio(detail.site.id) : null,
@@ -50,6 +56,11 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
                   >
                     {nomeDoMes(report.periodMonth)} de {report.periodYear}
                   </a>
+                  {report.partial ? (
+                    <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-[0.6875rem] font-medium text-ink-600">
+                      Provisório
+                    </span>
+                  ) : null}
                   <span className="mt-0.5 block truncate text-xs text-ink-400">
                     {report.highlights.summary[0] ?? ''}
                   </span>
@@ -76,6 +87,9 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
             siteId={detail.site.id}
             configuredRecipients={detail.site.reportRecipients}
             lastRequest={lastRequest}
+            mesAnterior={mesAnterior.label}
+            mesEmCurso={mesEmCurso.label}
+            mesAnteriorSemDados={detail.site.createdAt.getTime() >= mesAnterior.end.getTime()}
           />
         ) : null}
       </Card>

@@ -297,3 +297,32 @@ describe('buildReport — identidade', () => {
     expect(data.brand.name).toBe('Estúdio X')
   })
 })
+
+describe('buildReport — site que entrou a meio do período', () => {
+  // Nove dias vigiados, amostras a cada cinco minutos durante esses nove dias.
+  const ENTRADA = new Date(PERIOD.end.getTime() - 9 * 24 * 3_600_000)
+  const vigiado = samples(new Array((9 * 24 * 3_600_000) / INTERVAL).fill(true), ENTRADA)
+
+  it('conta a cobertura sobre os dias vigiados, e não sobre o mês inteiro', () => {
+    const data = report({ uptimeSamples: vigiado, monitoredFrom: ENTRADA })
+
+    expect(data.monitoredFrom).toEqual(ENTRADA)
+    expect(data.uptime.coverage).toBeCloseTo(1, 2)
+    // Com a janela inteira coberta há juízo sobre o SLA. Sobre o mês inteiro
+    // ficaria abaixo de metade e sem juízo nenhum.
+    expect(data.uptime.slaMet).toBe(true)
+  })
+
+  it('sem a data de entrada, os mesmos nove dias dão cobertura de um terço', () => {
+    const data = report({ uptimeSamples: vigiado })
+
+    expect(data.monitoredFrom).toBeNull()
+    expect(data.uptime.coverage).toBeLessThan(0.35)
+    expect(data.uptime.slaMet).toBeNull()
+  })
+
+  it('ignora uma data de entrada anterior ao período', () => {
+    const data = report({ monitoredFrom: ANTES })
+    expect(data.monitoredFrom).toBeNull()
+  })
+})

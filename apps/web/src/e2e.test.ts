@@ -625,6 +625,13 @@ describeE2E('fluxo de entrada e painel', () => {
     await painel.goto(`${baseUrl}/sites/${siteId}/relatorios`)
     await painel.waitForSelector('#report-recipient')
 
+    // O site foi criado hoje: o último mês completo é de antes de ele existir.
+    // A opção fica desligada e o mês em curso vem escolhido — antes, o botão
+    // gerava um PDF vazio de um mês sem monitorização.
+    expect(await painel.isDisabled('input[name=scope][value=last_month]')).toBe(true)
+    expect(await painel.isChecked('input[name=scope][value=month_to_date]')).toBe(true)
+    expect(await painel.isVisible('text=esse mês não tem dados para relatar')).toBe(true)
+
     await painel.fill('#report-recipient', 'reuniao@exemplo.pt')
     await painel.click('button:has-text("Enviar agora")')
 
@@ -640,6 +647,7 @@ describeE2E('fluxo de entrada e painel', () => {
         .where(eq(schema.reportRequests.siteId, siteId))
       expect(pedidos).toHaveLength(1)
       expect(pedidos[0]?.recipients).toEqual(['reuniao@exemplo.pt'])
+      expect(pedidos[0]?.scope).toBe('month_to_date')
       expect(pedidos[0]?.completedAt).toBeNull()
     } finally {
       await close()

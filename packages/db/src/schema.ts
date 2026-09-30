@@ -603,6 +603,11 @@ export const reports = pgTable(
     sentAt: timestamp('sent_at', { withTimezone: true }),
     sentTo: jsonb('sent_to').$type<string[]>().notNull().default([]),
     sendError: text('send_error'),
+    /**
+     * Do mês em curso, pedido antes de ele acabar. É provisório: o relatório
+     * do mês completo toma-lhe o lugar, em vez de ser impedido por ele.
+     */
+    partial: boolean('partial').notNull().default(false),
   },
   (table) => [
     // Um relatório por site e por mês. É o que torna a geração idempotente:
@@ -623,6 +628,11 @@ export const reports = pgTable(
  * Uma tabela e não uma fila: um pedido tem estado que interessa mostrar a
  * quem carregou no botão, e sobrevive a um reinício do worker a meio.
  */
+export const reportRequestScopeEnum = pgEnum('report_request_scope', [
+  'last_month',
+  'month_to_date',
+])
+
 export const reportRequests = pgTable(
   'report_requests',
   {
@@ -654,6 +664,11 @@ export const reportRequests = pgTable(
      * passar a mandá-lo para lá todos os meses.
      */
     recipients: jsonb('recipients').$type<string[]>().notNull().default([]),
+    /**
+     * Que período se pede: o último mês completo, ou o mês em curso até ao
+     * momento do pedido. O segundo é o único com dados para um site novo.
+     */
+    scope: reportRequestScopeEnum('scope').notNull().default('last_month'),
     /** Para quem o relatório foi enviado, ou vazio se não foi para ninguém. */
     sentTo: jsonb('sent_to').$type<string[]>().notNull().default([]),
     error: text('error'),

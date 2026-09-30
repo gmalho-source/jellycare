@@ -162,6 +162,8 @@ export interface SiteReport {
   sentAt: Date | null
   sentTo: string[]
   highlights: typeof schema.reports.$inferSelect['highlights']
+  /** Do mês em curso, provisório até sair o do mês completo. */
+  partial: boolean
 }
 
 export interface SiteDetail {
@@ -500,6 +502,7 @@ export async function getSiteDetail(siteId: string): Promise<SiteDetail | null> 
         sentAt: schema.reports.sentAt,
         sentTo: schema.reports.sentTo,
         highlights: schema.reports.highlights,
+        partial: schema.reports.partial,
       })
       .from(schema.reports)
       .where(eq(schema.reports.siteId, siteId))

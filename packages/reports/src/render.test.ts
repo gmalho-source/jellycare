@@ -206,3 +206,24 @@ describe('renderReportPdf', () => {
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
   }, 120_000)
 })
+
+describe('renderReportHtml — janela e parcial', () => {
+  it('diz desde quando o site é acompanhado, e que um relatório parcial é provisório', () => {
+    const periodo = monthPeriod(2026, 9, 'Europe/Lisbon')
+    const html = renderReportHtml(
+      buildReport({
+        organizationName: 'Jelly',
+        site: { label: 'Jelly', url: 'https://jelly.pt', hostname: 'jelly.pt' },
+        period: { ...periodo, end: new Date('2026-09-30T10:00:00Z'), partial: true, label: 'setembro de 2026 (até 30/09)' },
+        monitoredFrom: new Date('2026-09-22T08:05:00Z'),
+        uptimeSamples: [],
+        findings: [],
+        formRuns: [],
+        checkRuns: [],
+      }),
+    )
+
+    expect(html).toContain('acompanhamento desde 22 de setembro de 2026')
+    expect(html).toContain('Relatório provisório')
+  })
+})

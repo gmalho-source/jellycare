@@ -26,7 +26,12 @@ export interface RequestedReport {
  */
 export async function requestReport(
   db: Database,
-  options: { siteId: string; requestedBy?: string; recipients?: string[] },
+  options: {
+    siteId: string
+    requestedBy?: string
+    recipients?: string[]
+    scope?: 'last_month' | 'month_to_date'
+  },
 ): Promise<RequestedReport> {
   const inserted = await db
     .insert(reportRequests)
@@ -34,6 +39,7 @@ export async function requestReport(
       siteId: options.siteId,
       ...(options.requestedBy ? { requestedBy: options.requestedBy } : {}),
       recipients: options.recipients ?? [],
+      scope: options.scope ?? 'last_month',
     })
     .onConflictDoNothing()
     .returning()

@@ -40,6 +40,9 @@ export default async function PortalRelatoriosPage({
                 </a>
                 <p className="text-xs text-ink-400">
                   Gerado a {formatDateTime(report.generatedAt)}
+                  {/* O cliente tem de saber que este não é o definitivo: os
+                      números do mês ainda vão mudar. */}
+                  {report.partial ? ' · provisório, o mês ainda não tinha acabado' : ''}
                 </p>
               </div>
               <span className="text-xs text-ink-400">PDF</span>

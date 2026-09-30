@@ -460,6 +460,7 @@ export async function resendAccessAction(
 
 const reportRequestSchema = z.object({
   siteId: z.string().uuid(),
+  scope: z.enum(['last_month', 'month_to_date']).default('last_month'),
   // Vazio significa "os destinatários configurados no site".
   recipient: z
     .string()
@@ -491,6 +492,7 @@ export async function requestReportAction(
 
   const parsed = reportRequestSchema.safeParse({
     siteId: formData.get('siteId'),
+    scope: formData.get('scope') ?? undefined,
     recipient: formData.get('recipient') ?? '',
   })
   if (!parsed.success) {
@@ -514,6 +516,7 @@ export async function requestReportAction(
   const { created } = await requestReport(getDb(), {
     siteId: parsed.data.siteId,
     requestedBy: user.id,
+    scope: parsed.data.scope,
     ...(parsed.data.recipient ? { recipients: [parsed.data.recipient] } : {}),
   })
 

@@ -83,6 +83,12 @@ export interface ReportInput {
   excludedSections?: readonly string[]
   /** As notas da equipa que entram neste relatório. */
   notes?: readonly string[]
+  /**
+   * Quando o site começou a ser acompanhado. Um site que entrou a meio do
+   * período só é medido a partir daí: a cobertura e o SLA contam sobre os dias
+   * vigiados, e não sobre dias em que ainda não estava na plataforma.
+   */
+  monitoredFrom?: Date
 }
 
 export interface PageSpeedStrategySummary {
@@ -139,6 +145,8 @@ export interface ReportData {
   organizationName: string
   site: ReportInput['site']
   period: ReportPeriod
+  /** O início do acompanhamento, quando cai dentro do período. Nulo de resto. */
+  monitoredFrom: Date | null
   brand: { name: string; url: string }
   uptime: UptimeSummary
   findings: FindingsSummary
@@ -460,8 +468,19 @@ function summariseWordPress(
 }
 
 export function buildReport(input: ReportInput): ReportData {
+  const inicio = input.monitoredFrom
+  const monitoredFrom =
+    inicio &&
+    inicio.getTime() > input.period.start.getTime() &&
+    inicio.getTime() < input.period.end.getTime()
+      ? inicio
+      : null
+
+  // A disponibilidade conta sobre a janela vigiada. Contada sobre o mês
+  // inteiro, um site que entrou a dia 22 aparecia com 27% de cobertura e sem
+  // juízo sobre o SLA — nove dias medidos a parecerem trinta mal medidos.
   const uptime = summariseUptime(input.uptimeSamples, {
-    period: input.period,
+    period: monitoredFrom ? { ...input.period, start: monitoredFrom } : input.period,
     ...(input.slaTarget !== undefined ? { slaTarget: input.slaTarget } : {}),
     ...(input.expectedIntervalMs !== undefined
       ? { expectedIntervalMs: input.expectedIntervalMs }
@@ -484,6 +503,7 @@ export function buildReport(input: ReportInput): ReportData {
     organizationName: input.organizationName,
     site: input.site,
     period: input.period,
+    monitoredFrom,
     brand: input.brand ?? { name: 'Jellycare', url: 'https://jellycare.pt' },
     uptime,
     findings,

@@ -7,6 +7,7 @@ import {
 import {
   buildReport,
   monthPeriod,
+  monthToDate,
   previousMonth,
   renderReportPdf,
   reportFileName,
@@ -175,6 +176,17 @@ async function lerWordPress(
   return { components: componentes, updates: atualizacoes, backups: copias }
 }
 
+/** A razão, em palavras, para não haver relatório de um período. */
+function semMonitorizacao(desde: Date, period: ReportPeriod): string {
+  const dia = new Intl.DateTimeFormat('pt-PT', {
+    timeZone: DEFAULT_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(desde)
+  return `O site só é acompanhado desde ${dia}: ${period.label} não tem dados. Peça o mês em curso.`
+}
+
 export async function generateReport(
   deps: ReportJobDeps,
   siteId: string,
@@ -190,8 +202,23 @@ export async function generateReport(
 ): Promise<ReportOutcome> {
   const { db } = deps
 
+  const siteRows = await db
+    .select()
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+  const site = siteRows[0]
+  if (!site) return { status: 'skipped', reason: 'Site não encontrado' }
+
+  // Um mês em que o site ainda não estava na plataforma não tem nada para
+  // dizer. O PDF saía na mesma, a afirmar que não houve observações — o que
+  // é verdade e lê-se como avaria.
+  if (site.createdAt.getTime() >= period.end.getTime()) {
+    return { status: 'skipped', reason: semMonitorizacao(site.createdAt, period) }
+  }
+
   const existing = await db
-    .select({ id: schema.reports.id })
+    .select({ id: schema.reports.id, partial: schema.reports.partial })
     .from(schema.reports)
     .where(
       and(
@@ -202,15 +229,14 @@ export async function generateReport(
     )
     .limit(1)
 
-  if (existing[0]) return { status: 'skipped', reason: 'Relatório já existe para este período' }
-
-  const siteRows = await db
-    .select()
-    .from(schema.sites)
-    .where(eq(schema.sites.id, siteId))
-    .limit(1)
-  const site = siteRows[0]
-  if (!site) return { status: 'skipped', reason: 'Site não encontrado' }
+  if (existing[0]) {
+    // Um relatório provisório do mês em curso dá lugar ao do mês completo.
+    // Sem isto, pedir o parcial a dia 30 impedia o definitivo de sair a 3.
+    if (!existing[0].partial || period.partial) {
+      return { status: 'skipped', reason: 'Relatório já existe para este período' }
+    }
+    await db.delete(schema.reports).where(eq(schema.reports.id, existing[0].id))
+  }
 
   const orgRows = await db
     .select()
@@ -333,6 +359,7 @@ export async function generateReport(
     wordpress,
     excludedSections: site.reportExcludedSections,
     notes: notas.map((nota) => nota.body),
+    monitoredFrom: site.createdAt,
     ...(organization.brandName
       ? {
           brand: {
@@ -365,6 +392,7 @@ export async function generateReport(
         findingsOpen: data.findings.stillOpen,
       },
       generatedAt: deps.now ?? new Date(),
+      partial: period.partial ?? false,
     })
     // Duas instâncias de worker podem chegar aqui ao mesmo tempo. O índice
     // único decide, e quem perder não rebenta nem duplica.
@@ -463,23 +491,44 @@ export async function generatePendingReports(
   return { considered: sites.length, generated, sent }
 }
 
-/** Regenera o relatório de um período, para pedidos manuais a partir do painel. */
+/**
+ * Regenera o relatório de um período, para pedidos manuais a partir do painel.
+ *
+ * Aceita um período já resolvido — o mês em curso não é um mês de calendário
+ * — ou o ano e o mês de um mês completo.
+ */
 export async function regenerateReport(
   deps: ReportJobDeps,
   siteId: string,
-  year: number,
-  month: number,
+  year: number | ReportPeriod,
+  month?: number,
   recipientsOverride?: string[],
 ): Promise<ReportOutcome> {
-  const period = monthPeriod(year, month, deps.timeZone ?? DEFAULT_TIME_ZONE)
+  const period =
+    typeof year === 'number'
+      ? monthPeriod(year, month ?? 1, deps.timeZone ?? DEFAULT_TIME_ZONE)
+      : year
+
+  // Antes de apagar o que houver: um período sem monitorização não se
+  // regenera, e o relatório que lá estivesse não se perde por um pedido que
+  // não ia produzir nada.
+  const siteRows = await deps.db
+    .select({ createdAt: schema.sites.createdAt })
+    .from(schema.sites)
+    .where(eq(schema.sites.id, siteId))
+    .limit(1)
+  const desde = siteRows[0]?.createdAt
+  if (desde && desde.getTime() >= period.end.getTime()) {
+    return { status: 'skipped', reason: semMonitorizacao(desde, period) }
+  }
 
   await deps.db
     .delete(schema.reports)
     .where(
       and(
         eq(schema.reports.siteId, siteId),
-        eq(schema.reports.periodYear, year),
-        eq(schema.reports.periodMonth, month),
+        eq(schema.reports.periodYear, period.year),
+        eq(schema.reports.periodMonth, period.month),
       ),
     )
 
@@ -491,8 +540,8 @@ export { zonedYearMonth }
 /**
  * Executa os pedidos manuais deixados no painel.
  *
- * O período é o último mês completo, resolvido aqui com a mesma função que o
- * envio agendado usa. O painel não o calcula: essa conta tem de respeitar o
+ * O período é o último mês completo ou o mês em curso, conforme o pedido,
+ * resolvido aqui com as mesmas funções que o envio agendado usa. O painel não o calcula: essa conta tem de respeitar o
  * fuso do cliente e a hora de verão, e duplicá-la do outro lado era duplicar
  * exatamente a parte onde é fácil errar.
  *
@@ -510,14 +559,15 @@ export async function runReportRequests(deps: ReportJobDeps): Promise<{ processe
     if (!request) break
 
     processed++
-    const period = previousMonth(now, timeZone)
+    const period =
+      request.scope === 'month_to_date' ? monthToDate(now, timeZone) : previousMonth(now, timeZone)
 
     try {
       const outcome = await regenerateReport(
         deps,
         request.siteId,
-        period.year,
-        period.month,
+        period,
+        undefined,
         request.recipients.length > 0 ? request.recipients : undefined,
       )
 
@@ -526,7 +576,7 @@ export async function runReportRequests(deps: ReportJobDeps): Promise<{ processe
         periodMonth: period.month,
         ...(outcome.status === 'generated'
           ? { sentTo: outcome.sentTo }
-          : { error: `O relatório não foi gerado: ${outcome.status}.` }),
+          : { error: outcome.reason }),
       })
     } catch (error) {
       // O pedido fica concluído com o erro escrito: deixá-lo por concluir
