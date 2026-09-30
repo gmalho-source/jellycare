@@ -41,8 +41,9 @@ oposição no portal. É a Cláusula 7.ª a funcionar sozinha.
   esta cláusula passa a estar errada.
 
 - **Subcontratantes v2** — acrescenta a Anthropic, pelo assistente técnico da
-  equipa (`docs/assistente.md`). Publicada a 29/09/2026 com `effectiveAt` a
-  29/10/2026: o pré-aviso de 30 dias da Cláusula 7.ª. O DPA não muda de versão
+  equipa (`docs/assistente.md`). Publicada a 30/09/2026 com `effectiveAt` a
+  31/10/2026: o pré-aviso de 30 dias da Cláusula 7.ª, com margem para os 30
+  dias serem completos seja qual for a hora do deploy. O DPA não muda de versão
   — acrescentar um subcontratante é precisamente o que a Cláusula 7.ª prevê
   sem nova aceitação.
 
