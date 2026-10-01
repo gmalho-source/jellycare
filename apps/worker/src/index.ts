@@ -80,6 +80,9 @@ async function main(): Promise<void> {
           ...(process.env.URLHAUS_AUTH_KEY
             ? { urlhausAuthKey: process.env.URLHAUS_AUTH_KEY }
             : {}),
+          ...(process.env.WEB_RISK_API_KEY
+            ? { webRiskApiKey: process.env.WEB_RISK_API_KEY }
+            : {}),
           ...(process.env.WP_UMBRELLA_TOKEN
             ? { umbrellaToken: process.env.WP_UMBRELLA_TOKEN }
             : {}),

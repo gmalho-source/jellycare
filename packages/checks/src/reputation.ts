@@ -4,6 +4,8 @@ import { USER_AGENT } from '@jellycare/core'
 export interface ReputationConfig {
   /** Chave da abuse.ch. Sem ela o URLhaus responde 401 e é saltado. */
   urlhausAuthKey?: string
+  /** Chave da Google Web Risk, da conta Google Cloud da plataforma. */
+  webRiskApiKey?: string
   timeoutMs?: number
   /** Páginas adicionais a submeter, além da homepage. */
   additionalUrls?: string[]
@@ -15,19 +17,36 @@ export interface ProviderResult {
 }
 
 const URLHAUS_ENDPOINT = 'https://urlhaus-api.abuse.ch/v1/host/'
+const WEB_RISK_ENDPOINT = 'https://webrisk.googleapis.com/v1/uris:search'
+
+/**
+ * As listas da Web Risk que interessam: malware, phishing e software
+ * indesejado. São as que fazem o Chrome mostrar o ecrã vermelho antes de
+ * entrar no site.
+ */
+const WEB_RISK_THREATS = ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE'] as const
+
+/** No máximo, por site e por passagem: a Web Risk cobra por consulta acima da quota grátis. */
+const WEB_RISK_MAX_URLS = 10
+
+const AMEACA: Record<string, string> = {
+  MALWARE: 'distribuição de malware',
+  SOCIAL_ENGINEERING: 'phishing ou engenharia social',
+  UNWANTED_SOFTWARE: 'software indesejado',
+}
 
 /*
- * Porque é que a Google Safe Browsing não está aqui.
+ * Porque é que a Google Safe Browsing não está aqui, e a Web Risk está.
  *
  * Foi implementada e retirada. Os termos da API v4 dizem "for non-commercial
  * use only", e o Jellycare é vendido — usá-la era violar a licença de um
  * fornecedor para vender um serviço de segurança, o que não se faz nem se
- * explica a um cliente. A alternativa com licença comercial é a Web Risk, que
- * é paga por consulta e não se justifica enquanto o URLhaus cobrir a parte do
- * malware.
+ * explica a um cliente. A Web Risk é a mesma base de dados com licença
+ * comercial: grátis até 100 000 consultas por mês e paga por consulta acima
+ * disso.
  *
- * Fica escrito para ninguém a voltar a adicionar por parecer óbvia. Ver
- * docs/checks.md.
+ * Fica escrito para ninguém voltar a pôr a Safe Browsing por parecer óbvia.
+ * Ver docs/checks.md.
  */
 
 interface UrlhausResponse {
@@ -79,6 +98,84 @@ export async function queryUrlhaus(
   } finally {
     clearTimeout(timer)
   }
+}
+
+interface WebRiskResponse {
+  threat?: { threatTypes?: string[]; expireTime?: string }
+}
+
+/**
+ * Google Web Risk: as páginas do site estão nas listas que o Chrome usa?
+ *
+ * Uma consulta por URL — a API não aceita lotes. Um URL marcado é incidente
+ * crítico: o Chrome passa a mostrar o aviso vermelho antes de entrar, e é
+ * isso que tira o site da pesquisa e afasta quem lá ia.
+ *
+ * A chave viaja na query, como a API exige. O erro nunca leva o URL do pedido
+ * — só o estado e o motivo que a Google devolve no corpo — para a chave não
+ * acabar gravada no aviso da execução.
+ */
+export async function queryWebRisk(
+  urls: readonly string[],
+  apiKey: string,
+  fetchImpl: typeof globalThis.fetch,
+  timeoutMs: number,
+): Promise<ObservedFinding[]> {
+  const findings: ObservedFinding[] = []
+
+  for (const url of urls.slice(0, WEB_RISK_MAX_URLS)) {
+    const query = new URLSearchParams({ uri: url, key: apiKey })
+    for (const ameaca of WEB_RISK_THREATS) query.append('threatTypes', ameaca)
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetchImpl(`${WEB_RISK_ENDPOINT}?${query.toString()}`, {
+        signal: controller.signal,
+        headers: { 'user-agent': USER_AGENT },
+      })
+
+      if (!response.ok) {
+        // A Google explica no corpo o que está mal: uma chave sem a API
+        // ativada volta 403 com o texto a dizê-lo.
+        const detalhe = await response
+          .text()
+          .then((texto) => texto.slice(0, 300).replace(/\s+/g, ' ').trim())
+          .catch(() => '')
+        throw new Error(`Web Risk respondeu ${response.status}${detalhe ? `: ${detalhe}` : ''}`)
+      }
+
+      const body = (await response.json()) as WebRiskResponse
+      const tipos = body.threat?.threatTypes ?? []
+      if (tipos.length === 0) continue
+
+      findings.push({
+        code: 'blacklisted_web_risk',
+        discriminator: url,
+        severity: 'critical',
+        title: 'Página do site marcada pela Google como perigosa',
+        detail: `A Google lista esta página por ${tipos.map((tipo) => AMEACA[tipo] ?? tipo).join(' e ')}. O Chrome mostra um aviso antes de a abrir.`,
+        evidence: { url, threatTypes: tipos },
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  return findings
+}
+
+/** A homepage e as páginas declaradas, sem repetidos. */
+function urlsParaVerificar(siteUrl: string, adicionais: readonly string[] = []): string[] {
+  const vistos = new Set<string>()
+  const lista: string[] = []
+  for (const url of [siteUrl, ...adicionais]) {
+    const chave = url.replace(/\/+$/, '')
+    if (vistos.has(chave)) continue
+    vistos.add(chave)
+    lista.push(url)
+  }
+  return lista
 }
 
 export class NoReputationDataError extends Error {
@@ -171,9 +268,23 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
       })
     }
 
+    if (config.webRiskApiKey) {
+      const apiKey = config.webRiskApiKey
+      providers.push({
+        name: 'web-risk',
+        query: () =>
+          queryWebRisk(
+            urlsParaVerificar(context.site.url, config.additionalUrls),
+            apiKey,
+            context.fetch,
+            timeoutMs,
+          ),
+      })
+    }
+
     if (providers.length === 0) {
       throw new NoReputationDataError([
-        'nenhuma fonte configurada: defina URLHAUS_AUTH_KEY',
+        'nenhuma fonte configurada: defina URLHAUS_AUTH_KEY ou WEB_RISK_API_KEY',
       ])
     }
 

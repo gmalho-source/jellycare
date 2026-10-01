@@ -579,6 +579,15 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     oQueFazemos:
       'Identificamos o que está a pesar — imagens grandes, scripts a bloquear, falta de cache — e apresentamos um plano por ordem de impacto.',
   },
+  blacklisted_web_risk: {
+    titulo: 'A Google marca uma página do site como perigosa',
+    oQueE:
+      'Uma página do site está nas listas da Google de sites com malware, phishing ou software indesejado. O Chrome mostra um ecrã vermelho de aviso antes de a abrir.',
+    porqueImporta:
+      'Quase ninguém passa o aviso: as visitas caem de um dia para o outro, o site perde posição na pesquisa e os anúncios podem ser suspensos. Normalmente significa que o site foi comprometido.',
+    oQueFazemos:
+      'Tratamos como incidente: confirmamos e limpamos a infeção, fechamos a porta por onde entrou e pedimos à Google a revisão do site.',
+  },
   blacklisted_urlhaus: {
     titulo: 'O site aparece numa lista pública de sites maliciosos',
     oQueE:

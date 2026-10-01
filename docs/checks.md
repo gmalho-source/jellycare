@@ -8,10 +8,25 @@ acesso interno ao site.
 ## 1. Malware e reputação
 
 ### 1.1 Blacklists e reputação de domínio — agentless
-Consulta diária ao URLhaus (abuse.ch). Por aqui hão de vir também PhishTank,
-Spamhaus DBL e VirusTotal URL report. A Google Safe Browsing esteve aqui e foi
-retirada: a API v4 é «for non-commercial use only» e o Jellycare é vendido — a
-alternativa com licença comercial é a Web Risk, paga por consulta.
+Consulta diária a duas fontes, cada uma com a sua chave:
+
+- **URLhaus (abuse.ch)** — URLs do domínio conhecidos por distribuir malware.
+- **Google Web Risk** — as listas que o Chrome usa para o ecrã vermelho de
+  aviso: malware, phishing e software indesejado. Uma consulta por página — a
+  homepage e as páginas declaradas, no máximo dez por site e por dia.
+  Código `blacklisted_web_risk`.
+
+A Google Safe Browsing esteve aqui e foi retirada: a API v4 é «for
+non-commercial use only» e o Jellycare é vendido. A Web Risk é a mesma base de
+dados com licença comercial. O VirusTotal fica de fora pela mesma razão: a API
+pública é só para uso não comercial.
+
+Uma fonte que falha enquanto a outra responde não deita fora o que a outra
+encontrou; com as duas em baixo, o check falha em vez de dar o site por limpo.
+
+A Web Risk recebe os URLs das páginas públicas dos clientes, que não são dados
+pessoais — está na mesma situação do URLhaus, que recebe o domínio, e por isso
+não consta da lista de subcontratantes.
 Se o domínio ou qualquer URL do site
 aparece marcado, é incidente crítico imediato — perder o ranking no Google por
 "este site pode ser perigoso" custa mais ao cliente do que o próprio malware.

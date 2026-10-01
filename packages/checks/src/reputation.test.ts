@@ -100,6 +100,7 @@ describe('reputationCheck', () => {
 
     expect(outcome.status).toBe('failed')
     expect(outcome.error).toContain('URLHAUS_AUTH_KEY')
+    expect(outcome.error).toContain('WEB_RISK_API_KEY')
   })
 
   it('autentica no URLhaus com a chave da abuse.ch', async () => {
@@ -204,5 +205,106 @@ describe('aggregateProviders', () => {
     await expect(aggregateProviders([ma('503'), ma('500')])).rejects.toThrow(
       'Nenhuma fonte de reputação respondeu',
     )
+  })
+})
+
+describe('reputationCheck — Google Web Risk', () => {
+  /** O pedido como sai para um URL: a chave e as três listas, como a API as pede. */
+  function webRisk(uri: string, chave = 'chave-web-risk'): string {
+    const query = new URLSearchParams({ uri, key: chave })
+    for (const ameaca of ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE']) query.append('threatTypes', ameaca)
+    return `https://webrisk.googleapis.com/v1/uris:search?${query.toString()}`
+  }
+  const SO_WEB_RISK: ReputationConfig = { webRiskApiKey: 'chave-web-risk' }
+  const LIMPO = { body: '{}' }
+
+  it('não reporta nada quando nenhuma página está nas listas', async () => {
+    const outcome = await run({ [webRisk('https://cliente.pt')]: LIMPO }, SO_WEB_RISK)
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.findings).toEqual([])
+    expect(outcome.metrics.providersSucceeded).toBe(1)
+  })
+
+  it('uma página marcada é incidente crítico, e diz porquê', async () => {
+    const outcome = await run(
+      {
+        [webRisk('https://cliente.pt')]: {
+          body: JSON.stringify({ threat: { threatTypes: ['SOCIAL_ENGINEERING'], expireTime: '2026-10-02T00:00:00Z' } }),
+        },
+      },
+      SO_WEB_RISK,
+    )
+
+    expect(outcome.findings).toHaveLength(1)
+    expect(outcome.findings[0]).toMatchObject({
+      code: 'blacklisted_web_risk',
+      severity: 'critical',
+      discriminator: 'https://cliente.pt',
+    })
+    expect(outcome.findings[0]?.detail).toContain('phishing')
+  })
+
+  it('verifica também as páginas declaradas, sem repetir a homepage', async () => {
+    const fetch = mockFetch({
+      [webRisk('https://cliente.pt')]: LIMPO,
+      [webRisk('https://cliente.pt/contactos')]: {
+        body: JSON.stringify({ threat: { threatTypes: ['MALWARE'] } }),
+      },
+    })
+    const outcome = await runCheck(reputationCheck, { site: testSite, now: new Date(), fetch }, {
+      ...SO_WEB_RISK,
+      additionalUrls: ['https://cliente.pt/', 'https://cliente.pt/contactos'],
+    })
+
+    expect(fetch.calls).toHaveLength(2)
+    expect(outcome.findings.map((f) => f.discriminator)).toEqual(['https://cliente.pt/contactos'])
+  })
+
+  it('uma chave sem a API ativada falha em voz alta, sem a chave no erro', async () => {
+    const outcome = await run(
+      {
+        [webRisk('https://cliente.pt')]: {
+          status: 403,
+          body: JSON.stringify({ error: { message: 'Web Risk API has not been used in project 123' } }),
+        },
+      },
+      SO_WEB_RISK,
+    )
+
+    // Sem nenhuma fonte a responder, não houve observação: falha, não «limpo».
+    expect(outcome.status).toBe('failed')
+    expect(outcome.error).toContain('403')
+    expect(outcome.error).toContain('has not been used')
+    expect(outcome.error).not.toContain('chave-web-risk')
+  })
+
+  it('com a Web Risk em baixo, o que o URLhaus encontrou não se perde', async () => {
+    const outcome = await run(
+      {
+        [URLHAUS]: {
+          body: JSON.stringify({
+            query_status: 'ok',
+            urls: [{ url: 'https://cliente.pt/x.exe', threat: 'malware_download', url_status: 'online' }],
+          }),
+        },
+        [webRisk('https://cliente.pt')]: { status: 500, body: 'erro' },
+      },
+      { ...CONFIG, ...SO_WEB_RISK },
+    )
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.findings.map((f) => f.code)).toEqual(['blacklisted_urlhaus'])
+    expect(outcome.metrics.providersFailed).toBe(1)
+  })
+
+  it('consulta no máximo dez páginas por passagem', async () => {
+    const paginas = Array.from({ length: 15 }, (_, i) => `https://cliente.pt/p${i}`)
+    const fetch = mockFetch({}, LIMPO)
+    await runCheck(reputationCheck, { site: testSite, now: new Date(), fetch }, {
+      ...SO_WEB_RISK,
+      additionalUrls: paginas,
+    })
+    expect(fetch.calls).toHaveLength(10)
   })
 })

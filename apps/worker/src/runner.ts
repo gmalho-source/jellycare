@@ -56,6 +56,8 @@ export interface RunnerDeps {
    * duplicar a mesma credencial por cada linha da tabela.
    */
   urlhausAuthKey?: string
+  /** Chave da Google Web Risk. Também da plataforma, pela mesma razão. */
+  webRiskApiKey?: string
   /** Token da conta Jelly na WP Umbrella, para o inventário WordPress. */
   umbrellaToken?: string
   /** Chave da PageSpeed Insights. Também da plataforma, não do cliente. */
@@ -260,6 +262,7 @@ async function execute(
         ? {
             ...config,
             ...(deps.urlhausAuthKey ? { urlhausAuthKey: deps.urlhausAuthKey } : {}),
+            ...(deps.webRiskApiKey ? { webRiskApiKey: deps.webRiskApiKey } : {}),
           }
         : PAGE_SPEED_TYPES.includes(checkType)
           ? {

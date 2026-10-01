@@ -10,7 +10,7 @@
 | Email de saída | **Resend** |
 | Email de entrada (caixa de verificação) | **Cloudflare Email Routing** + Worker |
 | DNS | **Cloudflare** |
-| Reputação (opcional) | URLhaus (abuse.ch) |
+| Reputação (opcional) | URLhaus (abuse.ch) e Google Web Risk |
 
 ### Porquê
 
@@ -283,6 +283,7 @@ fly secrets set -a jellycare-worker \
   REPORT_FROM_EMAIL="Jellycare <relatorios@jellycare.pt>" \
   CANARY_EMAIL_DOMAIN="check.jellycare.pt" \
   URLHAUS_AUTH_KEY="<opcional>" \
+  WEB_RISK_API_KEY="<opcional>" \
   GOOGLE_PAGESPEED_API_KEY="<opcional>"
 ```
 
@@ -394,15 +395,25 @@ A chave é da plataforma e não do cliente: entra uma vez no ambiente do worker 
 serve todos os sites. Não se guarda na configuração de cada check, que seria
 duplicar a mesma credencial por cada linha da tabela.
 
-**Google Safe Browsing — não usar.**
+**Google Web Risk** — as listas que fazem o Chrome mostrar o ecrã vermelho
+antes de entrar num site (malware, phishing, software indesejado), com licença
+comercial. A chave vai em `WEB_RISK_API_KEY` nos segredos do worker:
 
-Esteve implementada e foi retirada. Os termos da API v4 dizem *"for
-non-commercial use only"* e o Jellycare é vendido: usá-la era violar a licença
-de um fornecedor para vender um serviço de segurança. A alternativa com licença
-comercial é a **Web Risk**, paga por consulta, e não se justifica enquanto o
-URLhaus cobrir a parte do malware.
+1. No Google Cloud, num projeto da Jelly com faturação ativa, ativar a
+   *Web Risk API*.
+2. Criar uma chave de API e restringi-la à Web Risk API.
+3. `fly secrets set WEB_RISK_API_KEY=... -a jellycare-worker`
 
-Se algum dia voltar, volta pela Web Risk e com a fatura pensada primeiro.
+Grátis até 100 000 consultas por mês; acima disso, 0,50 $ por mil. O check
+consulta a homepage e as páginas declaradas de cada site, no máximo dez, uma
+vez por dia: com cinco páginas por site, a quota grátis cobre cerca de 650
+sites. Uma chave sem a API ativada volta 403 com o motivo, e o motivo aparece
+no aviso da execução.
+
+**Google Safe Browsing — não usar.** Esteve implementada e foi retirada. Os
+termos da API v4 dizem *"for non-commercial use only"* e o Jellycare é vendido:
+usá-la era violar a licença de um fornecedor para vender um serviço de
+segurança. A Web Risk é a mesma base de dados com licença comercial.
 
 ### 10. Velocidade das páginas
 
