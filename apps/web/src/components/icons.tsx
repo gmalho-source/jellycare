@@ -112,6 +112,21 @@ const TRACOS: Record<string, React.ReactNode> = {
     </>
   ),
   mais: <path d="M8 3.5v9M3.5 8h9" />,
+  lista: <path d="M5.5 4h7.5M5.5 8h7.5M5.5 12h7.5M3 4h.01M3 8h.01M3 12h.01" />,
+  grelha: (
+    <>
+      <rect x="2.75" y="2.75" width="4.5" height="4.5" rx="1" />
+      <rect x="8.75" y="2.75" width="4.5" height="4.5" rx="1" />
+      <rect x="2.75" y="8.75" width="4.5" height="4.5" rx="1" />
+      <rect x="8.75" y="8.75" width="4.5" height="4.5" rx="1" />
+    </>
+  ),
+  pesquisa: (
+    <>
+      <circle cx="7" cy="7" r="4" />
+      <path d="m10 10 3 3" />
+    </>
+  ),
   saida: (
     <>
       <path d="M6.2 13H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h2.2" />

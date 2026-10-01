@@ -26,6 +26,19 @@ export interface CheckContext {
 
 export type CheckStatus = 'ok' | 'failed'
 
+/**
+ * Uma imagem da página tirada durante a verificação.
+ *
+ * Hoje só a PageSpeed a devolve: o Lighthouse fotografa a página no fim da
+ * medição, e é essa a imagem que o painel mostra na grelha de sites. Não é
+ * uma observação sobre o site, por isso não entra nas métricas nem nos
+ * problemas.
+ */
+export interface CheckCapture {
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  data: Buffer
+}
+
 export interface CheckOutcome {
   status: CheckStatus
   findings: ObservedFinding[]
@@ -45,6 +58,8 @@ export interface CheckOutcome {
    * Fica registado na execução, para quem opera a plataforma.
    */
   warnings?: string[]
+  /** Ver `CheckCapture`. Só numa execução com sucesso. */
+  capture?: CheckCapture
   durationMs: number
 }
 
@@ -66,6 +81,7 @@ export interface CheckResult {
   metrics?: Record<string, number>
   /** Ver `CheckOutcome.warnings`. */
   warnings?: string[]
+  capture?: CheckCapture
 }
 
 /**
@@ -86,6 +102,7 @@ export async function runCheck<TConfig>(
       findings: result.findings,
       metrics: result.metrics ?? {},
       ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+      ...(result.capture ? { capture: result.capture } : {}),
       durationMs: Date.now() - startedAt,
     }
   } catch (error) {

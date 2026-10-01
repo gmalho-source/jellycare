@@ -1,7 +1,7 @@
 import { CHECK_REGISTRY } from '@jellycare/checks'
 import { CONNECTOR_CHECKS } from '@jellycare/connectors'
 import { FORM_CHECKS } from '@jellycare/forms'
-import { createDatabase, schema, type Database } from '@jellycare/db'
+import { createDatabase, lerCaptura, schema, type Database } from '@jellycare/db'
 import type { Queue } from 'bullmq'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -770,6 +770,36 @@ describe('configuração da plataforma', () => {
         (url) => url.includes('pagespeedonline') && url.includes('chave-pagespeed'),
       ),
     ).toBe(true)
+  })
+
+  it('guarda a imagem da homepage que a PageSpeed devolve', async () => {
+    await addCheck('page_speed_desktop', 1440, null)
+    await verifySite()
+
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
+    const fetchStub = (async () =>
+      new Response(
+        JSON.stringify({
+          lighthouseResult: {
+            categories: { performance: { score: 0.93 } },
+            audits: {
+              'final-screenshot': {
+                details: { type: 'screenshot', data: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as typeof globalThis.fetch
+
+    await executeCheckJob(
+      { db, notifier: new RecordingNotifier(), fetch: fetchStub, pageSpeedApiKey: 'chave-pagespeed' },
+      { siteId, checkType: 'page_speed_desktop' },
+    )
+
+    const captura = await lerCaptura(db, siteId)
+    expect(captura?.mimeType).toBe('image/jpeg')
+    expect(captura?.image.equals(jpeg)).toBe(true)
   })
 
   it('diz o nome da variável em falta em vez de falhar em silêncio', async () => {

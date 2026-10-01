@@ -1,6 +1,7 @@
 import { runCheck, type CheckContext } from '@jellycare/core'
 import { describe, expect, it } from 'vitest'
 import {
+  capturaFinal,
   measurePageSpeed,
   pageSpeedCheck,
   pageSpeedDesktopCheck,
@@ -339,5 +340,47 @@ describe('measurePageSpeed', () => {
     await expect(
       measurePageSpeed('https://cliente.pt', 'chave-teste', 'mobile', fetch, 20),
     ).rejects.toThrow()
+  })
+})
+
+describe('captura da página', () => {
+  // Os primeiros bytes de um JPEG verdadeiro, chega para o que se testa.
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
+  const comCaptura = (data: string) =>
+    JSON.stringify({
+      lighthouseResult: {
+        categories: { performance: { score: 0.95 } },
+        audits: {
+          'largest-contentful-paint': { numericValue: 1800 },
+          'final-screenshot': { details: { type: 'screenshot', data } },
+        },
+      },
+    })
+
+  it('devolve a imagem que o Lighthouse tirou no fim da medição', async () => {
+    const outcome = await run({
+      [ENDPOINT]: { body: comCaptura(`data:image/jpeg;base64,${JPEG.toString('base64')}`) },
+    })
+    expect(outcome.status).toBe('ok')
+    expect(outcome.capture?.mimeType).toBe('image/jpeg')
+    expect(outcome.capture?.data.equals(JPEG)).toBe(true)
+  })
+
+  it('sem captura na resposta, mede na mesma', async () => {
+    const outcome = await run({ [ENDPOINT]: { body: resposta({ score: 0.95 }) } })
+    expect(outcome.status).toBe('ok')
+    expect(outcome.capture).toBeUndefined()
+  })
+
+  it('só aceita imagens, e de tamanho razoável', () => {
+    // O que vem de fora é servido no painel: um SVG ou HTML numa data URL
+    // não passa, e uma «imagem» de vários MB também não.
+    const audits = (data: string) => ({ 'final-screenshot': { details: { data } } })
+    expect(capturaFinal(audits('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='))).toBeNull()
+    expect(capturaFinal(audits('data:text/html;base64,PGh0bWw+'))).toBeNull()
+    expect(capturaFinal(audits('https://exemplo.pt/imagem.jpg'))).toBeNull()
+    const enorme = Buffer.alloc(2 * 1024 * 1024).toString('base64')
+    expect(capturaFinal(audits(`data:image/jpeg;base64,${enorme}`))).toBeNull()
+    expect(capturaFinal(audits(`data:image/webp;base64,${JPEG.toString('base64')}`))?.mimeType).toBe('image/webp')
   })
 })

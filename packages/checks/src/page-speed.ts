@@ -1,4 +1,4 @@
-import type { CheckContext, CheckDefinition, CheckResult, ObservedFinding } from '@jellycare/core'
+import type { CheckCapture, CheckContext, CheckDefinition, CheckResult, ObservedFinding } from '@jellycare/core'
 import { PONTUACAO_BOA, PONTUACAO_MA, USER_AGENT } from '@jellycare/core'
 
 export type PageSpeedStrategy = 'mobile' | 'desktop'
@@ -71,6 +71,8 @@ interface Audit {
   displayValue?: string
   score?: number | null
   scoreDisplayMode?: string
+  /** No `final-screenshot`, a imagem como data URL. */
+  details?: { type?: string; data?: string }
 }
 
 interface Category {
@@ -114,6 +116,8 @@ export interface PageSpeedMeasurement {
   tbtMs: number | null
   fcpMs: number | null
   speedIndexMs: number | null
+  /** A página como o Lighthouse a viu no fim da medição. Nula quando não veio. */
+  captura: CheckCapture | null
 }
 
 /** Uma pontuação de categoria em 0–100, que é como aparece em todo o lado. */
@@ -150,6 +154,26 @@ export function fracaoAgentic(
   }
 
   return total > 0 ? { passed, total } : null
+}
+
+/** Acima disto não é uma captura do Lighthouse, que anda pelas dezenas de KB. */
+const CAPTURA_MAXIMA = 1024 * 1024
+
+/**
+ * A captura final do Lighthouse, a partir da data URL que a PageSpeed devolve.
+ *
+ * Só aceita os três formatos de imagem que um browser mostra sem surpresas, e
+ * um tamanho razoável: o que vem de fora e é servido no painel não pode ser
+ * qualquer coisa.
+ */
+export function capturaFinal(audits: LighthouseResult['audits']): CheckCapture | null {
+  const dados = audits?.['final-screenshot']?.details?.data
+  if (typeof dados !== 'string') return null
+  const partes = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dados)
+  if (!partes) return null
+  const data = Buffer.from(partes[2]!, 'base64')
+  if (data.length === 0 || data.length > CAPTURA_MAXIMA) return null
+  return { mimeType: partes[1] as CheckCapture['mimeType'], data }
 }
 
 function numeric(audits: LighthouseResult['audits'], id: string): number | null {
@@ -230,6 +254,7 @@ export async function measurePageSpeed(
       tbtMs: numeric(audits, 'total-blocking-time'),
       fcpMs: numeric(audits, 'first-contentful-paint'),
       speedIndexMs: numeric(audits, 'speed-index'),
+      captura: capturaFinal(audits),
     }
   } finally {
     clearTimeout(timer)
@@ -358,7 +383,7 @@ function criarPageSpeed({ type, strategy, abreProblemas }: Variante): CheckDefin
         })
       }
 
-      return { findings, metrics }
+      return { findings, metrics, ...(medicao.captura ? { capture: medicao.captura } : {}) }
     },
   }
 }

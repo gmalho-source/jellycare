@@ -20,6 +20,8 @@ export interface SiteSummary {
   lastRunAt: Date | null
   /** Tem ligação a uma ferramenta de manutenção. Decide as secções do menu. */
   hasConnector: boolean
+  /** Quando foi tirada a imagem da homepage. Nula sem nenhuma ainda. */
+  capturaEm: Date | null
 }
 
 const OPEN_STATES = ['open', 'acknowledged'] as const
@@ -59,7 +61,7 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
   if (sites.length === 0) return []
   const siteIds = sites.map((site) => site.id)
 
-  const [findingRows, verificationRows, uptimeRows, lastRuns, connectorRows] = await Promise.all([
+  const [findingRows, verificationRows, uptimeRows, lastRuns, connectorRows, capturaRows] = await Promise.all([
     db
       .select({
         siteId: schema.findings.siteId,
@@ -116,10 +118,18 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
       .select({ siteId: schema.connectors.siteId })
       .from(schema.connectors)
       .where(inArray(schema.connectors.siteId, siteIds)),
+
+    // Só a data: a imagem vem à parte, pela rota da captura, quando o cartão
+    // a pede.
+    db
+      .select({ siteId: schema.siteScreenshots.siteId, capturedAt: schema.siteScreenshots.capturedAt })
+      .from(schema.siteScreenshots)
+      .where(inArray(schema.siteScreenshots.siteId, siteIds)),
   ])
 
   const verified = new Set(verificationRows.map((row) => row.siteId))
   const comConector = new Set(connectorRows.map((row) => row.siteId))
+  const capturaBySite = new Map(capturaRows.map((row) => [row.siteId, row.capturedAt]))
   const lastRunBySite = new Map(lastRuns.map((row) => [row.siteId, row.lastRunAt]))
   const uptimeBySite = new Map(
     uptimeRows.map((row) => [row.siteId, row.total > 0 ? (row.up / row.total) * 100 : null]),
@@ -149,6 +159,7 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
       uptime24h: uptimeBySite.get(site.id) ?? null,
       lastRunAt: lastRunBySite.get(site.id) ?? null,
       hasConnector: comConector.has(site.id),
+      capturaEm: capturaBySite.get(site.id) ?? null,
     }
   })
 })

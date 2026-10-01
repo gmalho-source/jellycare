@@ -12,6 +12,7 @@ import {
   type Site,
 } from '@jellycare/core'
 import {
+  guardarCaptura,
   recordCheckRun,
   schema,
   type Database,
@@ -222,6 +223,17 @@ export async function executeCheckJob(
     startedAt,
     now,
   })
+
+  // A imagem da homepage que a PageSpeed devolve, para a grelha do painel.
+  // Depois da execução registada e nunca à custa dela: uma imagem que não se
+  // guardou é um cartão sem fotografia, não uma verificação perdida.
+  if (outcome.status === 'ok' && outcome.capture) {
+    try {
+      await guardarCaptura(deps.db, { siteId: site.id, source: job.checkType, capture: outcome.capture, now })
+    } catch (error) {
+      console.warn(`Captura de ${site.hostname} não guardada:`, error instanceof Error ? error.message : error)
+    }
+  }
 
   const notified = await dispatchNotifications(deps, {
     notifications,

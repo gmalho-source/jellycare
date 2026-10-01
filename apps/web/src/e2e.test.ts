@@ -1148,6 +1148,59 @@ describeE2E('fluxo de entrada e painel', () => {
     await cliente.close()
   }, 120_000)
 
+  it('mostra os sites em grelha com a imagem da homepage, pesquisa e guarda a escolha', async () => {
+    // Os primeiros bytes de um JPEG: o suficiente para a rota o servir.
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.insert(schema.siteScreenshots).values([
+          { siteId: siteVerificado, source: 'page_speed_desktop', mimeType: 'image/jpeg', image: jpeg, capturedAt: new Date() },
+          { siteId: siteDeOutroCliente, source: 'page_speed_desktop', mimeType: 'image/jpeg', image: jpeg, capturedAt: new Date() },
+        ])
+      } finally {
+        await close()
+      }
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/`)
+    await equipa.waitForSelector('[data-vista="lista"]')
+
+    await equipa.click('button:has-text("Grelha")')
+    const cartao = equipa.locator('[data-vista="grelha"] li', { hasText: 'Site verificado' })
+    const imagem = cartao.locator('img[data-captura]')
+    expect(await imagem.getAttribute('src')).toContain(`/api/sites/${siteVerificado}/captura?v=`)
+    // Um site sem imagem diz porquê, em vez de mostrar uma imagem partida.
+    const semImagem = equipa.locator('[data-vista="grelha"] li', { hasText: 'Site de teste' })
+    expect(await semImagem.locator('img').count()).toBe(0)
+    expect(await semImagem.textContent()).toContain('propriedade do domínio')
+
+    // A rota serve a imagem a quem é da organização, e só a ele.
+    const daOrganizacao = await equipa.request.get(`${baseUrl}/api/sites/${siteVerificado}/captura`)
+    expect(daOrganizacao.status()).toBe(200)
+    expect(daOrganizacao.headers()['content-type']).toBe('image/jpeg')
+    expect(Buffer.from(await daOrganizacao.body()).equals(jpeg)).toBe(true)
+    const deOutro = await equipa.request.get(`${baseUrl}/api/sites/${siteDeOutroCliente}/captura`)
+    expect(deOutro.status()).toBe(404)
+
+    // A escolha fica: volta-se à página e continua em grelha.
+    await equipa.reload()
+    await equipa.waitForSelector('[data-vista="grelha"]')
+
+    // A pesquisa, sem acentos nem maiúsculas, pelo nome.
+    await equipa.fill('input[type="search"]', 'VERIFICADO')
+    expect(await equipa.locator('[data-vista="grelha"] li').count()).toBe(1)
+    await equipa.fill('input[type="search"]', 'nada-com-isto')
+    expect(await equipa.isVisible('text=Nenhum site corresponde')).toBe(true)
+    await equipa.close()
+
+    const anonimo = await browser.newPage()
+    const semSessao = await anonimo.request.get(`${baseUrl}/api/sites/${siteVerificado}/captura`)
+    expect(semSessao.status()).toBe(401)
+    await anonimo.close()
+  }, 120_000)
+
   it('silenciar deixa de ser uma porta sem volta', async () => {
     // Silenciar tirava o problema da lista e não havia ecrã nenhum onde o
     // voltar a encontrar: a única ação da aplicação que só se desfazia na

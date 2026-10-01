@@ -447,6 +447,26 @@ e do portal (`components/response-time-chart.tsx`, contas em
 Uma observação falhada não tem tempo de resposta e não entra na média; um dia
 sem observações interrompe a linha em vez de cair a zero.
 
+### Imagem da homepage
+
+A grelha de sites do painel mostra a homepage de cada um. A imagem é a que o
+Lighthouse tira no fim de cada medição da PageSpeed (o audit
+`final-screenshot`), por isso não custa nenhum pedido a mais ao site do
+cliente. Fica em `site_screenshots`, uma por site, substituída a cada medição:
+
+- a de computador ganha à de telemóvel, por caber melhor num cartão deitado;
+  a de telemóvel só entra enquanto não houver outra;
+- só se aceitam JPEG, PNG ou WebP até 1 MB, e a rota que a serve
+  (`/api/sites/[id]/captura`) verifica a pertença à organização, com
+  `nosniff` e uma CSP que não deixa correr nada;
+- uma imagem que não se guardou não falha a verificação: fica um cartão sem
+  fotografia.
+
+Um site por verificar não tem medição de velocidade e, por isso, não tem
+imagem; o cartão diz porquê. A lista e a grelha mostram o mesmo, e a escolha
+fica num cookie de quem usa o painel. A pesquisa corre no browser, sem
+acentos nem maiúsculas, pelo nome e pelo domínio, com `/` para lá ir.
+
 ### Telemóvel e computador são duas verificações
 
 `page_speed` mede em telemóvel, `page_speed_desktop` em computador. Duas e não

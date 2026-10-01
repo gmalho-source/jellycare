@@ -1,19 +1,15 @@
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Icone } from '@/components/icons'
+import { ListaDeSites } from '@/components/lista-de-sites'
 import { SchedulerBanner } from '@/components/scheduler-banner'
-import { HealthBadge, Stat, formatRelative, formatUptime } from '@/components/ui'
+import { Stat, formatUptime } from '@/components/ui'
+import { COOKIE_VISTA_SITES, vistaSitesDe } from '@/lib/pesquisa-sites'
 import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { requireUser } from '@/lib/session'
 import { lerVigia } from '@/lib/vigia'
 
 export const dynamic = 'force-dynamic'
-
-const STATE_LABEL: Record<string, string> = {
-  onboarding: 'Por verificar',
-  active: 'Ativo',
-  paused: 'Em pausa',
-  archived: 'Arquivado',
-}
 
 /** A média das disponibilidades conhecidas. Um site sem dados não conta como zero. */
 function mediaDisponibilidade(valores: readonly (number | null)[]): {
@@ -31,6 +27,7 @@ export default async function SitesPage() {
   const organizacoes = user.memberships.map((membership) => membership.organizationId)
 
   const [sites, vigia] = await Promise.all([listSites(organizacoes), lerVigia(organizacoes)])
+  const vista = vistaSitesDe((await cookies()).get(COOKIE_VISTA_SITES)?.value)
 
   const sorted = ordenarPorGravidade(sites)
   const comProblemas = sorted.filter((site) => site.worstSeverity !== null).length
@@ -113,71 +110,7 @@ export default async function SitesPage() {
           </p>
         </div>
       ) : (
-        <ul className="overflow-hidden rounded-2xl bg-white shadow-card">
-          {/* Uma lista e não uma tabela. Quatro colunas de largura fixa não
-              cabem num telemóvel, e uma tabela que rola na horizontal esconde
-              metade da informação a quem só tem o telemóvel à mão: aqui as
-              medidas passam para baixo do nome e nada sai do ecrã.
-
-              A linha inteira é ligação. Antes só o nome é que era, e tocar na
-              disponibilidade não fazia nada — num ecrã táctil isso lê-se como
-              avaria. */}
-          {sorted.map((site) => (
-            <li key={site.id} className="border-b border-ink-100 last:border-0">
-              <Link
-                href={`/sites/${site.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-ink-50 sm:gap-4 sm:px-5 sm:py-3.5"
-              >
-                <span
-                  aria-hidden
-                  className={`sev-${site.worstSeverity ?? 'ok'} sev-ponto h-9 w-1 shrink-0 rounded-full`}
-                />
-
-                <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink-100 text-sm font-semibold text-ink-600 sm:flex">
-                  {site.label.trim().charAt(0).toUpperCase() || '·'}
-                </span>
-
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[0.9375rem] font-semibold tracking-tight text-ink-900">
-                    {site.label}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-ink-400">
-                    {site.hostname}
-                  </span>
-
-                  {/* No telemóvel as medidas vivem debaixo do nome; a partir
-                      de `sm` cada uma tem a sua coluna à direita. */}
-                  <span className="mt-2 flex flex-wrap items-center gap-2 sm:hidden">
-                    <HealthBadge severity={site.worstSeverity} openFindings={site.openFindings} />
-                    <span className="font-mono text-xs tabular-nums text-ink-600">
-                      {formatUptime(site.uptime24h)}
-                    </span>
-                    <span className="text-xs text-ink-400">{formatRelative(site.lastRunAt)}</span>
-                  </span>
-                </span>
-
-                <span className="hidden w-20 text-right font-mono text-sm tabular-nums text-ink-600 sm:block">
-                  {formatUptime(site.uptime24h)}
-                </span>
-
-                <span className="hidden w-40 justify-end gap-2 sm:flex">
-                  {!site.verified && (
-                    <span className="self-center text-xs text-ink-400">
-                      {STATE_LABEL[site.state]}
-                    </span>
-                  )}
-                  <HealthBadge severity={site.worstSeverity} openFindings={site.openFindings} />
-                </span>
-
-                <span className="hidden w-24 text-right text-xs text-ink-400 sm:block">
-                  {formatRelative(site.lastRunAt)}
-                </span>
-
-                <Icone nome="seta" className="hidden h-4 w-4 shrink-0 text-ink-200 sm:block" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <ListaDeSites sites={sorted} vistaInicial={vista} />
       )}
     </div>
   )

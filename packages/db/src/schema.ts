@@ -1046,3 +1046,26 @@ export const reportNotes = pgTable(
   },
   (table) => [index('report_notes_site_idx').on(table.siteId, table.createdAt)],
 )
+
+/**
+ * A imagem da homepage de cada site, para a grelha do painel.
+ *
+ * Vem da PageSpeed: o Lighthouse fotografa a página no fim de cada medição, e
+ * guardar essa imagem não custa um pedido a mais ao site do cliente. Uma por
+ * site, substituída a cada medição. A de computador ganha à de telemóvel, por
+ * caber melhor num cartão deitado; a de telemóvel só entra enquanto não houver
+ * outra.
+ *
+ * Fica fora de `check_runs` de propósito: as execuções são apagadas aos 90
+ * dias e lidas às dezenas no painel, e uma imagem em cada uma pesava em tudo.
+ */
+export const siteScreenshots = pgTable('site_screenshots', {
+  siteId: uuid('site_id')
+    .primaryKey()
+    .references(() => sites.id, { onDelete: 'cascade' }),
+  /** O check que a tirou: `page_speed_desktop` ou `page_speed`. */
+  source: text('source').notNull(),
+  mimeType: text('mime_type').notNull(),
+  image: bytea('image').notNull(),
+  capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+})
