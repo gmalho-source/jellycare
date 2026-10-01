@@ -428,6 +428,25 @@ desativar por formulário.
   do Lighthouse (acessibilidade, práticas recomendadas, SEO, navegação com agência)
 - páginas com erro 5xx detetadas durante o crawl
 
+### Tempo de resposta
+
+Vem das amostras de disponibilidade (`uptime_samples.response_time_ms`), de
+cinco em cinco minutos, agrupadas por dia. No separador Desempenho, do painel
+e do portal (`components/response-time-chart.tsx`, contas em
+`lib/tempo-resposta.ts`):
+
+- um mostrador com a média dos últimos 30 dias, em escala linear até 2,7 s,
+  e a palavra ao lado da cor: rápido abaixo de 800 ms, aceitável até 1,8 s,
+  lento acima disso;
+- a linha dia a dia, com a média a tracejado e o dia mais rápido e o mais
+  lento marcados. A curva é monótona: entre dois dias nunca passa acima do
+  mais lento nem abaixo do mais rápido, para não desenhar um pico que não
+  existiu;
+- a tabela dos valores por dia, para quem não lê o gráfico.
+
+Uma observação falhada não tem tempo de resposta e não entra na média; um dia
+sem observações interrompe a linha em vez de cair a zero.
+
 ### Telemóvel e computador são duas verificações
 
 `page_speed` mede em telemóvel, `page_speed_desktop` em computador. Duas e não

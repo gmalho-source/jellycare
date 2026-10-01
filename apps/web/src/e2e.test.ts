@@ -995,6 +995,12 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await cliente.isVisible('text=5,4 s')).toBe(true)
     expect(await cliente.isVisible('text=Tempo de resposta do servidor')).toBe(true)
 
+    // O mostrador do tempo de resposta lê a média das observações deste site:
+    // uma a 180 ms e uma falhada, que não conta como zero.
+    const mostrador = cliente.locator('[data-tempo-resposta]')
+    expect(await mostrador.getAttribute('data-tempo-resposta')).toBe('bom')
+    expect(await mostrador.getAttribute('aria-label')).toBe('Tempo de resposta médio de 180 ms, rápido')
+
     // Continua sem ver o que é falha nossa, aqui como na visão geral.
     expect(await cliente.isVisible('text=Verificações falhadas')).toBe(false)
     await cliente.close()
