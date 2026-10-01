@@ -42,9 +42,9 @@ da equipa. O detalhe começa na página seguinte.
 resultado possível, e um relatório que só fala de problemas mostra-o como «0,
 0, 0». A lista diz, verificação a verificação, o que foi visto e o resultado:
 ligação cifrada, certificado (com a data até quando é válido), autenticação
-do email, DMARC, ficheiros expostos, reputação, cabeçalhos, WordPress. Só
-entra o que correu com sucesso no período — um visto numa verificação que não
-correu seria afirmar que olhámos. O juízo vem dos problemas em aberto no fim
+do email, DMARC, ficheiros expostos, reputação, conteúdo injetado e cloaking,
+cabeçalhos, WordPress. Só entra o que correu com sucesso no período — um visto
+numa verificação que não correu seria afirmar que olhámos. O juízo vem dos problemas em aberto no fim
 do período (`packages/reports/src/detalhe.ts`).
 
 A linha da reputação diz que fontes foram consultadas na última execução e
@@ -52,6 +52,11 @@ quantas páginas — as listas da Google que o Chrome usa para o aviso de site
 perigoso (Web Risk) e o URLhaus. Só as que responderam: o check grava a fonte
 como consultada apenas quando ela devolveu resposta, para o relatório nunca
 afirmar que a Google viu o site num dia em que a consulta falhou.
+
+A linha do conteúdo injetado diz quantas páginas foram analisadas e, quando
+houve comparação, que o Google e quem vem da pesquisa recebem a mesma versão
+de um visitante. Se o site recusou o Googlebot falso em todas as páginas, essa
+segunda frase não aparece: não houve comparação para a sustentar.
 
 Sem nenhuma verificação de segurança no período, o semáforo fica cinzento, e
 não verde.

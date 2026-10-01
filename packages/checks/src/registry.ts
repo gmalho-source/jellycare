@@ -2,6 +2,7 @@ import type { CheckDefinition } from '@jellycare/core'
 import { brokenLinksCheck } from './broken-links.js'
 import { emailAuthCheck } from './email-auth.js'
 import { exposedFilesCheck } from './exposed-files.js'
+import { injectedContentCheck } from './injected-content.js'
 import { pageSpeedCheck, pageSpeedDesktopCheck } from './page-speed.js'
 import { reputationCheck } from './reputation.js'
 import { securityHeadersCheck } from './security-headers.js'
@@ -56,6 +57,13 @@ export const CHECK_REGISTRY: Record<string, RegisteredCheck> = {
     definition: reputationCheck as CheckDefinition<any>,
     access: 'verified',
     label: 'Reputação e blacklists',
+  },
+  [injectedContentCheck.type]: {
+    definition: injectedContentCheck as CheckDefinition<any>,
+    // Pede a página a fazer-se passar pelo Googlebot e por quem vem da
+    // pesquisa. Só com autorização do dono, ou seja, com o domínio provado.
+    access: 'verified',
+    label: 'Conteúdo injetado e cloaking',
   },
   [brokenLinksCheck.type]: {
     definition: brokenLinksCheck as CheckDefinition<any>,

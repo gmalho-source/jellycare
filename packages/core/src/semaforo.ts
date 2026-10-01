@@ -29,11 +29,11 @@ export const PONTUACAO_MA = 50
 /**
  * As verificações que contam para o semáforo de segurança.
  *
- * Certificado, cabeçalhos, autenticação do email, reputação, ficheiros
- * expostos e vulnerabilidades WordPress. Ficam de fora a disponibilidade, a
- * velocidade, os links partidos e os formulários: são problemas reais, mas
- * não são ameaças, e um semáforo de segurança vermelho por uma página lenta
- * ensinava o cliente a não acreditar nele.
+ * Certificado, cabeçalhos, autenticação do email, reputação, conteúdo
+ * injetado, ficheiros expostos e vulnerabilidades WordPress. Ficam de fora a
+ * disponibilidade, a velocidade, os links partidos e os formulários: são
+ * problemas reais, mas não são ameaças, e um semáforo de segurança vermelho
+ * por uma página lenta ensinava o cliente a não acreditar nele.
  *
  * `wp_inventory` é o `WP_INVENTORY_CHECK` de `@jellycare/connectors`, escrito
  * à mão porque esse pacote depende deste e não o contrário. Um teste do painel
@@ -44,6 +44,7 @@ export const SECURITY_CHECK_TYPES: ReadonlySet<string> = new Set([
   'security_headers',
   'email_auth',
   'reputation',
+  'injected_content',
   'exposed_files',
   'wp_inventory',
 ])

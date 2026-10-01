@@ -4,7 +4,7 @@ import { Card, EmptyState } from '@/components/ui'
 import { MalwareCard } from '@/components/malware-card'
 import { DashboardOverview } from '@/components/site-dashboard'
 import { getSiteDashboard } from '@/lib/dashboard'
-import { lerCartaoMalware, lerMalware } from '@/lib/malware'
+import { avisosDoMalware, lerCartaoMalware, lerMalware } from '@/lib/malware'
 import { getPendingVerification, getSiteHeader } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { VerificarReputacao } from './verificar-reputacao'
@@ -35,7 +35,6 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
     header.verified ? getSiteDashboard(id) : null,
     lerMalware(id),
   ])
-  const ultimaReputacao = malware.ultima
   const verification = header.verified ? null : await getPendingVerification(id)
 
   // As duas vias, com o mesmo token. A que foi escolhida na criação aparece
@@ -65,10 +64,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
       <MalwareCard
         cartao={lerCartaoMalware(malware, header.verified)}
         acao={manageable && header.verified ? <VerificarReputacao siteId={header.site.id} /> : undefined}
-        avisosInternos={[
-          ...(ultimaReputacao?.error ? [ultimaReputacao.error] : []),
-          ...(ultimaReputacao?.warnings ?? []),
-        ]}
+        avisosInternos={avisosDoMalware(malware)}
       />
 
       {dashboard ? (

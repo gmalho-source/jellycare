@@ -1066,9 +1066,19 @@ describeE2E('fluxo de entrada e painel', () => {
           metrics: { webRiskUrls: 5, urlhausChecked: 1 },
           warnings: ['Web Risk: uma página recusada (400)'],
         })
-        await db
-          .insert(schema.checkConfigs)
-          .values({ siteId: siteVerificado, checkType: 'reputation', intervalMinutes: 60 * 24 })
+        await db.insert(schema.checkRuns).values({
+          siteId: siteVerificado,
+          checkType: 'injected_content',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 2 * 3600_000),
+          durationMs: 2400,
+          metrics: { pagesAnalysed: 3, comparisons: 6, comparisonsRefused: 0 },
+        })
+        await db.insert(schema.checkConfigs).values([
+          { siteId: siteVerificado, checkType: 'reputation', intervalMinutes: 60 * 24 },
+          { siteId: siteVerificado, checkType: 'injected_content', intervalMinutes: 60 * 24 },
+        ])
       } finally {
         await close()
       }
@@ -1085,6 +1095,10 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(texto).toContain('Google, 5 páginas')
     expect(texto).toContain('URLhaus')
     expect(texto).toContain('Web Risk: uma página recusada (400)')
+    // A segunda camada: o que o próprio site serve.
+    const conteudo = cartao.locator('[data-camada="conteudo"]')
+    expect(await conteudo.getAttribute('data-semaforo')).toBe('verde')
+    expect(await conteudo.textContent()).toContain('3 páginas analisadas')
 
     await cartao.locator('button:has-text("Verificar agora")').click()
     await equipa.waitForSelector('text=Pedido registado')
@@ -1094,17 +1108,21 @@ describeE2E('fluxo de entrada e painel', () => {
     // se confirma na base de dados.
     const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
     try {
-      const [config] = await db
-        .select({ nextRunAt: schema.checkConfigs.nextRunAt })
+      const configs = await db
+        .select({ checkType: schema.checkConfigs.checkType, nextRunAt: schema.checkConfigs.nextRunAt })
         .from(schema.checkConfigs)
         .where(
           and(
             eq(schema.checkConfigs.siteId, siteVerificado),
-            eq(schema.checkConfigs.checkType, 'reputation'),
+            inArray(schema.checkConfigs.checkType, ['reputation', 'injected_content']),
           ),
         )
-      expect(config?.nextRunAt).not.toBeNull()
-      expect(config!.nextRunAt!.getTime()).toBeLessThanOrEqual(Date.now())
+      // As duas verificações do cartão, e não só a das listas.
+      expect(configs).toHaveLength(2)
+      for (const config of configs) {
+        expect(config.nextRunAt, config.checkType).not.toBeNull()
+        expect(config.nextRunAt!.getTime(), config.checkType).toBeLessThanOrEqual(Date.now())
+      }
     } finally {
       await close()
     }
@@ -1118,6 +1136,7 @@ describeE2E('fluxo de entrada e painel', () => {
     const doCliente = cliente.locator('#malware')
     expect(await doCliente.locator('[data-malware]').getAttribute('data-malware')).toBe('verde')
     expect(await doCliente.textContent()).toContain('Google, 5 páginas')
+    expect(await doCliente.textContent()).toContain('3 páginas analisadas')
     expect(await doCliente.textContent()).not.toContain('recusada')
     expect(await doCliente.locator('button').count()).toBe(0)
     await cliente.close()

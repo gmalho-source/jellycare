@@ -32,34 +32,99 @@ aparece marcado, é incidente crítico imediato — perder o ranking no Google p
 "este site pode ser perigoso" custa mais ao cliente do que o próprio malware.
 
 **Onde aparece.** No cartão «Malware e reputação» da página do site, no painel
-e no portal (`components/malware-card.tsx`): escudo com semáforo, o estado, as
-páginas marcadas com a fonte que as marcou, e quando foi a última verificação
-e que fontes responderam. Uma marcação em aberto manda sobre tudo — o cartão
-fica vermelho mesmo que a última execução tenha falhado. «Limpo» só com uma
-execução que correu; uma execução falhada fica cinzenta, e não verde.
+e no portal (`components/malware-card.tsx`). Tem duas camadas: as listas de
+sites perigosos (esta secção) e o conteúdo do site (1.2 e 1.3). Cada uma diz
+o estado, as páginas marcadas com quem as marcou, quando foi a última
+verificação e o que foi visto. O semáforo do topo leva a pior das camadas.
+Uma marcação em aberto manda sobre tudo, mesmo que a última execução tenha
+falhado. «Limpo» só com as duas camadas a verde; uma execução falhada fica
+cinzenta, e não verde.
 
 Só a equipa vê os avisos da execução (uma fonte em baixo, uma página
-recusada) e o botão **Verificar agora**, que antecipa a verificação para a
-passagem seguinte do agendador, como o «Analisar agora» da velocidade. O
+recusada) e o botão **Verificar agora**, que antecipa as duas verificações
+para a passagem seguinte do agendador, como o «Analisar agora» da velocidade. O
 cartão lê a última execução de reputação à parte das execuções recentes do
 painel: essas são as últimas 25 de todos os checks, e com a disponibilidade a
 correr de cinco em cinco minutos a diária da reputação nunca lá aparecia.
 
 ### 1.2 Deteção de conteúdo injetado — agentless
-Análise do HTML e dos scripts servidos, à procura de:
-- JavaScript ofuscado (`eval`, `atob`, `String.fromCharCode` encadeado,
-  entropia anormal em strings)
-- iframes ocultos (`display:none`, 1x1px) para domínios externos
-- scripts de domínios não presentes na baseline aprovada do site
-- injeção de SEO spam (blocos de links escondidos, keywords de farmácia/casino
-  em `position:absolute; left:-9999px`)
-- redirects condicionais por `Referer` do Google ou `User-Agent` mobile
+Check `injected_content`, diário, só com a propriedade provada
+(`packages/checks/src/injected-content.ts`). Lê a homepage e até duas páginas
+declaradas (as mesmas `additionalUrls` da reputação), no máximo três por site.
+No HTML servido procura:
+
+- **links de spam escondidos** (`hidden_spam_links`, crítico) — links para
+  outros domínios com termos de farmácia, casino, apostas, empréstimos ou
+  réplicas, dentro de um elemento escondido: `display:none`,
+  `visibility:hidden`, `left:-9999px`, `font-size:0`, `height:0`, o atributo
+  `hidden`, ou uma classe ou id que o CSS da própria página esconde;
+- **molduras invisíveis** (`hidden_iframe`, elevado) — iframes de 0 ou 1
+  píxel, ou escondidos, para um domínio de fora. Ficam de fora os que sites
+  saudáveis usam escondidos: o noscript do Tag Manager, píxeis de conversão,
+  reCAPTCHA, Turnstile;
+- **JavaScript ofuscado** (`obfuscated_script`, elevado) — nos scripts da
+  própria página: `eval` de um packer `(p,a,c,k,e,d)`, `eval` de texto
+  descodificado (`atob`, `unescape`, `String.fromCharCode`), `document.write`
+  de texto codificado, `String.fromCharCode` com dezenas de códigos quando o
+  resultado é corrido ou escrito, e código passado num ofuscador (dezenas de
+  identificadores `_0x…`) que mexe em `location` ou cria scripts. Código
+  minificado não conta: minificar encurta nomes, não esconde o que corre.
+
+Os termos de spam, sozinhos, não acusam nada: uma farmácia online pode vender
+sildenafil. Só contam escondidos com links para fora, ou numa versão da página
+que o visitante normal não recebe (1.3).
+
+**O que fica de fora, por agora.** Os ficheiros `.js` externos não são lidos,
+só os scripts escritos na página. A comparação com uma lista aprovada de
+domínios de scripts precisa de guardar estado entre execuções e fica para a
+versão seguinte.
 
 ### 1.3 Cloaking — agentless
-O truque mais usado em sites WordPress comprometidos: o site serve conteúdo
-limpo ao visitante normal e conteúdo spam ao Googlebot. Deteta-se pedindo a
-mesma página três vezes — como browser normal, como Googlebot e como mobile
-com referrer do Google — e comparando. Divergência estrutural = alerta.
+No mesmo check. O site comprometido serve conteúdo limpo ao visitante normal
+e spam ao Googlebot, ou redireciona só quem chega da pesquisa. Cada página é
+pedida três vezes, sempre como telemóvel:
+
+| Perfil | User-Agent | Referer |
+|---|---|---|
+| visitante | Chrome em Android | — |
+| googlebot | Googlebot para telemóvel | — |
+| pesquisa | Chrome em Android | `https://www.google.com/` |
+
+Os três são telemóvel de propósito: um site pode servir HTML diferente a
+telemóvel e a computador, e isso é legítimo. Assim, o que muda entre perfis é
+só ser o Googlebot ou vir da pesquisa.
+
+- **Redirecionamento só para um dos perfis** (`cloaking_redirect`, crítico):
+  o visitante fica no domínio, o Googlebot ou quem vem da pesquisa vai parar a
+  outro. Um salto para o `www` do próprio site não conta.
+- **Spam só para um dos perfis** (`cloaking_spam`, crítico): termos de spam na
+  versão do Googlebot ou da pesquisa que não estão na do visitante.
+- **Página muito diferente para o Googlebot** (`cloaking_content`, médio):
+  menos de 25% de palavras em comum, com pelo menos 80 palavras de cada lado.
+  Pode ser personalização legítima, por isso é médio e laranja, e não
+  incidente.
+- O que é injetado só a quem vem da pesquisa conta como injeção (1.2), com o
+  perfil registado na evidência.
+
+**É o único check que não se apresenta como JellycareBot.** Um site
+comprometido mostra o conteúdo limpo a quem parece um verificador, por isso
+pedir como JellycareBot dava sempre «limpo». Corre só em domínios com a
+propriedade provada, ou seja, com autorização do dono.
+
+**Sites que recusam o Googlebot falso.** O Cloudflare e o Wordfence bloqueiam
+quem diz ser o Googlebot sem vir dos endereços da Google, e respondem 403.
+Isso não é cloaking: a comparação fica por fazer, entra no aviso da execução
+(`comparisonsRefused`) e o cliente não vê nada. O relatório e o cartão só dizem
+que a versão do Google é a mesma quando houve pelo menos uma comparação.
+
+**Limite honesto.** O cloaking por endereço IP, que só serve spam aos IPs
+verdadeiros da Google, não se vê de um datacenter. Para isso é preciso a
+Search Console (inspeção de URL) ou uma rede de proxies; fica registado como
+evolução.
+
+Sem nenhuma página lida, o check falha em vez de dar o site por limpo: uma
+execução «limpa» fechava uma injeção verdadeira só porque o site esteve em
+baixo à hora da verificação.
 
 ### 1.4 Defacement e alteração inesperada — agentless
 Hash do DOM normalizado (removendo elementos voláteis: datas, contadores,

@@ -40,6 +40,7 @@ const CHECKS: { checkType: string; intervalMinutes: number }[] = [
   { checkType: 'security_headers', intervalMinutes: 60 * 24 },
   { checkType: 'exposed_files', intervalMinutes: 60 * 24 },
   { checkType: 'reputation', intervalMinutes: 60 * 24 },
+  { checkType: 'injected_content', intervalMinutes: 60 * 24 },
   { checkType: 'broken_links', intervalMinutes: 60 * 24 * 7 },
   { checkType: 'form_discovery', intervalMinutes: 60 * 24 * 7 },
   { checkType: 'form_test', intervalMinutes: 60 * 24 },

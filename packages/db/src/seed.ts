@@ -26,6 +26,7 @@ const CHECK_DEFAULTS: { checkType: string; intervalMinutes: number }[] = [
   { checkType: 'security_headers', intervalMinutes: 60 * 24 },
   { checkType: 'exposed_files', intervalMinutes: 60 * 24 },
   { checkType: 'reputation', intervalMinutes: 60 * 24 },
+  { checkType: 'injected_content', intervalMinutes: 60 * 24 },
   { checkType: 'broken_links', intervalMinutes: 60 * 24 * 7 },
   // As rotinas de formulários são a razão de ser do produto. Sem elas na
   // semente, um site criado por aqui nascia sem a funcionalidade central e

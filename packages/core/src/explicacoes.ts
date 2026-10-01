@@ -597,6 +597,65 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     oQueFazemos:
       'Investigamos com urgência se o site está mesmo comprometido, limpamos o que houver a limpar, e submetemos o pedido de remoção da lista.',
   },
+
+  /* ---------------------------------------------------------------------- */
+  /* Conteúdo injetado e cloaking                                           */
+  /* ---------------------------------------------------------------------- */
+
+  hidden_spam_links: {
+    titulo: 'Há links de spam escondidos no site',
+    oQueE:
+      'A página tem links para outros sites, invisíveis para quem a visita, com termos de spam como farmácia, casino ou apostas. Quem os pôs lá entrou no site sem autorização.',
+    porqueImporta:
+      'O Google vê estes links e associa o site a spam: perde posição na pesquisa e, se continuar, pode ser marcado como comprometido. É também sinal de que alguém tem acesso ao site.',
+    oQueFazemos:
+      'Tratamos como incidente: removemos o conteúdo injetado, encontramos e fechamos a porta por onde entrou, e confirmamos que o Google volta a ver o site limpo.',
+  },
+  hidden_iframe: {
+    titulo: 'O site carrega outro site de forma invisível',
+    oQueE:
+      'A página tem uma moldura invisível que carrega conteúdo de um domínio desconhecido. É uma técnica habitual para pôr os visitantes a descarregar malware ou a gerar visitas falsas.',
+    porqueImporta:
+      'Quem visita o site pode estar a ser exposto a malware sem saber, e o Google pode passar a marcar o site como perigoso.',
+    oQueFazemos:
+      'Confirmamos de onde vem a moldura. Se não foi posta por vós ou por um serviço vosso, tratamos como incidente e limpamos o site.',
+  },
+  obfuscated_script: {
+    titulo: 'Há código escondido na página',
+    oQueE:
+      'A página tem código escrito de forma a esconder o que faz. É assim que normalmente se injetam redirecionamentos para sites de spam e malware.',
+    porqueImporta:
+      'Pode estar a enviar parte dos visitantes para outros sites, ou a carregar malware, sem que ninguém da vossa equipa o veja ao abrir o site.',
+    oQueFazemos:
+      'Analisamos o código. Se não pertencer a nenhum serviço que usam, tratamos como incidente: removemos, limpamos o site e fechamos a porta por onde entrou.',
+  },
+  cloaking_spam: {
+    titulo: 'O site mostra ao Google conteúdo diferente do que os visitantes veem',
+    oQueE:
+      'Quando é o Google a visitar a página, ou quem chega da pesquisa, aparece spam que um visitante normal não vê. É o truque típico de um site comprometido: o dono não dá por nada e o Google indexa o spam.',
+    porqueImporta:
+      'Os resultados da pesquisa passam a mostrar spam com o nome do vosso negócio, o site perde posição, e o Google pode penalizá-lo ou marcá-lo como comprometido.',
+    oQueFazemos:
+      'Tratamos como incidente: limpamos o site, fechamos a porta por onde entrou e pedimos ao Google que volte a analisar as páginas afetadas.',
+  },
+  cloaking_redirect: {
+    titulo: 'Quem chega pelo Google é enviado para outro site',
+    oQueE:
+      'Um visitante que escreve o endereço fica no site, mas quem chega pela pesquisa do Google, ou o próprio Google, é redirecionado para outro domínio.',
+    porqueImporta:
+      'Perdem as visitas que vêm da pesquisa, normalmente a maior parte, sem darem por isso, porque ao abrirem o site diretamente está tudo normal.',
+    oQueFazemos:
+      'Tratamos como incidente: removemos o redirecionamento, limpamos o site e fechamos a porta por onde entrou.',
+  },
+  cloaking_content: {
+    titulo: 'O Google vê uma página bastante diferente da dos visitantes',
+    oQueE:
+      'A versão da página que o Google recebe tem pouco em comum com a que um visitante vê. Pode ser personalização legítima, mas também pode ser o início de uma infeção.',
+    porqueImporta:
+      'Se não for intencional, o Google está a indexar conteúdo que não é o vosso, e isso aparece nos resultados da pesquisa.',
+    oQueFazemos:
+      'Comparamos as duas versões. Se a diferença for legítima, fica registado; se não for, tratamos como incidente.',
+  },
 }
 
 /** A explicação de um código, ou `null` se ainda não houver uma escrita. */

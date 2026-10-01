@@ -40,7 +40,10 @@ o alojamento do cliente.
 
 Mitigação:
 - respeitar `robots.txt` e `crawl-delay`
-- `User-Agent` identificável com URL de contacto
+- `User-Agent` identificável com URL de contacto, com uma exceção: a deteção
+  de cloaking pede como browser e como Googlebot, porque um site comprometido
+  esconde o spam de quem parece um verificador. Só em domínios com a
+  propriedade provada, três páginas por dia (`docs/checks.md`, 1.3)
 - concorrência limitada por host e backoff em 429 e 5xx
 - budget de páginas por plano
 - espalhar os jobs no tempo para não bater vários sites do mesmo servidor de

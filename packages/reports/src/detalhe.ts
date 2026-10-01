@@ -201,6 +201,28 @@ export function buildVerificacoes(
     })
   }
 
+  const conteudo = ultima('injected_content')
+  if (conteudo) {
+    const problemas = de('injected_content')
+    const paginas = conteudo.metrics?.pagesAnalysed
+    const comparadas = (conteudo.metrics?.comparisons ?? 0) > 0
+    const cloaking = problemas.some((f) => f.code.startsWith('cloaking_'))
+    itens.push({
+      chave: 'conteudo',
+      estado: pior(problemas),
+      titulo:
+        problemas.length === 0
+          ? 'Sem código injetado nem conteúdo escondido'
+          : cloaking
+            ? 'O Google recebe uma versão diferente do site'
+            : 'Conteúdo injetado na página',
+      detalhe:
+        problemas.length > 0
+          ? `Por resolver: ${nomes(problemas)}.`
+          : `${typeof paginas === 'number' ? `${paginas} ${paginas === 1 ? 'página analisada' : 'páginas analisadas'}` : 'Páginas analisadas'}: sem links de spam escondidos, molduras invisíveis ou código ofuscado${comparadas ? '. A versão que o Google e quem vem da pesquisa recebem é a mesma de um visitante' : ''}.`,
+    })
+  }
+
   if (cabecalhos) {
     const faltam = de('security_headers').filter(
       (f) => f.code !== 'http_not_redirected' && f.code !== 'missing_hsts',

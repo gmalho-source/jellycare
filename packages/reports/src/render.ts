@@ -34,6 +34,7 @@ const CHECK_LABEL: Record<string, string> = {
   security_headers: 'Cabeçalhos de segurança',
   exposed_files: 'Ficheiros expostos',
   reputation: 'Reputação e listas de malware',
+  injected_content: 'Conteúdo injetado e cloaking',
   broken_links: 'Links quebrados',
   form_discovery: 'Descoberta de formulários',
   form_test: 'Teste de formulários',

@@ -27,6 +27,7 @@ import {
   MIN_CHECK_INTERVAL_MINUTES,
 } from '@/lib/checks'
 import { getDb } from '@/lib/db'
+import { CHECKS_DO_MALWARE } from '@/lib/malware'
 import { getSiteHeader } from '@/lib/queries'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import {
@@ -1396,14 +1397,15 @@ export async function requestReputationAction(
     .where(
       and(
         eq(schema.checkConfigs.siteId, parsed.data.siteId),
-        eq(schema.checkConfigs.checkType, 'reputation'),
+        // As duas verificações do cartão: as listas e o conteúdo do site.
+        inArray(schema.checkConfigs.checkType, [...CHECKS_DO_MALWARE]),
         eq(schema.checkConfigs.enabled, true),
       ),
     )
     .returning({ id: schema.checkConfigs.id })
 
   if (atualizadas.length === 0) {
-    return { error: 'A verificação de reputação está desligada neste site.' }
+    return { error: 'As verificações de malware estão desligadas neste site.' }
   }
 
   revalidatePath(`/sites/${parsed.data.siteId}`)

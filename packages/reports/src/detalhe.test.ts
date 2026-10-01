@@ -100,6 +100,49 @@ describe('buildVerificacoes — reputação', () => {
   })
 })
 
+describe('buildVerificacoes — conteúdo injetado e cloaking', () => {
+  it('diz quantas páginas foram analisadas e que o Google recebe a mesma versão', () => {
+    const [item] = buildVerificacoes(
+      [ok('injected_content', { pagesAnalysed: 3, comparisons: 6 })],
+      [],
+      null,
+    )
+    expect(item).toMatchObject({ chave: 'conteudo', estado: 'ok', titulo: 'Sem código injetado nem conteúdo escondido' })
+    expect(item?.detalhe).toContain('3 páginas analisadas')
+    expect(item?.detalhe).toContain('mesma de um visitante')
+  })
+
+  it('sem nenhuma comparação feita, não afirma que o Google vê o mesmo', () => {
+    // Um site que recusa o Googlebot falso deixa a comparação por fazer.
+    const [item] = buildVerificacoes(
+      [ok('injected_content', { pagesAnalysed: 1, comparisons: 0 })],
+      [],
+      null,
+    )
+    expect(item?.detalhe).toContain('1 página analisada')
+    expect(item?.detalhe).not.toContain('Google')
+  })
+
+  it('um cloaking em aberto é falha, com o título do cloaking', () => {
+    const [item] = buildVerificacoes(
+      [ok('injected_content', { pagesAnalysed: 1, comparisons: 2 })],
+      [{ checkType: 'injected_content', code: 'cloaking_spam', severity: 'critical' }],
+      null,
+    )
+    expect(item).toMatchObject({ estado: 'falha', titulo: 'O Google recebe uma versão diferente do site' })
+    expect(item?.detalhe).toContain('o site mostra ao Google conteúdo diferente')
+  })
+
+  it('uma diferença de conteúdo sem spam é aviso, não falha', () => {
+    const [item] = buildVerificacoes(
+      [ok('injected_content', { pagesAnalysed: 1, comparisons: 2 })],
+      [{ checkType: 'injected_content', code: 'cloaking_content', severity: 'medium' }],
+      null,
+    )
+    expect(item?.estado).toBe('aviso')
+  })
+})
+
 describe('buildDiario', () => {
   it('um registo por dia, com os dias antes da entrada marcados', () => {
     const entrada = new Date('2026-09-22T08:05:00Z')

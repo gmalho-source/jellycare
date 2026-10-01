@@ -77,8 +77,8 @@ isso, e duas pessoas a escrever ao mesmo tempo intercalavam turnos.
 
 ## Porque não há um para o cliente
 
-Os checks emitem 68 códigos distintos. É um conjunto fechado: quando um cliente
-pergunta «o que é isto?», a pergunta tem 68 respostas possíveis, que se escrevem
+Os checks emitem 74 códigos distintos. É um conjunto fechado: quando um cliente
+pergunta «o que é isto?», a pergunta tem 74 respostas possíveis, que se escrevem
 uma vez e se revêem. Isso é conteúdo, não é IA.
 
 Um assistente a falar com um cliente fala em nome da Jelly sobre a segurança do
