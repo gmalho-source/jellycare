@@ -259,6 +259,8 @@ describe('reputationCheck — Google Web Risk', () => {
 
     expect(fetch.calls).toHaveLength(2)
     expect(outcome.findings.map((f) => f.discriminator)).toEqual(['https://cliente.pt/contactos'])
+    // Fica gravado quantas páginas a Google viu, para o relatório o poder dizer.
+    expect(outcome.metrics.webRiskUrls).toBe(2)
   })
 
   it('uma chave sem a API ativada falha em voz alta, sem a chave no erro', async () => {
@@ -296,6 +298,10 @@ describe('reputationCheck — Google Web Risk', () => {
     expect(outcome.status).toBe('ok')
     expect(outcome.findings.map((f) => f.code)).toEqual(['blacklisted_urlhaus'])
     expect(outcome.metrics.providersFailed).toBe(1)
+    // A fonte que falhou não fica gravada como consultada: o relatório não
+    // pode afirmar que a Google viu o site num dia em que não viu.
+    expect(outcome.metrics.urlhausChecked).toBe(1)
+    expect(outcome.metrics.webRiskUrls).toBeUndefined()
   })
 
   it('consulta no máximo dez páginas por passagem', async () => {

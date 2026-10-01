@@ -166,16 +166,38 @@ export function buildVerificacoes(
     })
   }
 
-  if (ultima('reputation')) {
+  const reputacao = ultima('reputation')
+  if (reputacao) {
     const problemas = de('reputation')
+    const paginasGoogle = reputacao.metrics?.webRiskUrls
+    const urlhaus = reputacao.metrics?.urlhausChecked === 1
+    const google = typeof paginasGoogle === 'number' && paginasGoogle > 0
+    // As fontes que responderam na última execução, ditas pelo nome. Uma
+    // execução antiga, sem esta métrica, cai na frase genérica de antes.
+    const fontes = [
+      google
+        ? `nas listas da Google que o Chrome usa para o aviso de site perigoso (${paginasGoogle} ${paginasGoogle === 1 ? 'página' : 'páginas'})`
+        : '',
+      urlhaus ? 'no URLhaus, de sites a distribuir malware' : '',
+    ].filter(Boolean)
+    const pelaGoogle = problemas.some((f) => f.code === 'blacklisted_web_risk')
     itens.push({
       chave: 'reputacao',
       estado: problemas.length > 0 ? 'falha' : 'ok',
-      titulo: problemas.length === 0 ? 'Fora das listas de malware' : 'Domínio numa lista de malware',
+      titulo:
+        problemas.length > 0
+          ? pelaGoogle
+            ? 'Página do site marcada pela Google como perigosa'
+            : 'Domínio numa lista de malware'
+          : google
+            ? 'Fora das listas de malware e phishing'
+            : 'Fora das listas de malware',
       detalhe:
-        problemas.length === 0
-          ? 'O domínio não aparece em nenhuma lista de sites a distribuir malware.'
-          : 'O domínio aparece numa lista de sites a distribuir malware. Detalhe nos pontos em aberto.',
+        problemas.length > 0
+          ? 'Tratado como incidente. Detalhe nos pontos em aberto.'
+          : fontes.length > 0
+            ? `Verificado ${fontes.join(' e ')}. Nenhuma ocorrência.`
+            : 'O domínio não aparece em nenhuma lista de sites a distribuir malware.',
     })
   }
 

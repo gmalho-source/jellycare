@@ -75,6 +75,31 @@ describe('buildVerificacoes', () => {
   })
 })
 
+describe('buildVerificacoes — reputação', () => {
+  it('diz que fontes foram consultadas e quantas páginas', () => {
+    const [item] = buildVerificacoes([ok('reputation', { webRiskUrls: 3, urlhausChecked: 1 })], [], null)
+    expect(item).toMatchObject({ chave: 'reputacao', estado: 'ok', titulo: 'Fora das listas de malware e phishing' })
+    expect(item?.detalhe).toContain('listas da Google')
+    expect(item?.detalhe).toContain('3 páginas')
+    expect(item?.detalhe).toContain('URLhaus')
+  })
+
+  it('só com o URLhaus, não fala da Google', () => {
+    const [item] = buildVerificacoes([ok('reputation', { urlhausChecked: 1 })], [], null)
+    expect(item?.titulo).toBe('Fora das listas de malware')
+    expect(item?.detalhe).not.toContain('Google')
+  })
+
+  it('uma página marcada pela Google é falha, com o nome certo', () => {
+    const [item] = buildVerificacoes(
+      [ok('reputation', { webRiskUrls: 1 })],
+      [{ checkType: 'reputation', code: 'blacklisted_web_risk', severity: 'critical' }],
+      null,
+    )
+    expect(item).toMatchObject({ estado: 'falha', titulo: 'Página do site marcada pela Google como perigosa' })
+  })
+})
+
 describe('buildDiario', () => {
   it('um registo por dia, com os dias antes da entrada marcados', () => {
     const entrada = new Date('2026-09-22T08:05:00Z')

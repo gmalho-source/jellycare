@@ -189,6 +189,12 @@ export class NoReputationDataError extends Error {
 export interface ReputationProvider {
   name: string
   query: () => Promise<ObservedFinding[]>
+  /**
+   * A métrica que fica gravada quando a fonte responde. É o que deixa o
+   * relatório dizer que fontes foram consultadas e quantas páginas — e não
+   * afirmar uma consulta que falhou.
+   */
+  metric?: { key: string; value: number }
 }
 
 /**
@@ -207,6 +213,7 @@ export async function aggregateProviders(
 
   const findings: ObservedFinding[] = []
   const failures: string[] = []
+  const porFonte: Record<string, number> = {}
   let succeeded = 0
 
   results.forEach((result, index) => {
@@ -214,6 +221,8 @@ export async function aggregateProviders(
     if (result.status === 'fulfilled') {
       succeeded++
       findings.push(...result.value)
+      const metrica = providers[index]?.metric
+      if (metrica) porFonte[metrica.key] = metrica.value
     } else {
       const reason = result.reason
       failures.push(`${name}: ${reason instanceof Error ? reason.message : String(reason)}`)
@@ -238,6 +247,7 @@ export async function aggregateProviders(
       providersSucceeded: succeeded,
       providersFailed: failures.length,
       listings: findings.length,
+      ...porFonte,
     },
     ...(failures.length > 0
       ? {
@@ -265,20 +275,17 @@ export const reputationCheck: CheckDefinition<ReputationConfig> = {
         name: 'urlhaus',
         query: () =>
           queryUrlhaus(context.site.hostname, context.fetch, timeoutMs, config.urlhausAuthKey),
+        metric: { key: 'urlhausChecked', value: 1 },
       })
     }
 
     if (config.webRiskApiKey) {
       const apiKey = config.webRiskApiKey
+      const paginas = urlsParaVerificar(context.site.url, config.additionalUrls).slice(0, WEB_RISK_MAX_URLS)
       providers.push({
         name: 'web-risk',
-        query: () =>
-          queryWebRisk(
-            urlsParaVerificar(context.site.url, config.additionalUrls),
-            apiKey,
-            context.fetch,
-            timeoutMs,
-          ),
+        query: () => queryWebRisk(paginas, apiKey, context.fetch, timeoutMs),
+        metric: { key: 'webRiskUrls', value: paginas.length },
       })
     }
 

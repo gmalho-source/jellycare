@@ -47,6 +47,12 @@ entra o que correu com sucesso no período — um visto numa verificação que n
 correu seria afirmar que olhámos. O juízo vem dos problemas em aberto no fim
 do período (`packages/reports/src/detalhe.ts`).
 
+A linha da reputação diz que fontes foram consultadas na última execução e
+quantas páginas — as listas da Google que o Chrome usa para o aviso de site
+perigoso (Web Risk) e o URLhaus. Só as que responderam: o check grava a fonte
+como consultada apenas quando ela devolveu resposta, para o relatório nunca
+afirmar que a Google viu o site num dia em que a consulta falhou.
+
 Sem nenhuma verificação de segurança no período, o semáforo fica cinzento, e
 não verde.
 
