@@ -31,6 +31,20 @@ Se o domínio ou qualquer URL do site
 aparece marcado, é incidente crítico imediato — perder o ranking no Google por
 "este site pode ser perigoso" custa mais ao cliente do que o próprio malware.
 
+**Onde aparece.** No cartão «Malware e reputação» da página do site, no painel
+e no portal (`components/malware-card.tsx`): escudo com semáforo, o estado, as
+páginas marcadas com a fonte que as marcou, e quando foi a última verificação
+e que fontes responderam. Uma marcação em aberto manda sobre tudo — o cartão
+fica vermelho mesmo que a última execução tenha falhado. «Limpo» só com uma
+execução que correu; uma execução falhada fica cinzenta, e não verde.
+
+Só a equipa vê os avisos da execução (uma fonte em baixo, uma página
+recusada) e o botão **Verificar agora**, que antecipa a verificação para a
+passagem seguinte do agendador, como o «Analisar agora» da velocidade. O
+cartão lê a última execução de reputação à parte das execuções recentes do
+painel: essas são as últimas 25 de todos os checks, e com a disponibilidade a
+correr de cinco em cinco minutos a diária da reputação nunca lá aparecia.
+
 ### 1.2 Deteção de conteúdo injetado — agentless
 Análise do HTML e dos scripts servidos, à procura de:
 - JavaScript ofuscado (`eval`, `atob`, `String.fromCharCode` encadeado,

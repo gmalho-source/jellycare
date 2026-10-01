@@ -299,9 +299,11 @@ describe('reconciliação', () => {
     const outcome = await correr()
 
     expect(outcome.metrics.reconciled).toBe(1)
-    const linhas = await registos()
-    expect(linhas[0]?.status).toBe('failed')
-    expect(linhas[0]?.settledAt).not.toBeNull()
+    // A segunda execução pode ordenar de novo, e sem ORDER BY a ordem das
+    // linhas é a física: procura-se a do processo, e não a primeira.
+    const reconciliada = (await registos()).find((linha) => linha.processId === 'proc-1')
+    expect(reconciliada?.status).toBe('failed')
+    expect(reconciliada?.settledAt).not.toBeNull()
   })
 
   it('não conclui nada quando a leitura dos processos falha', async () => {

@@ -1050,6 +1050,79 @@ describeE2E('fluxo de entrada e painel', () => {
     }
   }, 120_000)
 
+  it('mostra o malware e a reputação, e pede uma verificação fora de horas', async () => {
+    // Uma execução limpa com as duas fontes a responder, e um aviso de uma
+    // página que a Google não aceitou. O aviso é operação nossa: só a equipa.
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.insert(schema.checkRuns).values({
+          siteId: siteVerificado,
+          checkType: 'reputation',
+          status: 'ok',
+          region: 'eu-west',
+          startedAt: new Date(Date.now() - 2 * 3600_000),
+          durationMs: 900,
+          metrics: { webRiskUrls: 5, urlhausChecked: 1 },
+          warnings: ['Web Risk: uma página recusada (400)'],
+        })
+        await db
+          .insert(schema.checkConfigs)
+          .values({ siteId: siteVerificado, checkType: 'reputation', intervalMinutes: 60 * 24 })
+      } finally {
+        await close()
+      }
+    }
+
+    const equipa = await entrarComo(email)
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}`)
+    await equipa.waitForSelector('h1')
+
+    const cartao = equipa.locator('#malware')
+    expect(await cartao.locator('[data-malware]').getAttribute('data-malware')).toBe('verde')
+    const texto = await cartao.textContent()
+    expect(texto).toContain('Limpo')
+    expect(texto).toContain('Google, 5 páginas')
+    expect(texto).toContain('URLhaus')
+    expect(texto).toContain('Web Risk: uma página recusada (400)')
+
+    await cartao.locator('button:has-text("Verificar agora")').click()
+    await equipa.waitForSelector('text=Pedido registado')
+    await equipa.close()
+
+    // Como no «Analisar agora»: o botão antecipa a verificação, e é isso que
+    // se confirma na base de dados.
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+    try {
+      const [config] = await db
+        .select({ nextRunAt: schema.checkConfigs.nextRunAt })
+        .from(schema.checkConfigs)
+        .where(
+          and(
+            eq(schema.checkConfigs.siteId, siteVerificado),
+            eq(schema.checkConfigs.checkType, 'reputation'),
+          ),
+        )
+      expect(config?.nextRunAt).not.toBeNull()
+      expect(config!.nextRunAt!.getTime()).toBeLessThanOrEqual(Date.now())
+    } finally {
+      await close()
+    }
+
+    // O cliente vê o mesmo resultado, sem o botão (gasta quota nossa) e sem o
+    // aviso da execução.
+    const cliente = await entrarComo(emailCliente)
+    await cliente.waitForURL(`${baseUrl}/portal`)
+    await cliente.goto(`${baseUrl}/portal/sites/${siteVerificado}`)
+    await cliente.waitForSelector('h1')
+    const doCliente = cliente.locator('#malware')
+    expect(await doCliente.locator('[data-malware]').getAttribute('data-malware')).toBe('verde')
+    expect(await doCliente.textContent()).toContain('Google, 5 páginas')
+    expect(await doCliente.textContent()).not.toContain('recusada')
+    expect(await doCliente.locator('button').count()).toBe(0)
+    await cliente.close()
+  }, 120_000)
+
   it('silenciar deixa de ser uma porta sem volta', async () => {
     // Silenciar tirava o problema da lista e não havia ecrã nenhum onde o
     // voltar a encontrar: a única ação da aplicação que só se desfazia na

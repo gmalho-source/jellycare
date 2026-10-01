@@ -1353,3 +1353,59 @@ export async function archiveReportNoteAction(formData: FormData): Promise<void>
 
   revalidatePath(`/sites/${nota.siteId}/relatorios`)
 }
+
+export interface ReputationRequestState {
+  message?: string
+  error?: string
+}
+
+/**
+ * Pede uma verificação de reputação já, sem esperar pela passagem diária.
+ *
+ * O mesmo mecanismo do «Analisar agora» da velocidade: antecipa o
+ * `nextRunAt` e o agendador apanha-a na passagem seguinte, de trinta em
+ * trinta segundos. Carregar duas vezes não faz duas consultas — o `nextRunAt`
+ * é empurrado para a frente quando o job entra na fila.
+ *
+ * Só para quem gere: cada verificação consulta a Google por cada página, e a
+ * quota é da plataforma.
+ */
+export async function requestReputationAction(
+  _previous: ReputationRequestState,
+  formData: FormData,
+): Promise<ReputationRequestState> {
+  const user = await requireUser()
+
+  const parsed = pageSpeedRequestSchema.safeParse({ siteId: formData.get('siteId') })
+  if (!parsed.success) return { error: 'Site inválido.' }
+
+  const header = await getSiteHeader(parsed.data.siteId)
+  if (!header) return { error: 'Site não encontrado.' }
+
+  assertMembership(user, header.site.organizationId)
+  if (!canManage(user, header.site.organizationId)) {
+    return { error: 'Não tem permissão para pedir esta verificação.' }
+  }
+  if (!header.verified) {
+    return { error: 'A verificação só corre depois de provada a propriedade do domínio.' }
+  }
+
+  const atualizadas = await getDb()
+    .update(schema.checkConfigs)
+    .set({ nextRunAt: new Date() })
+    .where(
+      and(
+        eq(schema.checkConfigs.siteId, parsed.data.siteId),
+        eq(schema.checkConfigs.checkType, 'reputation'),
+        eq(schema.checkConfigs.enabled, true),
+      ),
+    )
+    .returning({ id: schema.checkConfigs.id })
+
+  if (atualizadas.length === 0) {
+    return { error: 'A verificação de reputação está desligada neste site.' }
+  }
+
+  revalidatePath(`/sites/${parsed.data.siteId}`)
+  return { message: 'Pedido registado — corre na próxima passagem, em menos de um minuto.' }
+}

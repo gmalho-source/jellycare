@@ -9,10 +9,12 @@ import {
   formatUptime,
 } from '@/components/ui'
 import { EstadoDoSite } from '@/components/estado-do-site'
+import { MalwareCard } from '@/components/malware-card'
 import { SiteDashboard } from '@/components/site-dashboard'
 import { checkMeta } from '@/lib/checks'
 import { getSiteDashboard } from '@/lib/dashboard'
 import { lerDesempenho, lerSeguranca } from '@/lib/estado-do-site'
+import { lerCartaoMalware, lerMalware } from '@/lib/malware'
 import { getPageSpeedHistory, getSiteDetail, getUptime } from '@/lib/queries'
 import { assertMembership, requireUser } from '@/lib/session'
 
@@ -41,9 +43,10 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
   // Só depois de verificado, tal como no painel interno: antes disso não há
   // verificações de segurança nem inventário, e um painel a zeros diria menos
   // do que a frase que fica no lugar.
-  const [dashboard, velocidade] = await Promise.all([
+  const [dashboard, velocidade, malware] = await Promise.all([
     detail.verified ? getSiteDashboard(id) : null,
     getPageSpeedHistory(id, 'page_speed'),
+    lerMalware(id),
   ])
   // Sem painel, ainda assim há disponibilidade para mostrar — é o que
   // monitorizamos desde o primeiro dia.
@@ -60,6 +63,10 @@ export default async function PortalSitePage({ params }: { params: Promise<{ id:
         hrefSeguranca="#problemas"
         hrefDesempenho={`/portal/sites/${id}/desempenho`}
       />
+
+      {/* Sem botão nem avisos da execução: verificar já gasta quota da
+          plataforma, e uma fonte em baixo é matéria nossa, não do site dele. */}
+      <MalwareCard cartao={lerCartaoMalware(malware, detail.verified)} />
 
       {dashboard ? <SiteDashboard data={dashboard} audiencia="cliente" /> : null}
 
