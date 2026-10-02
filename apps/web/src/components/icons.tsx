@@ -121,6 +121,19 @@ const TRACOS: Record<string, React.ReactNode> = {
       <rect x="8.75" y="8.75" width="4.5" height="4.5" rx="1" />
     </>
   ),
+  organizacoes: (
+    <>
+      <path d="M3 13.5V4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v9.5" />
+      <path d="M10 7h2a1 1 0 0 1 1 1v5.5M2 13.5h12M5.5 5.5h2M5.5 8h2M5.5 10.5h2" />
+    </>
+  ),
+  equipa: (
+    <>
+      <circle cx="6" cy="5.5" r="2.25" />
+      <path d="M2 13c.4-2.2 2-3.5 4-3.5s3.6 1.3 4 3.5" />
+      <path d="M10.5 3.6a2.25 2.25 0 0 1 0 3.8M12 9.9c1 .5 1.7 1.6 2 3.1" />
+    </>
+  ),
   pesquisa: (
     <>
       <circle cx="7" cy="7" r="4" />

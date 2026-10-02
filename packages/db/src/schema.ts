@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -102,6 +103,12 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
   name: text('name'),
+  /**
+   * Da equipa da Jelly: administrador em todas as organizações, as de hoje e
+   * as que vierem, sem ter de ser acrescentado a cada uma. Gerido na página
+   * Equipa. Tirar daqui tira o acesso a tudo de uma vez.
+   */
+  isStaff: boolean('is_staff').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -1069,3 +1076,39 @@ export const siteScreenshots = pgTable('site_screenshots', {
   image: bytea('image').notNull(),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
 })
+
+/**
+ * As pessoas de contacto de uma organização cliente.
+ *
+ * Não são utilizadores: um contacto não entra no painel nem no portal só por
+ * estar aqui. É a ficha de quem é quem no cliente — o diretor de marketing,
+ * a pessoa de TI, a contabilidade — e quem recebe o relatório mensal.
+ *
+ * Quem tem `receivesReports` recebe o relatório de todos os sites da
+ * organização, junto dos destinatários próprios de cada site. Exige email:
+ * a base de dados recusa um contacto marcado para relatórios sem ele.
+ */
+export const organizationContacts = pgTable(
+  'organization_contacts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** A função no cliente: «Diretora de marketing», «TI». */
+    jobTitle: text('job_title'),
+    phone: text('phone'),
+    email: text('email'),
+    receivesReports: boolean('receives_reports').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('organization_contacts_org_idx').on(table.organizationId),
+    check(
+      'organization_contacts_reports_need_email',
+      sql`not ${table.receivesReports} or ${table.email} is not null`,
+    ),
+  ],
+)

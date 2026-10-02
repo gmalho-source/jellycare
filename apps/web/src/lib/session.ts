@@ -53,6 +53,18 @@ export async function requireUser(): Promise<AuthenticatedUser> {
 }
 
 /**
+ * Só a Equipa Jelly: as páginas Equipa e Organizações.
+ *
+ * Quem não é da equipa vai para o início, como num site que não é seu, em vez
+ * de ver um erro a dizer que a página existe.
+ */
+export async function requireStaff(): Promise<AuthenticatedUser> {
+  const user = await requireUser()
+  if (!user.isStaff) redirect('/')
+  return user
+}
+
+/**
  * Confirma que o utilizador pertence à organização.
  *
  * Todas as leituras de dados de um site passam por aqui. Um identificador de

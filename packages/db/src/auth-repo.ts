@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { and, eq, gt } from 'drizzle-orm'
 import type { Database } from './client.js'
-import { loginTokens, memberships, sessions, users } from './schema.js'
+import { loginTokens, memberships, organizations, sessions, users } from './schema.js'
 
 /**
  * Autenticação sem palavras-passe.
@@ -34,6 +34,8 @@ export interface AuthenticatedUser {
   id: string
   email: string
   name: string | null
+  /** Da Equipa Jelly: administrador em todas as organizações. */
+  isStaff: boolean
   memberships: { organizationId: string; role: string }[]
 }
 
@@ -124,6 +126,7 @@ async function loadUser(db: Database, userId: string): Promise<AuthenticatedUser
       id: users.id,
       email: users.email,
       name: users.name,
+      isStaff: users.isStaff,
       organizationId: memberships.organizationId,
       role: memberships.role,
     })
@@ -134,14 +137,35 @@ async function loadUser(db: Database, userId: string): Promise<AuthenticatedUser
   const first = rows[0]
   if (!first) return null
 
+  const proprias = rows
+    .filter((row) => row.organizationId !== null)
+    .map((row) => ({ organizationId: row.organizationId as string, role: row.role as string }))
+
   return {
     id: first.id,
     email: first.email,
     name: first.name,
-    memberships: rows
-      .filter((row) => row.organizationId !== null)
-      .map((row) => ({ organizationId: row.organizationId as string, role: row.role as string })),
+    isStaff: first.isStaff,
+    memberships: first.isStaff ? await comoEquipa(db, proprias) : proprias,
   }
+}
+
+/**
+ * As pertenças de alguém da Equipa Jelly: administrador em todas as
+ * organizações.
+ *
+ * Calculadas em cada sessão e não gravadas: uma organização criada amanhã
+ * entra logo, e tirar alguém da equipa tira-lhe tudo sem deixar pertenças
+ * esquecidas para trás. Um papel de dono que a pessoa já tenha mantém-se;
+ * qualquer outro sobe a administrador.
+ */
+async function comoEquipa(
+  db: Database,
+  proprias: { organizationId: string; role: string }[],
+): Promise<{ organizationId: string; role: string }[]> {
+  const todas = await db.select({ id: organizations.id }).from(organizations)
+  const donos = new Set(proprias.filter((m) => m.role === 'owner').map((m) => m.organizationId))
+  return todas.map((org) => ({ organizationId: org.id, role: donos.has(org.id) ? 'owner' : 'admin' }))
 }
 
 /** Resolve a sessão de um pedido. `null` quando expirada ou inexistente. */

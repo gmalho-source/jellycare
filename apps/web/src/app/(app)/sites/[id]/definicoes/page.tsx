@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import {
   listMembers,
+  listarOrganizacoes,
   organizationObjections,
   pruneEndedWindows,
   windowState,
@@ -11,6 +12,8 @@ import { getLegalState } from '@/lib/legal'
 import { getSiteDetail } from '@/lib/queries'
 import { listUmbrellaProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
+import Link from 'next/link'
+import { MoverSite } from '../../../organizacoes/formularios'
 import { AccessPanel } from '../access-panel'
 import { DangerPanel } from '../danger-panel'
 import { LegalPanel } from '../legal-panel'
@@ -38,6 +41,8 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
   const members = await listMembers(getDb(), detail.site.organizationId)
   const legal = await getLegalState(detail.site.organizationId)
   const objecoes = await organizationObjections(getDb(), detail.site.organizationId)
+  const organizacoes = await listarOrganizacoes(getDb(), user.memberships.map((m) => m.organizationId))
+  const daOrganizacao = organizacoes.find((organizacao) => organizacao.id === detail.site.organizationId)
 
   return (
     <>
@@ -86,6 +91,29 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
           />
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader
+          title="Cliente"
+          action={
+            <Link
+              href={`/organizacoes/${detail.site.organizationId}`}
+              className="text-xs font-semibold text-ink-600 hover:text-ink-900"
+            >
+              Contactos e acessos de {daOrganizacao?.name ?? 'a organização'} →
+            </Link>
+          }
+        />
+        {user.isStaff ? (
+          <MoverSite
+            siteId={detail.site.id}
+            atual={detail.site.organizationId}
+            organizacoes={organizacoes.map((organizacao) => ({ id: organizacao.id, name: organizacao.name }))}
+          />
+        ) : (
+          <p className="px-5 py-4 text-sm text-ink-600">{daOrganizacao?.name}</p>
+        )}
+      </Card>
 
       {manageable ? (
         <Card>

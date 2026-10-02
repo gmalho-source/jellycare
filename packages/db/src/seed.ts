@@ -82,6 +82,10 @@ export async function seed(options: SeedOptions): Promise<{ userId: string; site
       .values({ organizationId, userId, role: 'owner' })
       .onConflictDoNothing()
 
+    // Quem monta a plataforma é da Equipa Jelly: é por aí que se chega à
+    // página Equipa para acrescentar os outros.
+    await db.update(users).set({ isStaff: true }).where(eq(users.id, userId))
+
     const siteUrl = options.siteUrl ?? 'https://jelly.pt'
     const hostname = new URL(siteUrl).hostname
 

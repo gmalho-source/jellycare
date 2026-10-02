@@ -1,4 +1,4 @@
-import { schema } from '@jellycare/db'
+import { destinatariosDoRelatorio, schema } from '@jellycare/db'
 import { and, desc, eq } from 'drizzle-orm'
 import type { EmailMontado } from './aviso-email'
 import { getDb } from './db'
@@ -56,12 +56,10 @@ export async function sugestoesDeDestinatarios(
   organizationId: string,
 ): Promise<SugestaoDeDestinatario[]> {
   const db = getDb()
-  const [site, contas] = await Promise.all([
-    db
-      .select({ recipients: schema.sites.reportRecipients })
-      .from(schema.sites)
-      .where(eq(schema.sites.id, siteId))
-      .limit(1),
+  const [doRelatorio, contas] = await Promise.all([
+    // Os do site e os contactos da organização marcados para relatórios: é a
+    // mesma lista para onde o relatório mensal vai.
+    destinatariosDoRelatorio(db, siteId),
     db
       .select({ email: schema.users.email })
       .from(schema.memberships)
@@ -82,7 +80,7 @@ export async function sugestoesDeDestinatarios(
     atual[origem] = true
     porEmail.set(chave, atual)
   }
-  for (const email of site[0]?.recipients ?? []) juntar(email, 'relatorios')
+  for (const email of doRelatorio) juntar(email, 'relatorios')
   for (const conta of contas) juntar(conta.email, 'acesso')
 
   return [...porEmail.values()].sort((a, b) => a.email.localeCompare(b.email))

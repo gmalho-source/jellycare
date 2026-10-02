@@ -244,3 +244,32 @@ trinta segundos. É esperado.
 **Cuidado com os findings dessa rajada.** Um check que corre pela primeira vez
 em muitas horas pode reportar algo que já lá estava na véspera. Verificar antes
 de alarmar o cliente.
+
+## Acessos: Equipa Jelly, organizações e contactos
+
+**Cada cliente é uma organização.** O papel de cliente vale para a
+organização inteira: quem tem acesso de cliente vê no portal todos os sites
+dela. Dois clientes na mesma organização veem os sites um do outro, por isso
+cada um tem a sua. Criam-se em **Organizações** e um site muda de organização
+nas definições dele («Cliente → Mudar de organização»).
+
+**Equipa Jelly.** Quem está na equipa (`users.is_staff`) é administrador em
+todas as organizações, as de hoje e as que forem criadas depois, sem ter de
+ser acrescentado a cada uma. As pertenças são calculadas em cada sessão
+(`comoEquipa` em `packages/db/src/auth-repo.ts`) e não gravadas: tirar alguém
+da equipa tira-lhe tudo de uma vez, e só fica o que a pessoa tenha por si numa
+organização concreta. Gere-se na página **Equipa Jelly**, só visível à
+equipa. A equipa nunca fica vazia, e ninguém se tira a si próprio.
+
+Na migração 0018 entraram na equipa os donos que já existiam. O painel não
+concede o papel de dono, por isso eram os utilizadores criados pela semente
+(`seed.ts`), que continua a pôr na equipa quem monta a plataforma.
+
+**Contactos.** Cada organização tem a ficha de quem é quem no cliente: nome,
+função, telefone, email e se recebe o relatório mensal. Não são acessos: um
+contacto não entra no portal por estar ali; o acesso dá-se em «Quem tem
+acesso», na mesma página. Quem está marcado para relatórios recebe o
+relatório de todos os sites da organização, junto dos destinatários próprios
+de cada site, sem repetidos (`destinatariosDoRelatorio`). A base de dados
+recusa um contacto marcado para relatórios sem email. Um envio pedido no
+painel para um endereço escolhido vai só para esse.

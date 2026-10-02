@@ -127,6 +127,13 @@
       "when": 1790889292344,
       "tag": "0017_needy_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790929966886,
+      "tag": "0018_curvy_jack_power",
+      "breakpoints": true
     }
   ]
 }

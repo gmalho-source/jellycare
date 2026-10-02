@@ -1,6 +1,7 @@
 import {
   claimNextReportRequest,
   completeReportRequest,
+  destinatariosDoRelatorio,
   schema,
   type Database,
 } from '@jellycare/db'
@@ -450,7 +451,10 @@ export async function generateReport(
 
   const incluido = { notes: notas.map((nota) => nota.id), sections: data.sections }
 
-  const recipients = (recipientsOverride ?? site.reportRecipients).filter((value) =>
+  // Os destinatários do site e os contactos da organização marcados para
+  // receber relatórios. Um envio pedido para um endereço escolhido vai só
+  // para esse.
+  const recipients = (recipientsOverride ?? (await destinatariosDoRelatorio(db, site.id))).filter((value) =>
     value.includes('@'),
   )
   if (recipients.length === 0 || !deps.sendReport) {

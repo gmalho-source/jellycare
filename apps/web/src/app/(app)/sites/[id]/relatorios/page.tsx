@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { latestReportRequest } from '@jellycare/db'
+import { destinatariosDoRelatorio, latestReportRequest } from '@jellycare/db'
 import { REPORT_SECTIONS, monthToDate, previousMonth } from '@jellycare/reports/data'
 import { Card, CardHeader, EmptyState, formatRelative, nomeDoMes } from '@/components/ui'
 import { getDb } from '@/lib/db'
@@ -25,9 +25,11 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
   const mesAnterior = previousMonth(agora, 'Europe/Lisbon')
   const mesEmCurso = monthToDate(agora, 'Europe/Lisbon')
 
-  const [lastRequest, notas] = await Promise.all([
+  const [lastRequest, notas, destinatarios] = await Promise.all([
     latestReportRequest(getDb(), detail.site.id),
     manageable ? lerNotasDoRelatorio(detail.site.id) : null,
+    // Os do site e os contactos da organização que recebem relatórios.
+    destinatariosDoRelatorio(getDb(), detail.site.id),
   ])
 
   return (
@@ -85,7 +87,7 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
         {manageable ? (
           <ReportPanel
             siteId={detail.site.id}
-            configuredRecipients={detail.site.reportRecipients}
+            configuredRecipients={destinatarios}
             lastRequest={lastRequest}
             mesAnterior={mesAnterior.label}
             mesEmCurso={mesEmCurso.label}

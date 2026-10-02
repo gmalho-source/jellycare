@@ -45,7 +45,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         exato: true,
         contagem: sites.filter((site) => site.worstSeverity !== null).length,
       }}
-      globais={[{ href: '/sites/new', label: 'Adicionar site', icone: 'mais', exato: true }]}
+      globais={[
+        { href: '/sites/new', label: 'Adicionar site', icone: 'mais', exato: true },
+        // Só a Equipa Jelly gere clientes e a própria equipa.
+        ...(user.isStaff
+          ? [
+              { href: '/organizacoes', label: 'Organizações', icone: 'organizacoes', exato: false },
+              { href: '/equipa', label: 'Equipa Jelly', icone: 'equipa', exato: true },
+            ]
+          : []),
+      ]}
       grupo="Os seus sites"
       sites={naBarra}
       sair={signOut}

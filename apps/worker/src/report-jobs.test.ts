@@ -151,6 +151,21 @@ describe('generateReport', () => {
     expect(report?.sentTo).toEqual(['cliente@exemplo.pt'])
   }, 120_000)
 
+  it('envia também aos contactos da organização marcados para receber relatórios', async () => {
+    await seedUptime()
+    await db.insert(schema.organizationContacts).values([
+      { organizationId, name: 'Ana', jobTitle: 'Marketing', email: 'ana@exemplo.pt', receivesReports: true },
+      { organizationId, name: 'Contas', email: 'contas@exemplo.pt', receivesReports: false },
+    ])
+
+    await generateReport(deps(), siteId, PERIOD)
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.to).toEqual(['cliente@exemplo.pt', 'ana@exemplo.pt'])
+    const [report] = await storedReports()
+    expect(report?.sentTo).toEqual(['cliente@exemplo.pt', 'ana@exemplo.pt'])
+  }, 120_000)
+
   it('não gera duas vezes o mesmo período', async () => {
     await seedUptime()
 

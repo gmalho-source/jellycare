@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createServer as createHttpServer, type Server } from 'node:http'
 import { explicacaoDe } from '@jellycare/core'
-import { createDatabase, schema } from '@jellycare/db'
+import { createDatabase, destinatariosDoRelatorio, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Browser } from 'playwright'
@@ -181,6 +181,18 @@ describeE2E('fluxo de entrada e painel', () => {
       siteUrl: `https://e2e-${Date.now()}.exemplo.pt`,
     })
     siteId = seeded.siteId
+
+    // A semente põe quem monta a plataforma na Equipa Jelly, com acesso a
+    // todas as organizações. Aqui o utilizador da equipa é só membro da sua:
+    // é o que os testes abaixo esperam, e a Equipa tem o seu teste próprio.
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.update(schema.users).set({ isStaff: false }).where(eq(schema.users.email, email))
+      } finally {
+        await close()
+      }
+    }
 
     // Histórico mínimo no site do teste. Sem isto, a lista de sites nunca
     // exercita as agregações de última execução e de disponibilidade — e foi
@@ -1200,6 +1212,123 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(semSessao.status()).toBe(401)
     await anonimo.close()
   }, 120_000)
+
+  it('a Equipa Jelly cria clientes, regista contactos, muda sites e gere a própria equipa', async () => {
+    const marca = Date.now()
+    const daEquipa = `equipa-${marca}@jelly.pt`
+    const novo = `dsi-${marca}@jelly.pt`
+    let siteParaMudar: string
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.insert(schema.users).values({ email: daEquipa, isStaff: true })
+        const [origem] = await db
+          .select({ organizationId: schema.sites.organizationId })
+          .from(schema.sites)
+          .where(eq(schema.sites.id, siteId))
+        const [criado] = await db
+          .insert(schema.sites)
+          .values({
+            organizationId: origem!.organizationId,
+            label: `Site a mudar ${marca}`,
+            url: `https://mudar-${marca}.exemplo.pt`,
+            hostname: `mudar-${marca}.exemplo.pt`,
+            state: 'active',
+          })
+          .returning({ id: schema.sites.id })
+        siteParaMudar = criado!.id
+      } finally {
+        await close()
+      }
+    }
+
+    // Quem não é da equipa não vê as páginas nem as ligações para elas.
+    const membro = await entrarComo(email)
+    expect(await membro.isVisible('nav a[href="/equipa"]')).toBe(false)
+    await membro.goto(`${baseUrl}/equipa`)
+    await membro.waitForURL(`${baseUrl}/`)
+    await membro.goto(`${baseUrl}/organizacoes`)
+    await membro.waitForURL(`${baseUrl}/`)
+    await membro.close()
+
+    const equipa = await entrarComo(daEquipa)
+    await equipa.waitForSelector('nav a[href="/organizacoes"]')
+
+    // Um cliente novo.
+    await equipa.goto(`${baseUrl}/organizacoes`)
+    await equipa.fill('input[name="name"]', `Clínica E2E ${marca}`)
+    await equipa.click('button:has-text("Criar organização")')
+    await equipa.waitForURL(/\/organizacoes\/[0-9a-f-]{36}$/)
+    const organizacaoId = equipa.url().split('/').pop()!
+    expect(await equipa.isVisible(`h1:has-text("Clínica E2E ${marca}")`)).toBe(true)
+
+    // Um contacto marcado para relatórios sem email é recusado com a razão.
+    const novoContacto = equipa.locator('[data-contacto="novo"]')
+    await novoContacto.locator('input[name="name"]').fill('Sem Email')
+    await novoContacto.locator('input[name="receivesReports"]').check()
+    await novoContacto.locator('button[type="submit"]').click()
+    await equipa.waitForSelector('text=precisa de email')
+
+    // E um contacto completo.
+    await novoContacto.locator('input[name="name"]').fill('Ana Silva')
+    await novoContacto.locator('input[name="jobTitle"]').fill('Diretora de marketing')
+    await novoContacto.locator('input[name="phone"]').fill('+351 912 345 678')
+    await novoContacto.locator('input[name="email"]').fill('ana@clinica-e2e.pt')
+    await novoContacto.locator('button[type="submit"]').click()
+    const linha = equipa.locator('[data-contacto-linha="ana@clinica-e2e.pt"]')
+    await linha.waitFor()
+    const textoDaLinha = await linha.textContent()
+    expect(textoDaLinha).toContain('Diretora de marketing')
+    expect(textoDaLinha).toContain('+351 912 345 678')
+    expect(await linha.locator('span', { hasText: /^Recebe o relatório mensal$/ }).count()).toBe(1)
+
+    // Mudar um site para o cliente novo, pelas definições do site.
+    await equipa.goto(`${baseUrl}/sites/${siteParaMudar}/definicoes`)
+    await equipa.selectOption('select[name="organizationId"]', organizacaoId)
+    await equipa.click('button:has-text("Mudar de organização")')
+    await equipa.waitForSelector(`text=O site passou para Clínica E2E ${marca}`)
+
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        const [mudado] = await db
+          .select({ organizationId: schema.sites.organizationId })
+          .from(schema.sites)
+          .where(eq(schema.sites.id, siteParaMudar))
+        expect(mudado?.organizationId).toBe(organizacaoId)
+        // O contacto marcado passa a receber o relatório deste site.
+        const destinatarios = await destinatariosDoRelatorio(db, siteParaMudar)
+        expect(destinatarios).toEqual(['ana@clinica-e2e.pt'])
+      } finally {
+        await close()
+      }
+    }
+
+    // Acrescentar alguém à equipa dá-lhe acesso a clientes onde nunca foi
+    // posto, incluindo o de outra organização.
+    await equipa.goto(`${baseUrl}/equipa`)
+    await equipa.fill('input[name="email"]', novo)
+    await equipa.click('button:has-text("Acrescentar à equipa")')
+    await equipa.waitForSelector(`text=${novo} entrou na Equipa Jelly`)
+
+    const dsi = await entrarComo(novo)
+    await dsi.goto(`${baseUrl}/sites/${siteDeOutroCliente}`)
+    await dsi.waitForSelector('h1')
+    expect(dsi.url()).toContain(siteDeOutroCliente)
+    expect(await dsi.isVisible('text=Site de outro cliente')).toBe(true)
+    await dsi.close()
+
+    // E retirá-lo tira-lhe esse acesso.
+    equipa.once('dialog', (dialogo) => dialogo.accept())
+    await equipa.locator('[data-equipa] li', { hasText: novo }).locator('button:has-text("Retirar")').click()
+    await equipa.waitForSelector(`[data-equipa] li:has-text("${novo}")`, { state: 'detached' })
+    await equipa.close()
+
+    const fora = await entrarComo(novo)
+    await fora.goto(`${baseUrl}/sites/${siteDeOutroCliente}`)
+    expect(fora.url()).not.toContain(siteDeOutroCliente)
+    await fora.close()
+  }, 180_000)
 
   it('silenciar deixa de ser uma porta sem volta', async () => {
     // Silenciar tirava o problema da lista e não havia ecrã nenhum onde o

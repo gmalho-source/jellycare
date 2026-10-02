@@ -6,7 +6,7 @@ const ORG = '11111111-1111-1111-1111-111111111111'
 const OUTRA = '22222222-2222-2222-2222-222222222222'
 
 function utilizador(...memberships: { organizationId: string; role: string }[]): AuthenticatedUser {
-  return { id: 'u1', email: 'p@exemplo.pt', name: null, memberships }
+  return { id: 'u1', email: 'p@exemplo.pt', name: null, isStaff: false, memberships }
 }
 
 describe('isClientOnly', () => {
