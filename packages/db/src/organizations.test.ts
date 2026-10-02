@@ -9,6 +9,7 @@ import {
   alterarContacto,
   apagarContacto,
   criarOrganizacao,
+  definirAcessoDoContacto,
   destinatariosDoRelatorio,
   listarContactos,
   listarEquipa,
@@ -208,5 +209,44 @@ describe('contactos', () => {
     await acrescentarContacto(db, outra.id, { name: 'Alheio', email: 'alheio@outro.pt', receivesReports: true })
     expect(await destinatariosDoRelatorio(db, siteId)).toEqual([])
     expect(await db.select().from(organizationContacts).where(eq(organizationContacts.organizationId, org.id))).toEqual([])
+  })
+})
+
+describe('acesso ao portal a partir do contacto', () => {
+  it('dá acesso de cliente, e a ficha passa a mostrá-lo', async () => {
+    const org = await organizacao()
+    const email = novoEmail()
+    await acrescentarContacto(db, org.id, { name: 'Ana', email, receivesReports: false })
+
+    expect(await definirAcessoDoContacto(db, org.id, email, true)).toBe('concedido')
+    expect(await definirAcessoDoContacto(db, org.id, email, true)).toBe('sem_mudanca')
+    expect((await listarContactos(db, org.id))[0]?.acesso).toBe('cliente')
+
+    const user = await entrar(email)
+    expect(user.memberships).toEqual([{ organizationId: org.id, role: 'client' }])
+  })
+
+  it('nunca despromove a cliente quem já é da equipa nessa organização', async () => {
+    const org = await organizacao()
+    const email = novoEmail()
+    await grantAccess(db, { organizationId: org.id, email, role: 'member' })
+    await acrescentarContacto(db, org.id, { name: 'Da equipa', email, receivesReports: false })
+
+    expect(await definirAcessoDoContacto(db, org.id, email, true)).toBe('sem_mudanca')
+    expect((await listarContactos(db, org.id))[0]?.acesso).toBe('equipa')
+    // E desmarcar também não lhe tira o acesso de equipa.
+    expect(await definirAcessoDoContacto(db, org.id, email, false)).toBe('sem_mudanca')
+    expect((await entrar(email)).memberships).toEqual([{ organizationId: org.id, role: 'member' }])
+  })
+
+  it('tira o acesso de cliente, e só nesta organização', async () => {
+    const org = await organizacao()
+    const outra = await organizacao()
+    const email = novoEmail()
+    await definirAcessoDoContacto(db, org.id, email, true)
+    await definirAcessoDoContacto(db, outra.id, email, true)
+
+    expect(await definirAcessoDoContacto(db, org.id, email, false)).toBe('retirado')
+    expect((await entrar(email)).memberships).toEqual([{ organizationId: outra.id, role: 'client' }])
   })
 })

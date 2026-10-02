@@ -266,9 +266,12 @@ concede o papel de dono, por isso eram os utilizadores criados pela semente
 (`seed.ts`), que continua a pôr na equipa quem monta a plataforma.
 
 **Contactos.** Cada organização tem a ficha de quem é quem no cliente: nome,
-função, telefone, email e se recebe o relatório mensal. Não são acessos: um
-contacto não entra no portal por estar ali; o acesso dá-se em «Quem tem
-acesso», na mesma página. Quem está marcado para relatórios recebe o
+função, telefone, email, se recebe o relatório mensal e se tem acesso ao
+portal. A caixa do portal cria ou retira a mesma pertença de cliente que se dá
+em «Quem tem acesso» (`definirAcessoDoContacto`), e manda o aviso por email
+quando o acesso é novo. Nunca mexe em acesso de equipa: quem já é da equipa
+nessa organização não é despromovido a cliente, nem perde o acesso ao
+desmarcar. Quem está marcado para relatórios recebe o
 relatório de todos os sites da organização, junto dos destinatários próprios
 de cada site, sem repetidos (`destinatariosDoRelatorio`). A base de dados
 recusa um contacto marcado para relatórios sem email. Um envio pedido no

@@ -71,9 +71,12 @@ export function RenomearOrganizacao({ organizationId, nome }: { organizationId: 
 export function FormularioContacto({
   organizationId,
   contacto,
+  sites,
 }: {
   organizationId: string
   contacto?: ContactoDaOrganizacao
+  /** Quantos sites a organização tem: é isso que o cliente passa a ver no portal. */
+  sites: number
 }) {
   const [estado, acao, aEnviar] = useActionState<EstadoDoFormulario, FormData>(guardarContactoAction, {})
   const prefixo = contacto ? `contacto-${contacto.id}` : 'contacto-novo'
@@ -144,6 +147,28 @@ export function FormularioContacto({
         />
         Recebe o relatório mensal de todos os sites desta organização
       </label>
+
+      {contacto?.acesso === 'equipa' ? (
+        <p className="text-sm text-ink-600 sm:col-span-2">
+          Já tem acesso de equipa a esta organização; isso gere-se em «Quem tem acesso».
+        </p>
+      ) : (
+        <label className="flex items-start gap-2 text-sm text-ink-900 sm:col-span-2">
+          <input
+            type="checkbox"
+            name="portalAccess"
+            defaultChecked={contacto?.acesso === 'cliente'}
+            className="mt-0.5 h-4 w-4 rounded border-ink-200 accent-ink-900"
+          />
+          <span>
+            Acesso ao portal do cliente
+            <span className="block text-xs text-ink-400">
+              Entra com este email, sem palavra-passe, e vê {sites === 1 ? 'o site' : `os ${sites} sites`} desta
+              organização. Recebe um aviso por email.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <button type="submit" disabled={aEnviar} className={contacto ? botaoSecundario : botaoPrincipal}>

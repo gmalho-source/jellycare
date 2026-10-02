@@ -7,6 +7,7 @@ import {
   alterarContacto,
   apagarContacto,
   criarOrganizacao,
+  definirAcessoDoContacto,
   moverSite,
   renomearOrganizacao,
   retirarDaEquipa,
@@ -127,9 +128,13 @@ const contactoSchema = z
       .transform((valor) => (valor ? valor : null))
       .refine((valor) => valor === null || z.string().email().safeParse(valor).success, 'Indique um email válido.'),
     receivesReports: z.boolean(),
+    portalAccess: z.boolean(),
   })
   .refine((dados) => !dados.receivesReports || dados.email !== null, {
     message: 'Para receber o relatório mensal, o contacto precisa de email.',
+  })
+  .refine((dados) => !dados.portalAccess || dados.email !== null, {
+    message: 'Para ter acesso ao portal, o contacto precisa de email: é com ele que entra.',
   })
 
 const textoDe = (formData: FormData, campo: string) => {
@@ -156,6 +161,7 @@ export async function guardarContactoAction(
     phone: textoDe(formData, 'phone'),
     email: textoDe(formData, 'email'),
     receivesReports: formData.get('receivesReports') === 'on',
+    portalAccess: formData.get('portalAccess') === 'on',
   })
   if (!dados.success) return { error: primeiroErro(dados) }
 
@@ -164,13 +170,29 @@ export async function guardarContactoAction(
     return { error: 'Não tem permissão para gerir os contactos desta organização.' }
   }
 
-  const { organizationId, contactoId, ...contacto } = dados.data
+  const { organizationId, contactoId, portalAccess, ...contacto } = dados.data
   const db = getDb()
   if (contactoId) await alterarContacto(db, organizationId, contactoId, contacto)
   else await acrescentarContacto(db, organizationId, contacto)
 
+  // O acesso ao portal é uma pertença de cliente, a mesma que se dá em «Quem
+  // tem acesso». A caixa só a cria ou retira; nunca mexe em acesso de equipa.
+  const acesso = contacto.email
+    ? await definirAcessoDoContacto(db, organizationId, contacto.email, portalAccess)
+    : 'sem_mudanca'
+  if (acesso === 'concedido') await sendAccessEmail(contacto.email!, 'client')
+
   revalidatePath(`/organizacoes/${organizationId}`)
-  return { message: contactoId ? 'Contacto guardado.' : `${contacto.name} acrescentado aos contactos.` }
+  revalidatePath('/sites', 'layout')
+  const guardado = contactoId ? 'Contacto guardado.' : `${contacto.name} acrescentado aos contactos.`
+  return {
+    message:
+      acesso === 'concedido'
+        ? `${guardado} Passou a ter acesso ao portal e foi avisado por email.`
+        : acesso === 'retirado'
+          ? `${guardado} Deixou de ter acesso ao portal.`
+          : guardado,
+  }
 }
 
 export async function apagarContactoAction(formData: FormData): Promise<void> {

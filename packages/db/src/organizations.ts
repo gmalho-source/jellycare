@@ -155,6 +155,11 @@ export interface ContactoDaOrganizacao {
   phone: string | null
   email: string | null
   receivesReports: boolean
+  /**
+   * Se o email do contacto tem acesso a esta organização: `cliente` no
+   * portal, `equipa` no painel interno, ou nenhum.
+   */
+  acesso: 'cliente' | 'equipa' | null
 }
 
 export interface DadosDoContacto {
@@ -181,7 +186,7 @@ function normalizarContacto(dados: DadosDoContacto) {
 }
 
 export async function listarContactos(db: Database, organizationId: string): Promise<ContactoDaOrganizacao[]> {
-  return db
+  const linhas = await db
     .select({
       id: organizationContacts.id,
       name: organizationContacts.name,
@@ -189,10 +194,61 @@ export async function listarContactos(db: Database, organizationId: string): Pro
       phone: organizationContacts.phone,
       email: organizationContacts.email,
       receivesReports: organizationContacts.receivesReports,
+      papel: memberships.role,
     })
     .from(organizationContacts)
+    .leftJoin(users, eq(users.email, organizationContacts.email))
+    .leftJoin(
+      memberships,
+      and(eq(memberships.userId, users.id), eq(memberships.organizationId, organizationContacts.organizationId)),
+    )
     .where(eq(organizationContacts.organizationId, organizationId))
     .orderBy(asc(organizationContacts.name))
+
+  return linhas.map(({ papel, ...contacto }) => ({
+    ...contacto,
+    acesso: papel === null ? null : papel === 'client' ? 'cliente' : 'equipa',
+  }))
+}
+
+/**
+ * Dá ou tira o acesso ao portal a partir do contacto.
+ *
+ * Dar acesso cria a conta de cliente se ainda não existir; não toca numa
+ * pertença que já exista, para nunca despromover a cliente alguém da equipa
+ * que por acaso também está nos contactos. Tirar só retira o papel de
+ * cliente: o acesso de equipa não se perde por uma caixa desmarcada numa
+ * ficha de contactos.
+ */
+export async function definirAcessoDoContacto(
+  db: Database,
+  organizationId: string,
+  email: string,
+  ativo: boolean,
+): Promise<'concedido' | 'retirado' | 'sem_mudanca'> {
+  const endereco = email.toLowerCase().trim()
+  return db.transaction(async (tx) => {
+    const [utilizador] = await tx.select({ id: users.id }).from(users).where(eq(users.email, endereco)).limit(1)
+    const [pertenca] = utilizador
+      ? await tx
+          .select({ id: memberships.id, role: memberships.role })
+          .from(memberships)
+          .where(and(eq(memberships.userId, utilizador.id), eq(memberships.organizationId, organizationId)))
+          .limit(1)
+      : []
+
+    if (ativo) {
+      if (pertenca) return 'sem_mudanca'
+      const userId =
+        utilizador?.id ?? (await tx.insert(users).values({ email: endereco }).returning({ id: users.id }))[0]!.id
+      await tx.insert(memberships).values({ organizationId, userId, role: 'client' })
+      return 'concedido'
+    }
+
+    if (pertenca?.role !== 'client') return 'sem_mudanca'
+    await tx.delete(memberships).where(eq(memberships.id, pertenca.id))
+    return 'retirado'
+  })
 }
 
 export async function acrescentarContacto(

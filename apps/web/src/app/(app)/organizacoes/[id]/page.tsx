@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic'
 /**
  * A ficha de um cliente: os contactos, os sites e quem tem acesso.
  *
- * Os contactos são a ficha de quem é quem no cliente, e quem recebe o
- * relatório mensal. Não são acessos: um contacto não entra no portal por
- * estar aqui. Para isso há «Quem tem acesso», mais abaixo.
+ * Os contactos são a ficha de quem é quem no cliente, quem recebe o
+ * relatório mensal e, quando se marca, quem entra no portal. O acesso dado
+ * aqui é o mesmo de «Quem tem acesso», mais abaixo: uma pertença de cliente.
  */
 export default async function OrganizacaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -94,11 +94,22 @@ export default async function OrganizacaoPage({ params }: { params: Promise<{ id
                       ) : null}
                     </p>
                   </div>
-                  {contacto.receivesReports ? (
-                    <span className="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-900">
-                      Recebe o relatório mensal
-                    </span>
-                  ) : null}
+                  <span className="flex flex-wrap gap-1.5">
+                    {contacto.receivesReports ? (
+                      <span className="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-900">
+                        Recebe o relatório mensal
+                      </span>
+                    ) : null}
+                    {contacto.acesso === 'cliente' ? (
+                      <span className="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-900">
+                        Acesso ao portal
+                      </span>
+                    ) : contacto.acesso === 'equipa' ? (
+                      <span className="rounded-full bg-ink-100 px-2.5 py-1 text-xs font-medium text-ink-900">
+                        Acesso de equipa
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
 
                 {gere ? (
@@ -107,7 +118,7 @@ export default async function OrganizacaoPage({ params }: { params: Promise<{ id
                       Editar
                     </summary>
                     <div className="mt-3 space-y-3">
-                      <FormularioContacto organizationId={organizacao.id} contacto={contacto} />
+                      <FormularioContacto organizationId={organizacao.id} contacto={contacto} sites={sites.length} />
                       <form action={apagarContactoAction}>
                         <input type="hidden" name="organizationId" value={organizacao.id} />
                         <input type="hidden" name="contactoId" value={contacto.id} />
@@ -126,7 +137,7 @@ export default async function OrganizacaoPage({ params }: { params: Promise<{ id
         {gere ? (
           <div className="border-t border-ink-100 px-5 py-4">
             <p className="mb-3 text-sm font-semibold text-ink-900">Novo contacto</p>
-            <FormularioContacto organizationId={organizacao.id} />
+            <FormularioContacto organizationId={organizacao.id} sites={sites.length} />
           </div>
         ) : null}
       </Card>

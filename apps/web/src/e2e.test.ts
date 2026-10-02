@@ -1273,14 +1273,18 @@ describeE2E('fluxo de entrada e painel', () => {
     await novoContacto.locator('input[name="name"]').fill('Ana Silva')
     await novoContacto.locator('input[name="jobTitle"]').fill('Diretora de marketing')
     await novoContacto.locator('input[name="phone"]').fill('+351 912 345 678')
-    await novoContacto.locator('input[name="email"]').fill('ana@clinica-e2e.pt')
+    await novoContacto.locator('input[name="email"]').fill(`ana-${marca}@clinica-e2e.pt`)
+    // E acesso ao portal, dado na mesma ficha.
+    await novoContacto.locator('input[name="portalAccess"]').check()
     await novoContacto.locator('button[type="submit"]').click()
-    const linha = equipa.locator('[data-contacto-linha="ana@clinica-e2e.pt"]')
+    await equipa.waitForSelector('text=Passou a ter acesso ao portal')
+    const linha = equipa.locator(`[data-contacto-linha="ana-${marca}@clinica-e2e.pt"]`)
     await linha.waitFor()
     const textoDaLinha = await linha.textContent()
     expect(textoDaLinha).toContain('Diretora de marketing')
     expect(textoDaLinha).toContain('+351 912 345 678')
     expect(await linha.locator('span', { hasText: /^Recebe o relatório mensal$/ }).count()).toBe(1)
+    expect(await linha.locator('span', { hasText: /^Acesso ao portal$/ }).count()).toBe(1)
 
     // Mudar um site para o cliente novo, pelas definições do site.
     await equipa.goto(`${baseUrl}/sites/${siteParaMudar}/definicoes`)
@@ -1298,11 +1302,18 @@ describeE2E('fluxo de entrada e painel', () => {
         expect(mudado?.organizationId).toBe(organizacaoId)
         // O contacto marcado passa a receber o relatório deste site.
         const destinatarios = await destinatariosDoRelatorio(db, siteParaMudar)
-        expect(destinatarios).toEqual(['ana@clinica-e2e.pt'])
+        expect(destinatarios).toEqual([`ana-${marca}@clinica-e2e.pt`])
       } finally {
         await close()
       }
     }
+
+    // A Ana entra no portal e vê o site do cliente dela, e só esse.
+    const ana = await entrarComo(`ana-${marca}@clinica-e2e.pt`)
+    await ana.waitForURL(`${baseUrl}/portal`)
+    expect(await ana.isVisible(`text=Site a mudar ${marca}`)).toBe(true)
+    expect(await ana.isVisible('text=Site de teste')).toBe(false)
+    await ana.close()
 
     // Acrescentar alguém à equipa dá-lhe acesso a clientes onde nunca foi
     // posto, incluindo o de outra organização.
