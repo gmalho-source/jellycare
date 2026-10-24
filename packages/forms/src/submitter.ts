@@ -1,5 +1,6 @@
 import type { Browser, Locator, Page, Response as PlaywrightResponse } from 'playwright'
 import { USER_AGENT } from '@jellycare/core'
+import { blockedDestinationReason, browserRequestAllowed, guardPublicTargetsEnabled } from '@jellycare/checks'
 import type { FillPlan } from './canary.js'
 import { isTestable, type DiscoveredForm } from './discovery.js'
 
@@ -105,10 +106,33 @@ export async function submitForm(options: SubmitOptions): Promise<SubmitResult> 
     }
   }
 
+  if (guardPublicTargetsEnabled()) {
+    const blocked = await blockedDestinationReason(pageUrl)
+    if (blocked) {
+      return {
+        submitted: false,
+        signal: null,
+        reason: 'A página de teste não é um endereço público.',
+        finalUrl: pageUrl,
+        validationErrors: [],
+        durationMs: Date.now() - startedAt,
+      }
+    }
+  }
+
   const context = await browser.newContext({
     userAgent: USER_AGENT,
     locale: 'pt-PT',
   })
+  if (guardPublicTargetsEnabled()) {
+    // O URL inicial já foi aceite. Um script da página, ou um redirect, pode
+    // na mesma pedir a metadata do alojamento. Cada pedido volta a passar
+    // pelo mesmo filtro dos checks.
+    await context.route('**/*', async (route) => {
+      if (await browserRequestAllowed(route.request().url())) await route.continue()
+      else await route.abort('blockedbyclient')
+    })
+  }
   const page = await context.newPage()
   page.setDefaultTimeout(timeoutMs)
 

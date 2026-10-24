@@ -1,21 +1,39 @@
 'use client'
 
-import { useActionState } from 'react'
-import { createSite, type ActionState } from '../../actions'
+import { useActionState, useState, useTransition } from 'react'
+import { createSite, umbrellaProjectsForSiteUrl, type ActionState } from '../../actions'
 
 const inputClass =
   'mt-1.5 w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm outline-none focus:border-jelly-500 focus:ring-2 focus:ring-jelly-100'
 
 export function NewSiteForm({
   organizations,
-  umbrella,
   umbrellaUnavailable,
 }: {
   organizations: { id: string; name: string }[]
-  umbrella: { id: number; name: string; baseUrl: string }[]
   umbrellaUnavailable?: string
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(createSite, {})
+  const [projects, setProjects] = useState<{ id: number; name: string; baseUrl: string }[]>([])
+  const [unavailable, setUnavailable] = useState(umbrellaUnavailable)
+  const [consultado, setConsultado] = useState(false)
+  const [aProcurar, startTransition] = useTransition()
+
+  function aoSairDoEndereco(value: string) {
+    const url = value.trim()
+    if (!url) {
+      setProjects([])
+      setConsultado(false)
+      setUnavailable(umbrellaUnavailable)
+      return
+    }
+    startTransition(async () => {
+      const result = await umbrellaProjectsForSiteUrl(url)
+      setProjects(result.projects)
+      setUnavailable(result.unavailable)
+      setConsultado(true)
+    })
+  }
 
   return (
     <form action={action} className="space-y-5 rounded-2xl bg-white shadow-card p-6">
@@ -61,6 +79,7 @@ export function NewSiteForm({
           placeholder="cliente.pt"
           required
           autoComplete="off"
+          onBlur={(event) => aoSairDoEndereco(event.target.value)}
         />
         <p className="mt-1.5 text-xs text-ink-400">
           Sem protocolo assume-se https. Guardamos o endereço canónico do site.
@@ -87,26 +106,31 @@ export function NewSiteForm({
         <label htmlFor="projectId" className="text-sm font-medium text-ink-900">
           Projeto na WP Umbrella
         </label>
-        {umbrellaUnavailable ? (
+        {unavailable ? (
           <p className="mt-1.5 text-xs text-ink-400">
-            Não foi possível obter a lista: {umbrellaUnavailable} Dá para ligar mais tarde, nas
-            definições do site.
+            Não foi possível obter a lista: {unavailable} Dá para ligar mais tarde, nas definições
+            do site.
+          </p>
+        ) : !consultado ? (
+          <p className="mt-1.5 text-xs text-ink-400">
+            {aProcurar
+              ? 'A procurar projetos deste endereço…'
+              : 'Saia do campo do endereço para ver os projetos da WP Umbrella desse domínio.'}
           </p>
         ) : (
           <>
             <select id="projectId" name="projectId" className={inputClass} defaultValue="">
               <option value="">Não é WordPress, ou ligo depois</option>
-              {umbrella.map((project) => (
+              {projects.map((project) => (
                 <option key={project.id} value={String(project.id)}>
                   {project.name} — {project.baseUrl}
                 </option>
               ))}
             </select>
             <p className="mt-1.5 text-xs text-ink-400">
-              É a ligação que torna este site um site WordPress para o Jellycare: inventário de
-              plugins e temas, cópias de segurança e atualizações automáticas. Confirme o
-              endereço e não só o nome — ligar ao projeto errado faz-nos reportar a este cliente
-              as vulnerabilidades de outro.
+              {projects.length === 0
+                ? 'Não há projetos da WP Umbrella com este endereço. Dá para ligar mais tarde, nas definições do site.'
+                : 'Só aparecem projetos deste endereço. Ligar ao projeto errado fazia-nos reportar a este cliente as vulnerabilidades de outro.'}
             </p>
           </>
         )}

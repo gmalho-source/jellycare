@@ -19,16 +19,28 @@ export const dynamic = 'force-dynamic'
 export default async function PortalLegalPage() {
   const user = await requireUser()
 
-  // Um cliente pertence a uma organização. Havendo mais, trata-se a primeira
-  // de que é cliente — é a que o portal já mostra.
-  const pertenca =
-    user.memberships.find((m) => m.role === 'client') ?? user.memberships[0]
+  // Havendo várias organizações de cliente, abre-se a primeira que ainda
+  // precisa de aceitação. A primeira da lista podia já estar em dia e o
+  // encaminhamento do portal caía numa página que não tinha nada para aceitar.
+  const clientes = user.memberships.filter((m) => m.role === 'client')
+  const pertenca = clientes[0] ?? user.memberships[0]
   if (!pertenca) {
     return <p className="text-sm text-ink-600">Não há nada associado a esta conta.</p>
   }
 
-  const organizationId = pertenca.organizationId
-  const estado = await getLegalState(organizationId)
+  let organizationId = pertenca.organizationId
+  let estado = await getLegalState(organizationId)
+  for (const candidata of clientes) {
+    const candidato =
+      candidata.organizationId === organizationId
+        ? estado
+        : await getLegalState(candidata.organizationId)
+    if (candidato.missing.length > 0 && !candidato.negotiatedRef) {
+      organizationId = candidata.organizationId
+      estado = candidato
+      break
+    }
+  }
   const comprovativos = await acceptedDocuments(getDb(), organizationId)
   const podeAceitar = pertenca.role === 'client'
 

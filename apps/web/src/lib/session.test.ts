@@ -1,6 +1,13 @@
 import type { AuthenticatedUser } from '@jellycare/db'
 import { describe, expect, it } from 'vitest'
-import { canGrantRole, canManage, isClientOnly, roleIn } from './session.js'
+import {
+  canChangeMemberRole,
+  canGrantRole,
+  canManage,
+  canRevokeMember,
+  isClientOnly,
+  roleIn,
+} from './session.js'
 
 const ORG = '11111111-1111-1111-1111-111111111111'
 const OUTRA = '22222222-2222-2222-2222-222222222222'
@@ -69,6 +76,48 @@ describe('canGrantRole', () => {
     const dono = utilizador({ organizationId: ORG, role: 'owner' })
 
     expect(canGrantRole(dono, OUTRA, 'client')).toBe(false)
+  })
+})
+
+describe('canChangeMemberRole', () => {
+  it('um membro não mexe em pares nem despromove o dono', () => {
+    const membro = utilizador({ organizationId: ORG, role: 'member' })
+
+    expect(canChangeMemberRole(membro, ORG, 'owner', 'member')).toBe(false)
+    expect(canChangeMemberRole(membro, ORG, 'member', 'client')).toBe(false)
+    expect(canChangeMemberRole(membro, ORG, 'client', 'member')).toBe(true)
+    expect(canChangeMemberRole(membro, ORG, 'client', 'admin')).toBe(false)
+  })
+
+  it('um administrador promove outro membro mas não toca num administrador', () => {
+    const admin = utilizador({ organizationId: ORG, role: 'admin' })
+
+    expect(canChangeMemberRole(admin, ORG, 'member', 'admin')).toBe(true)
+    expect(canChangeMemberRole(admin, ORG, 'admin', 'member')).toBe(false)
+    expect(canChangeMemberRole(admin, ORG, 'owner', 'admin')).toBe(false)
+    expect(canChangeMemberRole(admin, ORG, 'member', 'owner')).toBe(false)
+  })
+
+  it('o dono altera administradores e não cria outro dono', () => {
+    const dono = utilizador({ organizationId: ORG, role: 'owner' })
+
+    expect(canChangeMemberRole(dono, ORG, 'admin', 'member')).toBe(true)
+    expect(canChangeMemberRole(dono, ORG, 'owner', 'admin')).toBe(false)
+    expect(canChangeMemberRole(dono, ORG, 'member', 'owner')).toBe(false)
+  })
+})
+
+describe('canRevokeMember', () => {
+  it('só se retira o acesso a quem está abaixo', () => {
+    const membro = utilizador({ organizationId: ORG, role: 'member' })
+    const admin = utilizador({ organizationId: ORG, role: 'admin' })
+
+    expect(canRevokeMember(membro, ORG, 'client')).toBe(true)
+    expect(canRevokeMember(membro, ORG, 'owner')).toBe(false)
+    expect(canRevokeMember(membro, ORG, 'member')).toBe(false)
+    expect(canRevokeMember(admin, ORG, 'member')).toBe(true)
+    expect(canRevokeMember(admin, ORG, 'admin')).toBe(false)
+    expect(canRevokeMember(admin, ORG, 'owner')).toBe(false)
   })
 })
 

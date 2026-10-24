@@ -6,7 +6,7 @@ import { WordPressMetrics } from '@/components/site-dashboard'
 import { getSiteDashboard } from '@/lib/dashboard'
 import { getDb } from '@/lib/db'
 import { getSiteDetail } from '@/lib/queries'
-import { listUmbrellaProjects } from '@/lib/umbrella'
+import { listUmbrellaProjects, projectsForHostname } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { AutoUpdatePanel } from '../auto-update-panel'
 import { WordPressPanel } from '../wordpress-panel'
@@ -56,7 +56,7 @@ export default async function WordPressPage({ params }: { params: Promise<{ id: 
           }
           lastSyncAt={detail.connector?.lastSyncAt ?? null}
           lastError={detail.connector?.lastError ?? null}
-          options={umbrella.projects.map((project) => ({
+          options={projectsForHostname(umbrella.projects, detail.site.hostname).map((project) => ({
             id: project.id,
             name: project.name,
             baseUrl: project.baseUrl,

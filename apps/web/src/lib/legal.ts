@@ -37,12 +37,36 @@ export const LEGAL_SLUGS: Record<string, { kind: LegalKind; locale: LegalLocale 
  * dia em que alguém cole algo de um sítio qualquer para dentro de um `.md`
  * não se transforma num problema de segurança numa página pública.
  */
+/**
+ * Um `href` ou `src` que a página pública pode manter.
+ *
+ * O markdown vem do repositório, mas o `marked` transforma `[texto](javascript:...)`
+ * numa ligação que o browser executa. Só ficam http(s), mailto, um caminho do
+ * próprio site e uma âncora.
+ */
+function ligacaoPermitida(destino: string): boolean {
+  const valor = destino.trim()
+  if (/^https?:\/\//i.test(valor)) return true
+  if (/^mailto:/i.test(valor)) return true
+  if (valor.startsWith('/') && !valor.startsWith('//')) return true
+  return valor.startsWith('#')
+}
+
+function neutralizarLigacoes(html: string): string {
+  return html.replace(
+    /(\s(?:href|src)\s*=\s*)(["'])(.*?)\2/gi,
+    (completo, prefixo: string, aspas: string, valor: string) =>
+      ligacaoPermitida(valor) ? completo : `${prefixo}${aspas}#${aspas}`,
+  )
+}
+
 export function renderLegalMarkdown(body: string): string {
   const semHtml = body.replace(/</g, '&lt;')
   const html = marked.parse(semHtml, { async: false, gfm: true, breaks: false })
+  const seguro = neutralizarLigacoes(html)
   // As tabelas dos anexos têm cinco colunas e não encolhem. Cada uma leva um
   // invólucro que rola sozinho, para a página não rolar por causa delas.
-  return html.replace(/<table>/g, '<div class="legal-table"><table>').replace(
+  return seguro.replace(/<table>/g, '<div class="legal-table"><table>').replace(
     /<\/table>/g,
     '</table></div>',
   )

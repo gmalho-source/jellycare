@@ -3,6 +3,7 @@ import {
   assessDelivery,
   extractCanaryReference,
   parseAuthenticationResults,
+  senderMatchesSite,
   type InboundEmail,
 } from './mailbox.js'
 
@@ -96,6 +97,22 @@ describe('parseAuthenticationResults', () => {
 
   it('devolve nulos quando o cabeçalho não existe', () => {
     expect(parseAuthenticationResults(undefined)).toEqual({ spf: null, dkim: null, dmarc: null })
+  })
+})
+
+describe('senderMatchesSite', () => {
+  it('aceita o domínio do site, com nome de exibição e www', () => {
+    expect(senderMatchesSite('wordpress@cliente.pt', 'cliente.pt')).toBe(true)
+    expect(senderMatchesSite('Loja <mailer@www.cliente.pt>', 'cliente.pt')).toBe(true)
+    expect(senderMatchesSite('mailer@news.cliente.pt', 'cliente.pt')).toBe(true)
+    expect(senderMatchesSite('loja@cliente.pt', 'blog.cliente.pt')).toBe(true)
+  })
+
+  it('recusa outro domínio, mesmo parecido, e um remetente vazio', () => {
+    expect(senderMatchesSite('wordpress@outro.pt', 'cliente.pt')).toBe(false)
+    expect(senderMatchesSite('wordpress@evilcliente.pt', 'cliente.pt')).toBe(false)
+    expect(senderMatchesSite('wordpress@cliente.pt.evil.com', 'cliente.pt')).toBe(false)
+    expect(senderMatchesSite('', 'cliente.pt')).toBe(false)
   })
 })
 

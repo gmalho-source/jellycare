@@ -39,11 +39,21 @@ ENV NODE_ENV=production
 # resolve o Chromium a partir daí. Fixar o caminho à mão obrigaria a acertar o
 # número de build a cada atualização — exatamente o desencontro que se quer
 # evitar. JELLYCARE_CHROMIUM_PATH só é preciso em imagens que não sejam esta.
-ENV JELLYCARE_CHROMIUM_NO_SANDBOX=1
+#
+# Sem JELLYCARE_CHROMIUM_NO_SANDBOX. O sandbox do Chromium recusa correr como
+# root, por isso o processo passa a um utilizador normal. Se o Fly não tiver
+# user namespaces, o browser pode não arrancar — a submissão de formulários e
+# o PDF ficam por fazer, e a rede interna continua fechada pelo filtro de
+# destinos. Quem precisar mesmo de `--no-sandbox` define a variável no
+# ambiente, não na imagem.
 
 COPY --from=build /prod/worker ./
 COPY --from=build /prod/db /app/migrations-pkg
 COPY --from=build /app/packages/db/migrations /app/migrations-pkg/migrations
+
+RUN useradd --create-home --uid 1001 --shell /usr/sbin/nologin jellycare \
+ && chown -R jellycare:jellycare /app
+USER jellycare
 
 # As migrações correm aqui e não no dashboard: o dashboard pode ter várias
 # instâncias, e duas a migrar ao mesmo tempo é problema à espera de acontecer.
