@@ -34,6 +34,21 @@ export interface TickResult {
   failed: number
 }
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+const URL_RE = /https?:\/\/[^\s)]+/gi
+
+/**
+ * Texto de erro que pode ficar na batida e no painel da equipa.
+ *
+ * A mensagem original traz o id do site e, às vezes, o URL que a fila
+ * recusou. A batida é uma linha só, lida por toda a equipa e, durante um
+ * tempo, também pelo endpoint público. Tira-se o que identifica um cliente
+ * e corta-se o resto: um erro de fila cabe numa linha.
+ */
+export function publicErrorText(message: string): string {
+  return message.replace(URL_RE, '[url]').replace(UUID_RE, '[id]').replace(/\s+/g, ' ').trim().slice(0, 240)
+}
+
 /**
  * Nem todos os checks entraram na fila.
  *
@@ -86,9 +101,9 @@ async function recordHeartbeat(
   const mensagem =
     outcome.error === undefined
       ? null
-      : outcome.error instanceof Error
-        ? outcome.error.message
-        : String(outcome.error)
+      : publicErrorText(
+          outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+        )
 
   const valores = {
     lastTickAt: now,
@@ -206,8 +221,10 @@ async function runTick(options: SchedulerOptions, agora: Date): Promise<TickResu
       })
       enfileirados.push(check)
     } catch (error) {
+      // Sem o id do site. A batida é uma linha partilhada por toda a equipa
+      // e o id não ajuda a ler o erro — o tipo de verificação chega.
       falhas.push(
-        `${check.checkType}/${check.siteId}: ${error instanceof Error ? error.message : String(error)}`,
+        `${check.checkType}: ${publicErrorText(error instanceof Error ? error.message : String(error))}`,
       )
     }
   }
@@ -237,7 +254,7 @@ async function runTick(options: SchedulerOptions, agora: Date): Promise<TickResu
       .where(inArray(schema.checkConfigs.id, ids))
   }
 
-  if (falhas.length > 0) throw new EnqueueFailures(falhas)
+  if (falhas.length > 0) throw new EnqueueFailures([...new Set(falhas)])
 
   return { considered: checks.length, enqueued: enfileirados.length, failed: falhas.length }
 }

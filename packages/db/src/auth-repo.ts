@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, isNull } from 'drizzle-orm'
 import type { Database } from './client.js'
 import { loginTokens, memberships, organizations, sessions, users } from './schema.js'
 
@@ -99,10 +99,22 @@ export async function consumeLoginToken(
     if (loginToken.consumedAt !== null) return null
     if (loginToken.expiresAt.getTime() <= now.getTime()) return null
 
-    await tx
+    // A leitura acima não chega: duas trocas em simultâneo passam ambas no
+    // `consumedAt` nulo e abrem duas sessões. Quem ganha é o UPDATE que ainda
+    // encontra a linha por consumir. O outro volta sem sessão.
+    const claimed = await tx
       .update(loginTokens)
       .set({ consumedAt: now })
-      .where(eq(loginTokens.id, loginToken.id))
+      .where(
+        and(
+          eq(loginTokens.id, loginToken.id),
+          isNull(loginTokens.consumedAt),
+          gt(loginTokens.expiresAt, now),
+        ),
+      )
+      .returning({ id: loginTokens.id })
+
+    if (claimed.length === 0) return null
 
     const sessionToken = generateToken()
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS)

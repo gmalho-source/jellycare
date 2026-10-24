@@ -1,10 +1,13 @@
 'use server'
 
+import { isIP } from 'node:net'
 import { createLoginToken } from '@jellycare/db'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { appOrigin } from '@/lib/app-url'
 import { getDb } from '@/lib/db'
+import { loginAttemptLimited } from '@/lib/login-rate'
 
 export type LoginState = { message?: string; error?: string }
 
@@ -28,12 +31,28 @@ export async function requestLoginLink(
     message: 'Se este email tiver conta, enviámos uma ligação de entrada. É válida 15 minutos.',
   }
 
+  const cabecalhos = await headers()
+  // Só o endereço que o Fly põe. O `x-forwarded-for` é o primeiro valor que o
+  // cliente quiser enviar, e servia tanto para contornar o limite como para
+  // o esgotar na conta de outra pessoa.
+  const ip = cabecalhos.get('fly-client-ip')?.trim() ?? ''
+  if (loginAttemptLimited(parsed.data, isIP(ip) ? ip : null)) return resposta
+
+  let origin: string
+  try {
+    origin = appOrigin(cabecalhos)
+  } catch {
+    return { error: 'A entrada está indisponível. Tente mais tarde.' }
+  }
+
   const created = await createLoginToken(getDb(), parsed.data)
   if (!created) return resposta
 
-  const link = `${appOrigin(await headers())}/auth/callback?token=${encodeURIComponent(created.token)}`
+  const link = `${origin}/auth/callback?token=${encodeURIComponent(created.token)}`
 
-  await sendLoginEmail(parsed.data, link)
+  // O envio fica para depois da resposta. Esperá-lo só quando o email existe
+  // media o tempo e dizia a quem perguntasse se a conta está cá.
+  after(() => sendLoginEmail(parsed.data, link))
   return resposta
 }
 
@@ -42,7 +61,13 @@ async function sendLoginEmail(to: string, link: string): Promise<void> {
 
   if (!apiKey) {
     // Em desenvolvimento não há serviço de email configurado. Escrever a
-    // ligação na consola do servidor é preferível a falhar em silêncio.
+    // ligação na consola do servidor é preferível a falhar em silêncio. Em
+    // produção a ligação é uma chave de entrada: a consola fica com o aviso
+    // de que a chave falta, e não com a chave.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[jellycare] RESEND_API_KEY não está definido; a ligação de entrada não foi enviada.')
+      return
+    }
     console.info(`[jellycare] ligação de entrada para ${to}: ${link}`)
     return
   }

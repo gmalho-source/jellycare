@@ -18,10 +18,9 @@ export interface UmbrellaOption {
  * ligação: para ligar era preciso estar ligado. A página do WordPress continua
  * a mostrar isto, para quem já lá está poder trocar ou desligar.
  *
- * A escolha é à mão e não emparelhada por hostname: ligar ao projeto errado
- * faz-nos reportar a este cliente as vulnerabilidades de outro, e um endereço
- * parecido chega para isso acontecer. Daí a lista trazer o endereço ao lado
- * do nome.
+ * A lista já só traz projetos deste hostname. Uma ligação antiga a outro
+ * endereço continua visível no painel, mas não volta a ser aceite: o
+ * servidor recusa-a.
  */
 export function UmbrellaLink({
   siteId,
@@ -40,6 +39,7 @@ export function UmbrellaLink({
     linkUmbrellaProjectAction,
     {},
   )
+  const ligadoAqui = options.some((option) => String(option.id) === linkedId)
 
   if (!canManage) {
     return (
@@ -74,7 +74,7 @@ export function UmbrellaLink({
             <select
               id="umbrella-project"
               name="projectId"
-              defaultValue={linkedId ?? ''}
+              defaultValue={ligadoAqui ? (linkedId ?? '') : ''}
               className="min-w-[18rem] flex-1 rounded-lg border border-ink-200 px-3 py-2 text-sm focus:border-jelly-500 focus:outline-none"
             >
               <option value="">Não ligado</option>
@@ -96,8 +96,9 @@ export function UmbrellaLink({
           </div>
 
           <p className="mt-2 text-xs text-ink-400">
-            Confirme o endereço e não só o nome. Ligar ao projeto errado faz-nos reportar a este
-            cliente as vulnerabilidades de outro.
+            {linkedId && !ligadoAqui
+              ? 'A ligação atual é de outro endereço e não volta a ser aceite. Escolha o projeto deste site ou desligue.'
+              : 'Confirme o endereço e não só o nome. Ligar ao projeto errado faz-nos reportar a este cliente as vulnerabilidades de outro.'}
           </p>
         </>
       )}

@@ -1,5 +1,6 @@
 'use server'
 
+import { isIP } from 'node:net'
 import { organizationLegalState, recordAcceptance, recordObjection } from '@jellycare/db'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
@@ -72,9 +73,13 @@ export async function acceptLegalDocumentsAction(
     documentIds: pedidos,
     userId: user.id,
     representedBy: parsed.data.representedBy,
-    // `x-forwarded-for` traz a cadeia de proxies; o primeiro endereço é o de
-    // quem fez o pedido.
-    ip: cabecalhos.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    // O Fly põe aqui o endereço de quem fez o pedido. O `x-forwarded-for` é
+    // o que o cliente quiser escrever, e um comprovativo com um IP à escolha
+    // não prova nada. Sem o cabeçalho do Fly, fica por registar.
+    ip: (() => {
+      const fly = cabecalhos.get('fly-client-ip')?.trim() ?? ''
+      return isIP(fly) ? fly : null
+    })(),
     userAgent: cabecalhos.get('user-agent'),
   })
 

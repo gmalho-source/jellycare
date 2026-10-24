@@ -1,4 +1,5 @@
 export * from './http.js'
+export * from './public-target.js'
 export * from './uptime.js'
 export * from './security-headers.js'
 export * from './tls.js'

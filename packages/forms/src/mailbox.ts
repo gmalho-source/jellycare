@@ -35,6 +35,41 @@ export interface CanaryReference {
  * enviam a notificação a partir de um endereço próprio e não preservam o
  * `reply-to` — mais comuns do que seria de esperar.
  */
+/**
+ * O domínio do remetente, sem nome de exibição e sem `www.`.
+ *
+ * `Loja <mailer@www.cliente.pt>` fica `cliente.pt`. Sem um domínio legível
+ * não há como o ligar ao site, e a entrega não conta.
+ */
+export function senderDomain(from: string): string | null {
+  const angled = /<([^>\s]+)>/.exec(from)
+  const raw = (angled?.[1] ?? from).trim().toLowerCase()
+  const at = raw.lastIndexOf('@')
+  if (at <= 0 || at === raw.length - 1) return null
+  let domain = raw.slice(at + 1).replace(/\.$/, '')
+  if (domain.startsWith('www.')) domain = domain.slice(4)
+  if (!/^[a-z0-9.-]+$/.test(domain) || !domain.includes('.')) return null
+  return domain
+}
+
+/**
+ * O remetente pertence ao site que o teste diz ter notificado?
+ *
+ * O token no assunto chega para identificar o teste, mas não para provar
+ * quem enviou. Sem esta comparação, um email forjado com a referência no
+ * corpo marcava a entrega como boa. Conta o domínio do site, um subdomínio
+ * dele, ou o domínio de que o site é subdomínio — `mail.cliente.pt` a falar
+ * de `cliente.pt`, e `cliente.pt` a falar de `blog.cliente.pt`.
+ */
+export function senderMatchesSite(from: string, siteHostname: string): boolean {
+  const domain = senderDomain(from)
+  if (!domain) return false
+  let site = siteHostname.trim().toLowerCase().replace(/\.$/, '')
+  if (site.startsWith('www.')) site = site.slice(4)
+  if (!site) return false
+  return domain === site || domain.endsWith(`.${site}`) || site.endsWith(`.${domain}`)
+}
+
 export function extractCanaryReference(email: InboundEmail): CanaryReference | null {
   const fromAddress = /check\+([A-Za-z0-9-]+)-([a-f0-9]{8,})@/i.exec(email.to)
   if (fromAddress?.[1] && fromAddress[2]) {

@@ -2,10 +2,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { appOrigin, appUrl } from './app-url.js'
 
 const original = process.env.JELLYCARE_APP_URL
+const nodeEnv = process.env.NODE_ENV
+
+/** `NODE_ENV` está tipado como só de leitura; os testes precisam de o trocar. */
+function definirNodeEnv(valor: string | undefined): void {
+  const env = process.env as { NODE_ENV?: string }
+  if (valor === undefined) delete env.NODE_ENV
+  else env.NODE_ENV = valor
+}
 
 afterEach(() => {
   if (original === undefined) delete process.env.JELLYCARE_APP_URL
   else process.env.JELLYCARE_APP_URL = original
+  definirNodeEnv(nodeEnv)
 })
 
 describe('appOrigin', () => {
@@ -36,6 +45,19 @@ describe('appOrigin', () => {
 
     expect(appOrigin(new Headers({ host: 'localhost:3000' }))).toBe('http://localhost:3000')
     expect(appOrigin(new Headers({ host: 'exemplo.pt' }))).toBe('https://exemplo.pt')
+  })
+
+  it('em produção recusa arrancar sem domínio configurado', () => {
+    definirNodeEnv('production')
+    delete process.env.JELLYCARE_APP_URL
+
+    expect(() => appOrigin(new Headers({ host: 'atacante.example' }))).toThrow(/JELLYCARE_APP_URL/)
+  })
+
+  it('recusa um domínio configurado que não é http', () => {
+    process.env.JELLYCARE_APP_URL = 'javascript:alert(1)'
+
+    expect(() => appOrigin()).toThrow(/http/)
   })
 
   it('constrói o caminho de erro completo', () => {

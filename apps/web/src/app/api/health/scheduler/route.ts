@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
  * Público e sem sessão, de propósito. Quem tem de fazer esta pergunta é um
  * vigia externo — um workflow agendado, um serviço de uptime — e obrigá-lo a
  * autenticar-se era pôr mais uma peça entre a avaria e o aviso. Não devolve
- * nada sobre sites nem clientes: só instantes, contagens e o erro da própria
- * plataforma.
+ * o texto dos erros nem quantos sites existem: o código HTTP e as contagens
+ * de atraso chegam para o alarme, e o detalhe fica no painel da equipa.
  *
  * Servido pelo dashboard e não pelo worker. Um sinal de vida respondido pelo
  * processo que ele vigia cala-se ao mesmo tempo que ele, e a pergunta fica
@@ -39,11 +39,8 @@ export async function GET(): Promise<NextResponse> {
       lastTickAt: agendador.lastTickAt?.toISOString() ?? null,
       lastHealthyTickAt: agendador.lastHealthyTickAt?.toISOString() ?? null,
       lastEnqueueAt: agendador.lastEnqueueAt?.toISOString() ?? null,
-      lastError: agendador.lastError,
-      lastErrorAt: agendador.lastErrorAt?.toISOString() ?? null,
       checks: checks.map((check) => ({
         checkType: check.checkType,
-        tracked: check.tracked,
         late: check.late,
         lastSuccessAt: check.lastSuccessAt?.toISOString() ?? null,
         worstLateMinutes: check.worstLateMinutes,

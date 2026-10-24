@@ -9,13 +9,30 @@
  * e, ao voltar a clicar na ligação, recebe a mensagem de ligação inválida.
  */
 export function appOrigin(requestHeaders?: Headers): string {
-  const configured = process.env.JELLYCARE_APP_URL
-  if (configured) return configured.replace(/\/+$/, '')
+  const configured = process.env.JELLYCARE_APP_URL?.trim().replace(/\/+$/, '')
+  if (configured) {
+    // Só a origem. Um caminho ou credenciais no valor configurado não podem
+    // entrar na ligação de entrada.
+    let url: URL
+    try {
+      url = new URL(configured)
+    } catch {
+      throw new Error('JELLYCARE_APP_URL não é um endereço válido.')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('JELLYCARE_APP_URL tem de ser http ou https.')
+    }
+    return url.origin
+  }
 
-  // Sem configuração, resta o cabeçalho `host`. Serve em desenvolvimento e é
-  // o suficiente; em produção o `JELLYCARE_APP_URL` deve estar sempre
-  // definido, porque um `host` forjado num pedido faria a ligação de entrada
-  // apontar para o domínio de quem o forjou.
+  // Sem configuração, em produção não há fallback. O cabeçalho `host` é
+  // controlado por quem faz o pedido: usá-lo na ligação de entrada mandava o
+  // link para o domínio de quem o forjou. Em desenvolvimento o fallback
+  // mantém-se, senão a entrada local deixava de funcionar.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JELLYCARE_APP_URL não está definido.')
+  }
+
   const host = requestHeaders?.get('host')
   if (host) {
     const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https'

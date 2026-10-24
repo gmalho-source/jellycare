@@ -1,4 +1,9 @@
 import { USER_AGENT } from '@jellycare/core'
+import {
+  blockedDestinationReason,
+  guardPublicTargetsEnabled,
+  type AddressResolver,
+} from './public-target.js'
 
 export interface HttpResponse {
   url: string
@@ -23,6 +28,15 @@ export interface HttpRequestOptions {
   headers?: Record<string, string>
   signal?: AbortSignal
   fetchImpl?: typeof globalThis.fetch
+  /**
+   * Recusa destinos que não são HTTP(S) público, incluindo cada redirect.
+   *
+   * Em produção está sempre ligado. Nos testes fica desligado: a suite sobe
+   * servidores em `127.0.0.1` e um filtro global partia-a.
+   */
+  guardPublicTargets?: boolean
+  /** Resolução de DNS injectável, para testar o filtro sem a rede. */
+  resolveHost?: AddressResolver
 }
 
 export class HttpError extends Error {
@@ -118,6 +132,7 @@ export async function request(
     discardBody = false,
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
     fetchImpl = globalThis.fetch,
+    guardPublicTargets = guardPublicTargetsEnabled(),
   } = options
 
   const startedAt = Date.now()
@@ -125,6 +140,15 @@ export async function request(
   let currentUrl = url
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
+    if (guardPublicTargets) {
+      // Cada salto volta a ser avaliado. Um 302 para `127.0.0.1` ou para a
+      // metadata do alojamento não pode ser seguido só porque o URL inicial
+      // era público. A mensagem não repete o destino: o código chega ao
+      // histórico do check e não deve ecoar um endereço interno.
+      const blocked = await blockedDestinationReason(currentUrl, options.resolveHost)
+      if (blocked) throw new HttpError('Destino recusado', 'blocked_target')
+    }
+
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     if (options.signal) {

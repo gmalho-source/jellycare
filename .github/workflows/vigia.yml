@@ -40,19 +40,16 @@ jobs:
       - name: O agendador está vivo?
         run: |
           set -o pipefail
-          corpo=$(mktemp)
-          codigo=$(curl -sS --max-time 30 -o "$corpo" -w '%{http_code}' \
+          # Só o código. O corpo traz contagens e, se voltasse a trazer o
+          # erro da plataforma, ficava nos registos públicos do Actions.
+          codigo=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' \
             https://jellycare.pt/api/health/scheduler) || {
               echo "::error::Não foi possível falar com o dashboard."
               exit 1
             }
 
-          echo "Resposta ($codigo):"
-          cat "$corpo"
-          echo
-
           if [ "$codigo" != "200" ]; then
-            echo "::error::O agendador não está saudável (HTTP $codigo). Ver o corpo acima."
+            echo "::error::O agendador não está saudável (HTTP $codigo)."
             exit 1
           fi
 

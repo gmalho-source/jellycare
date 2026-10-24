@@ -117,6 +117,50 @@ export function canGrantRole(
   return false
 }
 
+const ROLE_RANK: Record<string, number> = { client: 0, member: 1, admin: 2, owner: 3 }
+
+/**
+ * Pode mudar o papel de quem já pertence à organização?
+ *
+ * Conceder um papel a alguém novo e reescrever o de quem já o tem não são a
+ * mesma coisa. Sem esta distinção, um membro despromovia o dono: a regra de
+ * `canGrantRole` só olha para o papel de destino, e o de origem era
+ * substituído na mesma.
+ *
+ * Só se altera quem está estritamente abaixo, e o papel novo não pode
+ * ultrapassar o de quem altera nem criar um dono.
+ */
+export function canChangeMemberRole(
+  user: AuthenticatedUser,
+  organizationId: string,
+  currentRole: string,
+  nextRole: string,
+): boolean {
+  const ownRank = ROLE_RANK[roleIn(user, organizationId) ?? '']
+  const currentRank = ROLE_RANK[currentRole]
+  const nextRank = ROLE_RANK[nextRole]
+  if (ownRank === undefined || currentRank === undefined || nextRank === undefined) return false
+  return currentRank < ownRank && nextRank <= ownRank && nextRank < ROLE_RANK.owner!
+}
+
+/**
+ * Pode retirar o acesso de alguém?
+ *
+ * A mesma fronteira da alteração: um par, ou alguém acima, não sai por ação
+ * de quem está ao lado. Tirar o próprio acesso continua a ser recusado por
+ * quem chama — aqui só se compara o papel.
+ */
+export function canRevokeMember(
+  user: AuthenticatedUser,
+  organizationId: string,
+  currentRole: string,
+): boolean {
+  const ownRank = ROLE_RANK[roleIn(user, organizationId) ?? '']
+  const currentRank = ROLE_RANK[currentRole]
+  if (ownRank === undefined || currentRank === undefined) return false
+  return currentRank < ownRank
+}
+
 /** Só a equipa da Jelly configura sites; o papel `client` é de leitura. */
 export function canManage(user: AuthenticatedUser, organizationId: string): boolean {
   return user.memberships.some(

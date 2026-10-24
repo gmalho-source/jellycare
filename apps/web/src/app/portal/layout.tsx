@@ -44,8 +44,9 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   // vivesse dentro dele, este encaminhamento apontava para uma página que o
   // volta a disparar — um ciclo. Estar fora resolve-o por construção, em vez
   // de por uma exceção ao caminho que alguém um dia esquecia.
-  const pertenca = user.memberships.find((m) => m.role === 'client')
-  if (pertenca) {
+  // Todas as organizações em que a pessoa é cliente. Olhar só para a primeira
+  // deixava as outras sem acordo e com o portal aberto na mesma.
+  for (const pertenca of user.memberships.filter((m) => m.role === 'client')) {
     const estado = await getLegalState(pertenca.organizationId)
     if (estado.missing.length > 0 && !estado.negotiatedRef) redirect('/legal/aceitar')
   }

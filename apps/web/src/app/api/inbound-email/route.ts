@@ -1,11 +1,13 @@
-import { recordCanaryDelivery } from '@jellycare/db'
+import { recordCanaryDelivery, schema } from '@jellycare/db'
 import {
   assessDelivery,
   extractCanaryReference,
   parseInboundPayload,
+  senderMatchesSite,
   verifyInboundSignature,
   type SignatureScheme,
 } from '@jellycare/forms'
+import { eq } from 'drizzle-orm'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getDb } from '@/lib/db'
 
@@ -74,14 +76,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!reference) return NextResponse.json({ status: 'ignorado' }, { status: 202 })
 
   const db = getDb()
-  const runs = await db.query.formRuns.findFirst({
-    where: (table, { eq }) => eq(table.canaryToken, reference.token),
-    columns: { startedAt: true },
-  })
+  const runs = await db
+    .select({ startedAt: schema.formRuns.startedAt, hostname: schema.sites.hostname })
+    .from(schema.formRuns)
+    .innerJoin(schema.sites, eq(schema.sites.id, schema.formRuns.siteId))
+    .where(eq(schema.formRuns.canaryToken, reference.token))
+    .limit(1)
 
-  if (!runs) return NextResponse.json({ status: 'desconhecido' }, { status: 202 })
+  const run = runs[0]
+  if (!run) return NextResponse.json({ status: 'desconhecido' }, { status: 202 })
 
-  const assessment = assessDelivery(email, runs.startedAt)
+  // O token identifica o teste. O remetente é que diz se a notificação veio
+  // do site. Sem isto, um email com a referência no corpo marcava a entrega
+  // como boa. 202 para o fornecedor não insistir.
+  if (!senderMatchesSite(email.from, run.hostname)) {
+    return NextResponse.json({ status: 'ignorado' }, { status: 202 })
+  }
+
+  const assessment = assessDelivery(email, run.startedAt)
 
   const outcome = await recordCanaryDelivery(db, {
     token: reference.token,
