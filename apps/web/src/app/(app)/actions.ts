@@ -1,6 +1,12 @@
 'use server'
 
-import { PAGE_SPEED_TYPES, buildChallenge, verifyOwnershipAny } from '@jellycare/checks'
+import {
+  PAGE_SPEED_TYPES,
+  blockedDestinationReason,
+  buildChallenge,
+  guardPublicTargetsEnabled,
+  verifyOwnershipAny,
+} from '@jellycare/checks'
 import {
   addMaintenanceWindow,
   grantAccess,
@@ -29,12 +35,14 @@ import {
 import { getDb } from '@/lib/db'
 import { CHECKS_DO_MALWARE } from '@/lib/malware'
 import { getSiteHeader } from '@/lib/queries'
-import { listUmbrellaProjects } from '@/lib/umbrella'
+import { listUmbrellaProjects, projectMatchesHostname } from '@/lib/umbrella'
 import {
   SESSION_COOKIE,
   assertMembership,
+  canChangeMemberRole,
   canGrantRole,
   canManage,
+  canRevokeMember,
   requireUser,
 } from '@/lib/session'
 
@@ -105,7 +113,15 @@ export async function createSite(
   // Um id que não existe faria o worker falhar todos os dias contra um
   // projeto fantasma; e confirmar depois de criar deixava um site meio-feito
   // sempre que a WP Umbrella estivesse em baixo.
-  let project: { id: number; name: string } | undefined
+  const parsedUrl = new URL(input.url)
+  if (guardPublicTargetsEnabled()) {
+    // O uptime corre antes da prova de propriedade. Um endereço interno
+    // entrava na fila e o worker pedia-o a partir da rede da plataforma.
+    const blocked = await blockedDestinationReason(parsedUrl.origin)
+    if (blocked) return { error: 'Esse endereço não pode ser monitorizado.' }
+  }
+
+  let project: { id: number; name: string; baseUrl: string } | undefined
   if (input.projectId) {
     const { projects, unavailable } = await listUmbrellaProjects()
     if (unavailable) {
@@ -113,9 +129,11 @@ export async function createSite(
     }
     project = projects.find((candidate) => String(candidate.id) === input.projectId)
     if (!project) return { error: 'Esse projeto não existe na conta da WP Umbrella.' }
+    if (!projectMatchesHostname(project.baseUrl, parsedUrl.hostname)) {
+      return { error: 'Esse projeto é de outro endereço. Escolha o projeto deste site.' }
+    }
   }
 
-  const parsedUrl = new URL(input.url)
   // Guardado sem barra final, para que o URL seja idêntico em toda a parte e
   // os fingerprints dos findings se mantenham estáveis.
   const canonicalUrl = parsedUrl.origin
@@ -172,6 +190,47 @@ export async function createSite(
   )
 
   redirect(`/sites/${siteId}`)
+}
+
+export interface UmbrellaChoice {
+  projects: { id: number; name: string; baseUrl: string }[]
+  unavailable?: string
+}
+
+/**
+ * Projetos da WP Umbrella cujo endereço é o do site que se está a criar.
+ *
+ * A conta da Jelly tem a frota toda. Devolvê-la ao browser punha o nome e o
+ * URL de cada cliente na página de quem está a adicionar um site. Aqui só
+ * saem os que coincidem com o endereço escrito.
+ */
+export async function umbrellaProjectsForSiteUrl(rawUrl: string): Promise<UmbrellaChoice> {
+  const user = await requireUser()
+  if (!user.memberships.some((membership) => membership.role !== 'client')) {
+    return { projects: [] }
+  }
+
+  const trimmed = rawUrl.trim()
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  let hostname: string
+  try {
+    const parsed = new URL(withScheme)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { projects: [] }
+    hostname = parsed.hostname
+    if (guardPublicTargetsEnabled() && (await blockedDestinationReason(parsed.origin))) {
+      return { projects: [], unavailable: 'Esse endereço não pode ser monitorizado.' }
+    }
+  } catch {
+    return { projects: [] }
+  }
+
+  const { projects, unavailable } = await listUmbrellaProjects()
+  return {
+    projects: projects
+      .filter((project) => projectMatchesHostname(project.baseUrl, hostname))
+      .map((project) => ({ id: project.id, name: project.name, baseUrl: project.baseUrl })),
+    ...(unavailable ? { unavailable } : {}),
+  }
 }
 
 /** Executa a verificação de propriedade e ativa o site quando passa. */
@@ -325,7 +384,33 @@ export async function grantAccessAction(
   if (!canManage(user, parsed.data.organizationId)) {
     return { error: 'Não tem permissão para gerir acessos nesta organização.' }
   }
-  if (!canGrantRole(user, parsed.data.organizationId, parsed.data.role)) {
+  const existente = await getDb()
+    .select({ role: schema.memberships.role })
+    .from(schema.memberships)
+    .innerJoin(schema.users, eq(schema.users.id, schema.memberships.userId))
+    .where(
+      and(
+        eq(schema.memberships.organizationId, parsed.data.organizationId),
+        eq(schema.users.email, parsed.data.email),
+      ),
+    )
+    .limit(1)
+
+  if (existente[0]) {
+    // Quem já tem acesso não é um convite: reescrever o papel de um dono
+    // estava ao alcance de um membro, porque a regra só olhava para o papel
+    // de destino.
+    if (
+      !canChangeMemberRole(
+        user,
+        parsed.data.organizationId,
+        existente[0].role,
+        parsed.data.role,
+      )
+    ) {
+      return { error: 'Não pode alterar alguém com um papel igual ou superior ao seu.' }
+    }
+  } else if (!canGrantRole(user, parsed.data.organizationId, parsed.data.role)) {
     return { error: 'Não pode conceder um papel com mais permissões do que o seu.' }
   }
 
@@ -362,6 +447,19 @@ export async function revokeAccessAction(formData: FormData): Promise<void> {
   // Tirar o acesso a si próprio deixaria a organização sem quem a gere, e a
   // recuperação passaria pela base de dados.
   if (parsed.data.userId === user.id) return
+
+  const alvo = await getDb()
+    .select({ role: schema.memberships.role })
+    .from(schema.memberships)
+    .where(
+      and(
+        eq(schema.memberships.organizationId, parsed.data.organizationId),
+        eq(schema.memberships.userId, parsed.data.userId),
+      ),
+    )
+    .limit(1)
+  if (!alvo[0]) return
+  if (!canRevokeMember(user, parsed.data.organizationId, alvo[0].role)) return
 
   await revokeAccess(getDb(), parsed.data.organizationId, parsed.data.userId)
   revalidatePath('/sites')
@@ -562,11 +660,10 @@ export interface ConnectorState {
 /**
  * Liga um site a um projeto da WP Umbrella, ou desliga-o.
  *
- * A ligação é manual e não por correspondência automática de hostname. Um
- * site ligado ao projeto errado faz-nos reportar as vulnerabilidades de um
- * cliente a outro, e um `base_url` parecido chega para isso acontecer. O
- * administrador escolhe da lista, que traz o endereço de cada projeto para
- * ele confirmar.
+ * A escolha continua a ser manual — não se liga sozinho — mas só entra um
+ * projeto cujo hostname é o deste site. Um `base_url` parecido chega para
+ * reportar as vulnerabilidades de um cliente a outro, e a lista do browser
+ * já só mostra os que coincidem.
  */
 export async function linkUmbrellaProjectAction(
   _previous: ConnectorState,
@@ -580,7 +677,10 @@ export async function linkUmbrellaProjectAction(
   if (!siteId) return { error: 'Site em falta.' }
 
   const rows = await getDb()
-    .select({ organizationId: schema.sites.organizationId })
+    .select({
+      organizationId: schema.sites.organizationId,
+      hostname: schema.sites.hostname,
+    })
     .from(schema.sites)
     .where(eq(schema.sites.id, siteId))
     .limit(1)
@@ -617,6 +717,9 @@ export async function linkUmbrellaProjectAction(
   const project = projects.find((candidate) => String(candidate.id) === projectId)
   if (!project) {
     return { error: 'Esse projeto não existe na conta da WP Umbrella.' }
+  }
+  if (!projectMatchesHostname(project.baseUrl, site.hostname)) {
+    return { error: 'Esse projeto é de outro endereço. Escolha o projeto deste site.' }
   }
 
   await getDb()

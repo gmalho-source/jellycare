@@ -198,14 +198,19 @@ export async function measurePageSpeed(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   const pedir = (comAgentic: boolean) => {
-    const query = new URLSearchParams({ url, key: apiKey, strategy })
+    // A chave vai no cabeçalho e não na query. Um URL com `key=` fica nos
+    // registos de acesso da Google e, quando a API o ecoa num erro, no
+    // histórico do check — que o painel mostra à equipa.
+    const query = new URLSearchParams({ url, strategy })
     for (const categoria of CATEGORIAS) query.append('category', categoria)
     if (comAgentic) query.append('category', CATEGORIA_AGENTIC)
     return fetchImpl(`${ENDPOINT}?${query.toString()}`, {
       signal: controller.signal,
-      headers: { 'user-agent': USER_AGENT },
+      headers: { 'user-agent': USER_AGENT, 'x-goog-api-key': apiKey },
     })
   }
+
+  const semChave = (texto: string) => (apiKey ? texto.replaceAll(apiKey, '[chave]') : texto)
 
   try {
     let response = await pedir(true)
@@ -222,11 +227,12 @@ export async function measurePageSpeed(
     if (!response.ok) {
       // A Google explica no corpo o que está mal — uma chave sem a API
       // ativada volta como 403 com o texto a dizê-lo. Sem isto ficava um
-      // número e uma ida ao painel da Google a adivinhar. A chave viaja na
-      // query, não no corpo, por isso nada de secreto sai daqui.
+      // número e uma ida ao painel da Google a adivinhar. O corpo pode
+      // repetir o pedido, por isso a chave é retirada antes de o texto
+      // seguir para o histórico do check.
       const detalhe = await response
         .text()
-        .then((texto) => texto.slice(0, 300).replace(/\s+/g, ' ').trim())
+        .then((texto) => semChave(texto.slice(0, 300).replace(/\s+/g, ' ').trim()))
         .catch(() => '')
       throw new Error(
         `PageSpeed Insights respondeu ${response.status}${detalhe ? `: ${detalhe}` : ''}`,
@@ -234,7 +240,9 @@ export async function measurePageSpeed(
     }
 
     const body = (await response.json()) as PageSpeedResponse
-    if (body.error?.message) throw new Error(`PageSpeed Insights: ${body.error.message}`)
+    if (body.error?.message) {
+      throw new Error(`PageSpeed Insights: ${semChave(body.error.message)}`)
+    }
 
     const lighthouse = body.lighthouseResult
     const categorias = lighthouse?.categories

@@ -109,6 +109,19 @@ describe('consumeLoginToken', () => {
     expect(await consumeLoginToken(db, login!.token)).toBeNull()
   })
 
+  it('um link usado em simultâneo só abre uma sessão', async () => {
+    const login = await createLoginToken(db, email)
+
+    const [primeira, segunda] = await Promise.all([
+      consumeLoginToken(db, login!.token),
+      consumeLoginToken(db, login!.token),
+    ])
+
+    expect([primeira, segunda].filter((sessao) => sessao !== null)).toHaveLength(1)
+    const rows = await db.select().from(sessions).where(eq(sessions.userId, userId))
+    expect(rows).toHaveLength(1)
+  })
+
   it('recusa um token expirado', async () => {
     const login = await createLoginToken(db, email)
     const muitoDepois = new Date(Date.now() + 60 * 60_000)

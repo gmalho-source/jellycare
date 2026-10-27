@@ -844,7 +844,7 @@ describeE2E('fluxo de entrada e painel', () => {
     // fora dos estados de paragem.
     const resposta = await fetch(`${baseUrl}/api/health/scheduler`)
     const corpo = await resposta.json()
-    expect(corpo.lastError).toBeNull()
+    expect(corpo.lastError).toBeUndefined()
     expect(['ok', 'checks_late']).toContain(corpo.status)
 
     // Nada disto pode ser guardado. Um sinal de vida servido de uma cache

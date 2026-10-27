@@ -11,7 +11,7 @@ import { mockFetch, testSite, type MockRoutes } from './test-utils.js'
 
 const CLASSICAS =
   'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' +
-  '?url=https%3A%2F%2Fcliente.pt&key=chave-teste&strategy=mobile' +
+  '?url=https%3A%2F%2Fcliente.pt&strategy=mobile' +
   '&category=performance&category=accessibility&category=best-practices&category=seo'
 
 /** O pedido como sai: as quatro categorias clássicas e a navegação com agência. */
@@ -176,9 +176,26 @@ describe('pageSpeedCheck', () => {
   })
 
   it('a chave não aparece no erro', async () => {
-    const outcome = await run({ [ENDPOINT]: { status: 500, body: 'erro interno' } })
+    const outcome = await run({
+      [ENDPOINT]: { status: 500, body: 'a chave chave-teste foi recusada' },
+    })
 
     expect(outcome.error).not.toContain('chave-teste')
+    expect(outcome.error).toContain('[chave]')
+  })
+
+  it('manda a chave no cabeçalho e não no endereço', async () => {
+    const base = mockFetch({ [ENDPOINT]: { body: resposta({ score: 0.9 }) } })
+    const cabecalhos: Headers[] = []
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      cabecalhos.push(new Headers(init?.headers))
+      return base(input, init)
+    }
+
+    await measurePageSpeed('https://cliente.pt', 'chave-teste', 'mobile', fetch, 5000)
+
+    expect(base.calls[0]).not.toContain('key=')
+    expect(cabecalhos[0]?.get('x-goog-api-key')).toBe('chave-teste')
   })
 
   it('a verificação de computador mede computador e guarda a pontuação', async () => {
