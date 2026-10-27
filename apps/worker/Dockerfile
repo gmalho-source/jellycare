@@ -51,9 +51,12 @@ COPY --from=build /prod/worker ./
 COPY --from=build /prod/db /app/migrations-pkg
 COPY --from=build /app/packages/db/migrations /app/migrations-pkg/migrations
 
-RUN useradd --create-home --uid 1001 --shell /usr/sbin/nologin jellycare \
- && chown -R jellycare:jellycare /app
-USER jellycare
+# A imagem do Playwright já traz um utilizador sem privilégios, `pwuser`
+# (UID 1001), feito precisamente para o Chromium correr com sandbox. Usa-se
+# esse: criar outro com o mesmo UID partia o build com «UID 1001 is not
+# unique», e foi o que deixou dois deploys por fazer.
+RUN chown -R pwuser:pwuser /app
+USER pwuser
 
 # As migrações correm aqui e não no dashboard: o dashboard pode ter várias
 # instâncias, e duas a migrar ao mesmo tempo é problema à espera de acontecer.
