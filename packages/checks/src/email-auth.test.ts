@@ -145,14 +145,24 @@ describe('emailAuthCheck', () => {
       now: new Date(),
       fetch: globalThis.fetch,
     }
+    const consultados: string[] = []
     const outcome = await runCheck(emailAuthCheck, context, {
       resolver: resolver(HEALTHY),
       dkimSelectors: ['default'],
+      // Os MX também falsos, como no resto do ficheiro. Sem isto o teste ia
+      // ao DNS real buscar os MX de cliente.pt, que é um domínio de alguém, e
+      // partiu no dia em que esse domínio deixou de os ter.
+      mxResolver: async (dominio: string) => {
+        consultados.push(dominio)
+        return MX_SAUDAVEL
+      },
+      hostResolver: async () => ['203.0.113.10'],
     })
 
     // Consulta cliente.pt e não www.cliente.pt: o email sai do domínio, não do
     // subdomínio onde o site está alojado.
     expect(outcome.findings).toEqual([])
+    expect(consultados).toEqual(['cliente.pt'])
   })
 
   it('deixa claro que a ausência de DKIM não é conclusiva', async () => {
