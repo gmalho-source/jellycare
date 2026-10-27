@@ -743,9 +743,12 @@ describe('configuração da plataforma', () => {
     await addCheck('page_speed', 1440, null)
     await verifySite()
 
-    const pedidos: string[] = []
-    const fetchStub = (async (input: RequestInfo | URL) => {
-      pedidos.push(typeof input === 'string' ? input : String(input))
+    const pedidos: { url: string; chave: string | null }[] = []
+    const fetchStub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      pedidos.push({
+        url: typeof input === 'string' ? input : String(input),
+        chave: new Headers(init?.headers).get('x-goog-api-key'),
+      })
       return new Response(
         JSON.stringify({
           lighthouseResult: { categories: { performance: { score: 0.93 } }, audits: {} },
@@ -765,11 +768,10 @@ describe('configuração da plataforma', () => {
     )
 
     expect(outcome.status).toBe('completed')
-    expect(
-      pedidos.some(
-        (url) => url.includes('pagespeedonline') && url.includes('chave-pagespeed'),
-      ),
-    ).toBe(true)
+    // A chave vai no cabeçalho, e não no URL, onde ficava nos registos.
+    const pedido = pedidos.find((p) => p.url.includes('pagespeedonline'))
+    expect(pedido?.chave).toBe('chave-pagespeed')
+    expect(pedido?.url).not.toContain('chave-pagespeed')
   })
 
   it('guarda a imagem da homepage que a PageSpeed devolve', async () => {

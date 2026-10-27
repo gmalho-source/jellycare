@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createServer as createHttpServer, type Server } from 'node:http'
 import { explicacaoDe } from '@jellycare/core'
-import { createDatabase, destinatariosDoRelatorio, schema } from '@jellycare/db'
+import { createDatabase, createLoginToken, destinatariosDoRelatorio, schema } from '@jellycare/db'
 import { seed } from '@jellycare/db/seed'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Browser } from 'playwright'
@@ -518,13 +518,24 @@ describeE2E('fluxo de entrada e painel', () => {
     await new Promise<void>((resolve) => anthropic?.close(() => resolve()))
   })
 
-  function loginLink(): string {
-    const fromLog = [...logBuffer.matchAll(/ligação de entrada para \S+: (\S+)/g)].pop()?.[1]
-    const fromFile = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
-    const link = fromLog ?? [...fromFile.matchAll(/ligação de entrada para \S+: (\S+)/g)].pop()?.[1]
-    if (!link) throw new Error(`Nenhuma ligação de entrada no registo:\n${logBuffer}`)
-    return link
+  /**
+   * A ligação de entrada de alguém, criada com a mesma função do formulário.
+   *
+   * Em produção a ligação só sai por email, e o servidor do teste corre em
+   * produção: a consola, de onde vinha antes, já não a tem — e ainda bem.
+   * Cria-se aqui; o formulário continua a ser preenchido antes de cada uso.
+   */
+  async function ligacaoDeEntrada(correio: string): Promise<string> {
+    const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 1 })
+    try {
+      const criado = await createLoginToken(db, correio)
+      if (!criado) throw new Error(`Nenhuma conta para ${correio}`)
+      return `${baseUrl}/auth/callback?token=${encodeURIComponent(criado.token)}`
+    } finally {
+      await close()
+    }
   }
+
 
   it('entra com ligação de uso único e mostra o painel', async () => {
     const page = await browser.newPage()
@@ -534,7 +545,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
 
-    await page.goto(loginLink())
+    await page.goto(await ligacaoDeEntrada(email))
     await page.waitForURL(`${baseUrl}/`)
 
     await expect.poll(() => page.textContent('h1'), { timeout: PRAZO_DE_ESPERA }).toBe('Sites')
@@ -560,7 +571,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
 
-    const link = loginLink()
+    const link = await ligacaoDeEntrada(email)
     const primeira = await browser.newPage()
     await primeira.goto(link)
     await primeira.waitForURL(`${baseUrl}/`)
@@ -579,7 +590,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.fill('#email', correio)
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
-    await page.goto(loginLink())
+    await page.goto(await ligacaoDeEntrada(correio))
     return page
   }
 
@@ -1711,7 +1722,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.fill('#email', email)
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
-    await page.goto(loginLink())
+    await page.goto(await ligacaoDeEntrada(email))
     await page.waitForURL(`${baseUrl}/`)
 
     await page.goto(`${baseUrl}/sites/${siteId}/definicoes`)
@@ -1766,7 +1777,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.fill('#email', email)
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
-    await page.goto(loginLink())
+    await page.goto(await ligacaoDeEntrada(email))
     await page.waitForURL(`${baseUrl}/`)
 
     await page.goto(`${baseUrl}/sites/${siteId}`)
@@ -1817,9 +1828,15 @@ describeE2E('fluxo de entrada e painel', () => {
         submitted: true,
       })
 
+      // O remetente é do domínio do próprio site, como o de um formulário a
+      // sério: um email com a referência mas vindo de outro lado não conta.
+      const [doSite] = await db
+        .select({ hostname: schema.sites.hostname })
+        .from(schema.sites)
+        .where(eq(schema.sites.id, siteId))
       const payload = JSON.stringify({
         to: `check+${siteId}-${token}@check.jellycare.pt`,
-        from: 'wordpress@cliente.pt',
+        from: `wordpress@${doSite!.hostname}`,
         subject: 'Novo contacto do site',
         text: `Referência do teste: ${token}`,
         headers: { 'Authentication-Results': 'mx; spf=pass; dkim=pass; dmarc=pass' },
@@ -1946,7 +1963,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await page.fill('#email', email)
     await page.click('button[type=submit]')
     await page.waitForSelector('text=Se este email tiver conta')
-    await page.goto(loginLink())
+    await page.goto(await ligacaoDeEntrada(email))
     await page.waitForURL(`${baseUrl}/`)
 
     await page.goto(`${baseUrl}/sites/${siteId}/relatorios`)
