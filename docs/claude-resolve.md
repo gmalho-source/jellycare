@@ -50,9 +50,11 @@ botão: são incidentes, tratados por uma pessoa.
 
 Uma vez:
 
-1. Criar na organização da Jelly no GitHub o repositório-modelo a partir de
-   `templates/repositorio-site/` e marcá-lo como *template repository*.
-2. Instalar a app do Claude na organização (https://github.com/apps/claude),
+1. Repositório-modelo: `Jellycare/modelo-site`, cópia de
+   `templates/repositorio-site/`, marcado como *template repository*. Uma
+   alteração ao modelo faz-se aqui e copia-se para lá; os repositórios já
+   criados não a recebem sozinhos.
+2. App do Claude instalada na organização Jellycare (https://github.com/apps/claude),
    com acesso aos repositórios `site-*`.
 3. Segredo da organização `ANTHROPIC_API_KEY`, partilhado com os `site-*`.
 4. Fine-grained personal access token de uma pessoa da equipa, com acesso aos
