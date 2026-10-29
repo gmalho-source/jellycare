@@ -72,8 +72,29 @@ describe('abrirIssue', () => {
     expect(JSON.parse(String(pedido?.init.body))).toMatchObject({ labels: ['claude-resolve'] })
   })
 
+  it('aceita o token colado com aspas, espaços ou mudança de linha', async () => {
+    process.env.GITHUB_RESOLVE_TOKEN = ' "github_pat_abc"\n'
+    let autorizacao: string | null = null
+    await abrirIssue('a/b', issue, (async (_url: string, init: RequestInit) => {
+      autorizacao = new Headers(init.headers).get('authorization')
+      return new Response(JSON.stringify({ number: 1, html_url: 'https://github.com/a/b/issues/1' }), { status: 201 })
+    }) as typeof fetch)
+    expect(autorizacao).toBe('Bearer github_pat_abc')
+  })
+
+  it('um token que o GitHub não reconhece diz onde o corrigir, sem o mostrar', async () => {
+    process.env.GITHUB_RESOLVE_TOKEN = 'segredo-que-nao-pode-aparecer'
+    const erro = await abrirIssue('a/b', issue, (async () => new Response('', { status: 401 })) as typeof fetch).catch(
+      (e: unknown) => e,
+    )
+    expect((erro as Error).message).toContain('GITHUB_RESOLVE_TOKEN')
+    expect((erro as Error).message).not.toContain('segredo-que-nao-pode-aparecer')
+  })
+
   it('sem token, diz o nome do segredo em falta', async () => {
     delete process.env.GITHUB_RESOLVE_TOKEN
+    await expect(abrirIssue('a/b', issue)).rejects.toThrow('GITHUB_RESOLVE_TOKEN')
+    process.env.GITHUB_RESOLVE_TOKEN = '  '
     await expect(abrirIssue('a/b', issue)).rejects.toThrow('GITHUB_RESOLVE_TOKEN')
   })
 
