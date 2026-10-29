@@ -129,8 +129,18 @@ function apiDoGitHub(): string {
   return (process.env.GITHUB_API_URL ?? 'https://api.github.com').replace(/\/+$/, '')
 }
 
+/**
+ * O token como o GitHub o espera. Um segredo colado num painel traz muitas
+ * vezes espaços, uma mudança de linha ou as aspas do comando de onde foi
+ * copiado; o GitHub recusa-o como se fosse falso.
+ */
+function tokenDoGitHub(): string | null {
+  const valor = (process.env.GITHUB_RESOLVE_TOKEN ?? '').trim().replace(/^(['"])(.*)\1$/, '$2').trim()
+  return valor || null
+}
+
 export function claudeResolveConfigurado(): boolean {
-  return Boolean(process.env.GITHUB_RESOLVE_TOKEN)
+  return tokenDoGitHub() !== null
 }
 
 /**
@@ -146,7 +156,7 @@ export async function abrirIssue(
   issue: IssueMontada,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ number: number; url: string }> {
-  const token = process.env.GITHUB_RESOLVE_TOKEN
+  const token = tokenDoGitHub()
   if (!token) throw new GitHubError('Falta o GITHUB_RESOLVE_TOKEN nos segredos do dashboard.')
 
   const resposta = await fetchImpl(`${apiDoGitHub()}/repos/${repo}/issues`, {
@@ -164,7 +174,11 @@ export async function abrirIssue(
 
   if (!resposta.ok) {
     // As mensagens dizem o que fazer, e nunca levam o token.
-    if (resposta.status === 401) throw new GitHubError('O GitHub recusou o token: está expirado ou foi revogado.')
+    if (resposta.status === 401) {
+      throw new GitHubError(
+        'O GitHub não reconhece o GITHUB_RESOLVE_TOKEN. Confirme nos segredos do jellycare-web que foi colado inteiro (começa por github_pat_), e que não expirou nem foi apagado.',
+      )
+    }
     if (resposta.status === 403 || resposta.status === 404) {
       throw new GitHubError(
         `O token não tem acesso ao repositório ${repo}, ou o repositório não existe. Confirme o nome nas definições e que o token inclui este repositório, com permissão de Issues.`,
