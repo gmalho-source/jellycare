@@ -130,10 +130,46 @@ export interface ReconcileInput {
   now?: Date
 }
 
+/**
+ * O que mudou na vida de um problema, para o registo de atividade.
+ *
+ * Separado das notificações de propósito: estas obedecem a uma política de
+ * quem incomodar e quando (um problema baixo que se resolve não avisa
+ * ninguém), e o registo quer tudo o que aconteceu, avise-se ou não.
+ */
+export type FindingEventKind = 'detected' | 'escalated' | 'reopened' | 'resolved'
+
+export interface FindingEvent {
+  kind: FindingEventKind
+  fingerprint: string
+  code: string
+  severity: Severity
+  title: string
+  /** Presente apenas em `escalated`. */
+  previousSeverity?: Severity
+}
+
 export interface ReconcileResult {
   creates: NewFinding[]
   updates: FindingUpdate[]
   notifications: FindingNotification[]
+  events: FindingEvent[]
+}
+
+function eventFrom(
+  kind: FindingEventKind,
+  finding: Pick<StoredFinding, 'fingerprint' | 'code' | 'severity' | 'title'>,
+  previousSeverity?: Severity,
+): FindingEvent {
+  const event: FindingEvent = {
+    kind,
+    fingerprint: finding.fingerprint,
+    code: finding.code,
+    severity: finding.severity,
+    title: finding.title,
+  }
+  if (previousSeverity !== undefined) event.previousSeverity = previousSeverity
+  return event
 }
 
 function notificationFrom(
@@ -192,6 +228,7 @@ export function reconcileFindings(input: ReconcileInput): ReconcileResult {
   const creates: NewFinding[] = []
   const updates: FindingUpdate[] = []
   const notifications: FindingNotification[] = []
+  const events: FindingEvent[] = []
 
   const byFingerprint = new Map<string, StoredFinding>()
   for (const finding of existing) byFingerprint.set(finding.fingerprint, finding)
@@ -222,7 +259,10 @@ export function reconcileFindings(input: ReconcileInput): ReconcileResult {
       if (obs.detail !== undefined) created.detail = obs.detail
       if (obs.evidence !== undefined) created.evidence = obs.evidence
       creates.push(created)
-      if (confirmed) notifications.push(notificationFrom('opened', created))
+      if (confirmed) {
+        notifications.push(notificationFrom('opened', created))
+        events.push(eventFrom('detected', created))
+      }
       continue
     }
 
@@ -256,20 +296,30 @@ export function reconcileFindings(input: ReconcileInput): ReconcileResult {
       // notificar, senão um site instável gera alertas em ciclo.
       changes.state = confirmed ? 'open' : 'pending'
       changes.resolvedAt = undefined
-      if (confirmed) notifications.push(notificationFrom('reopened', next))
+      if (confirmed) {
+        notifications.push(notificationFrom('reopened', next))
+        events.push(eventFrom('reopened', next))
+      }
     } else if (prior.state === 'pending') {
       changes.state = confirmed ? 'open' : 'pending'
-      if (confirmed) notifications.push(notificationFrom('opened', next))
+      if (confirmed) {
+        notifications.push(notificationFrom('opened', next))
+        // Daqui não se sabe se este pendente é novo ou um que reabriu: a
+        // reabertura limpou a data de resolução. Quem guarda o registo sabe, e
+        // corrige para `reopened` se o problema já tiver sido resolvido antes.
+        events.push(eventFrom('detected', next))
+      }
     } else if (isMoreSevere(obs.severity, prior.severity)) {
       // Já estava aberto ou reconhecido e piorou — isto merece sempre aviso.
       changes.state = 'open'
       notifications.push(notificationFrom('escalated', next, prior.severity))
+      events.push(eventFrom('escalated', next, prior.severity))
     }
 
     updates.push({ id: prior.id, fingerprint, changes })
   }
 
-  if (!runSucceeded) return { creates, updates, notifications }
+  if (!runSucceeded) return { creates, updates, notifications, events }
 
   for (const prior of existing) {
     if (seen.has(prior.fingerprint)) continue
@@ -281,11 +331,14 @@ export function reconcileFindings(input: ReconcileInput): ReconcileResult {
       changes: { state: 'resolved', resolvedAt: now, occurrences: 0 },
     })
 
+    // Um pendente que desaparece nunca chegou a ser um problema de ninguém.
+    if (prior.state !== 'pending') events.push(eventFrom('resolved', prior))
+
     // Só se avisa da recuperação daquilo que interrompeu alguém quando abriu.
     if (prior.state !== 'pending' && deliveryFor(prior.severity) === 'immediate') {
       notifications.push(notificationFrom('resolved', prior))
     }
   }
 
-  return { creates, updates, notifications }
+  return { creates, updates, notifications, events }
 }

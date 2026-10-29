@@ -8,6 +8,7 @@ import {
   anularPedidoAoClaude,
   concluirPedidoAoClaude,
   definirRepositorio,
+  registarAtividadeSemFalhar,
   reservarPedidoAoClaude,
   schema,
 } from '@jellycare/db'
@@ -74,6 +75,18 @@ export async function pedirAoClaudeAction(
       ),
     )
     await concluirPedidoAoClaude(db, reserva, issue)
+    await registarAtividadeSemFalhar(db, {
+      siteId: site.id,
+      findingId: finding.id,
+      tipo: 'claude_resolve_pedido',
+      actorId: user.id,
+      dados: {
+        titulo: finding.title,
+        codigo: finding.code,
+        severidade: finding.severity,
+        issue: { numero: issue.number, url: issue.url, repositorio: site.githubRepo },
+      },
+    })
     revalidatePath(`/sites/${site.id}/problemas`)
     return { message: `Enviado ao Claude: issue #${issue.number}.`, issueUrl: issue.url }
   } catch (error) {

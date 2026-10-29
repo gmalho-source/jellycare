@@ -16,8 +16,10 @@ import {
   type ReportData,
   type ReportPageSpeedRun,
   type ReportPeriod,
+  type ReportProblemEvent,
   type ReportWordPress,
 } from '@jellycare/reports'
+import type { Severity } from '@jellycare/core'
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 
@@ -219,6 +221,49 @@ export async function lerAvisosEnviados(
   return linhas.map((linha) => ({ sentAt: linha.sentAt!, subject: linha.subject }))
 }
 
+/**
+ * O ciclo de vida dos problemas no período, a partir do registo de atividade.
+ * Só o que o cliente vê: detetado, voltou, corrigido.
+ */
+export async function lerCicloDosProblemas(
+  db: Database,
+  siteId: string,
+  period: ReportPeriod,
+): Promise<ReportProblemEvent[]> {
+  const tipos = {
+    problema_detetado: 'detetado',
+    problema_reapareceu: 'voltou',
+    problema_resolvido: 'corrigido',
+  } as const
+  const linhas = await db
+    .select({
+      kind: schema.activityEvents.kind,
+      occurredAt: schema.activityEvents.occurredAt,
+      data: schema.activityEvents.data,
+    })
+    .from(schema.activityEvents)
+    .where(
+      and(
+        eq(schema.activityEvents.siteId, siteId),
+        inArray(schema.activityEvents.kind, Object.keys(tipos)),
+        gte(schema.activityEvents.occurredAt, period.start),
+        lt(schema.activityEvents.occurredAt, period.end),
+      ),
+    )
+    .orderBy(asc(schema.activityEvents.occurredAt))
+
+  return linhas.map((linha) => {
+    const dados = linha.data as { codigo?: string; titulo?: string; severidade?: Severity }
+    return {
+      tipo: tipos[linha.kind as keyof typeof tipos],
+      quando: linha.occurredAt,
+      code: dados.codigo ?? '',
+      title: dados.titulo ?? '',
+      severity: dados.severidade ?? 'low',
+    }
+  })
+}
+
 export async function generateReport(
   deps: ReportJobDeps,
   siteId: string,
@@ -327,7 +372,7 @@ export async function generateReport(
       ),
   ])
 
-  const [wordpress, notas, avisos] = await Promise.all([
+  const [wordpress, notas, avisos, ciclo] = await Promise.all([
     lerWordPress(db, siteId, period),
     // As notas que entram agora: as persistentes que ninguém retirou, e as de
     // «só no próximo» que ainda não foram levadas por nenhum relatório.
@@ -350,6 +395,7 @@ export async function generateReport(
       )
       .orderBy(asc(schema.reportNotes.createdAt)),
     lerAvisosEnviados(db, siteId, period),
+    lerCicloDosProblemas(db, siteId, period),
   ])
 
   const data = buildReport({
@@ -390,6 +436,7 @@ export async function generateReport(
       metrics: row.metrics,
     })),
     notices: avisos,
+    problemEvents: ciclo,
     pageSpeedRuns: velocidades(checkRunRows),
     wordpress,
     excludedSections: site.reportExcludedSections,

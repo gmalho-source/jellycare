@@ -1,12 +1,22 @@
 import type {
   CheckOutcome,
+  FindingEventKind,
   FindingNotification,
   StoredFinding,
+  TipoDeAtividade,
 } from '@jellycare/core'
 import { reconcileFindings } from '@jellycare/core'
 import { and, eq, inArray } from 'drizzle-orm'
+import { registarAtividade, type NovaAtividade } from './atividade.js'
 import type { Database } from './client.js'
-import { checkRuns, findings } from './schema.js'
+import { activityEvents, checkRuns, findings } from './schema.js'
+
+const TIPO_DO_EVENTO: Record<FindingEventKind, TipoDeAtividade> = {
+  detected: 'problema_detetado',
+  escalated: 'problema_agravou',
+  reopened: 'problema_reapareceu',
+  resolved: 'problema_resolvido',
+}
 
 type FindingRow = typeof findings.$inferSelect
 
@@ -94,8 +104,10 @@ export async function recordCheckRun(
       now,
     })
 
+    const idPorFingerprint = new Map(existingRows.map((row) => [row.fingerprint, row.id]))
+
     if (reconciliation.creates.length > 0) {
-      await tx
+      const criados = await tx
         .insert(findings)
         .values(
           reconciliation.creates.map((finding) => ({
@@ -121,6 +133,8 @@ export async function recordCheckRun(
           target: [findings.siteId, findings.fingerprint],
           set: { lastSeenAt: now },
         })
+        .returning({ id: findings.id, fingerprint: findings.fingerprint })
+      for (const criado of criados) idPorFingerprint.set(criado.fingerprint, criado.id)
     }
 
     for (const update of reconciliation.updates) {
@@ -141,6 +155,42 @@ export async function recordCheckRun(
         })
         .where(eq(findings.id, update.id))
     }
+
+    // Um pendente que passa a aberto pode ser um problema que já tinha sido
+    // resolvido e voltou: a reconciliação não o sabe, o registo sabe.
+    const jaResolvidos = new Set<string>()
+    const candidatos = reconciliation.events
+      .filter((evento) => evento.kind === 'detected')
+      .map((evento) => idPorFingerprint.get(evento.fingerprint))
+      .filter((id): id is string => id !== undefined)
+    if (candidatos.length > 0) {
+      const anteriores = await tx
+        .selectDistinct({ findingId: activityEvents.findingId })
+        .from(activityEvents)
+        .where(and(inArray(activityEvents.findingId, candidatos), eq(activityEvents.kind, 'problema_resolvido')))
+      for (const linha of anteriores) if (linha.findingId) jaResolvidos.add(linha.findingId)
+    }
+
+    const atividade: NovaAtividade[] = reconciliation.events.map((evento) => {
+      const findingId = idPorFingerprint.get(evento.fingerprint) ?? null
+      const tipo =
+        evento.kind === 'detected' && findingId && jaResolvidos.has(findingId)
+          ? 'problema_reapareceu'
+          : TIPO_DO_EVENTO[evento.kind]
+      return {
+        siteId,
+        findingId,
+        tipo,
+        quando: now,
+        dados: {
+          titulo: evento.title,
+          codigo: evento.code,
+          severidade: evento.severity,
+          ...(evento.previousSeverity ? { severidadeAnterior: evento.previousSeverity } : {}),
+        },
+      }
+    })
+    await registarAtividade(tx, atividade)
 
     return { runId, notifications: reconciliation.notifications }
   })

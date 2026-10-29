@@ -185,6 +185,27 @@ describe('buildTimeline', () => {
     mobile: [],
   }
 
+  it('com o registo de atividade, conta cada volta de um problema, e não só a última', () => {
+    const csp = { code: 'missing_csp', title: 'x', severity: 'low' as const }
+    const eventos = buildTimeline({
+      ...base,
+      // As datas do problema só guardam a última volta: detetado a 20 de agosto, em aberto.
+      findings: [{ ...csp, firstSeenAt: new Date('2026-08-20T09:00:00Z') }],
+      problemEvents: [
+        { ...csp, tipo: 'corrigido', quando: new Date('2026-09-03T09:00:00Z') },
+        { ...csp, tipo: 'voltou', quando: new Date('2026-09-10T09:00:00Z') },
+        { ...csp, tipo: 'corrigido', quando: new Date('2026-09-12T09:00:00Z') },
+        { ...csp, tipo: 'voltou', quando: new Date('2026-10-02T09:00:00Z') },
+      ],
+    })
+
+    expect(eventos.map((e) => e.texto)).toEqual([
+      'Corrigido: falta uma política de conteúdo permitido.',
+      'Voltou a aparecer: falta uma política de conteúdo permitido.',
+      'Corrigido: falta uma política de conteúdo permitido.',
+    ])
+  })
+
   it('conta o mês por ordem: entrada, problemas, correções, avisos, velocidade', () => {
     const eventos = buildTimeline({
       ...base,

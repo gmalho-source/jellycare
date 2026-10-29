@@ -64,6 +64,11 @@ const TRACOS: Record<string, React.ReactNode> = {
       <path d="M6.6 9.2h2.8" />
     </>
   ),
+  atividade: (
+    <>
+      <path d="M2 8h2.6l1.6-4 3.2 8 1.6-4H14" />
+    </>
+  ),
   relatorios: (
     <>
       <path d="M4 2h5l3 3v9H4z" />

@@ -50,6 +50,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         // Só a Equipa Jelly gere clientes e a própria equipa.
         ...(user.isStaff
           ? [
+              { href: '/atividade', label: 'Atividade', icone: 'atividade', exato: true },
               { href: '/organizacoes', label: 'Organizações', icone: 'organizacoes', exato: false },
               { href: '/equipa', label: 'Equipa Jelly', icone: 'equipa', exato: true },
             ]
