@@ -40,6 +40,9 @@ Começa sempre pelo que não parte nada:
   quase sempre só o alojamento muda. Em `.htaccess` dá para tirar
   `X-Powered-By` com `Header unset X-Powered-By`.
 
+No Jellycare, a CSP em *Report-Only* fecha o `missing_csp` e abre
+`csp_report_only` (informativo). Esse fecha quando a CSP passar a obrigatória.
+
 ## Confirmar
 
 `curl -sSI https://dominio/ | grep -iE 'strict-transport|content-security|x-frame|x-content-type|referrer-policy'`

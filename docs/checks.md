@@ -209,6 +209,8 @@ positivo de versão.
 Verificações não intrusivas, sem exploração:
 - headers de segurança: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
   Referrer-Policy, Permissions-Policy
+  - uma CSP só em `Content-Security-Policy-Report-Only` não conta como CSP em
+    falta: fica `csp_report_only`, informativo, até passar a obrigatória
 - mixed content em HTTPS
 - directory listing ativo
 - ficheiros que não deviam estar acessíveis: `.env`, `.git/HEAD`, `.DS_Store`,
