@@ -59,6 +59,32 @@ describe('securityHeadersCheck', () => {
     ])
   })
 
+  it('uma CSP só em Report-Only fica em observação, e não como CSP em falta', async () => {
+    const politica = "default-src 'self'; frame-ancestors 'self'"
+    const outcome = await run({
+      'https://cliente.pt': {
+        headers: { ...SECURE_HEADERS, 'content-security-policy': '', 'content-security-policy-report-only': politica },
+        body: 'ok',
+      },
+    })
+
+    expect(codes(outcome.findings)).toEqual(['csp_report_only'])
+    const finding = outcome.findings.find((f) => f.code === 'csp_report_only')
+    expect(finding?.severity).toBe('info')
+    expect(finding?.evidence).toEqual({ policy: politica })
+  })
+
+  it('com a CSP obrigatória, a Report-Only ao lado não abre nada', async () => {
+    const outcome = await run({
+      'https://cliente.pt': {
+        headers: { ...SECURE_HEADERS, 'content-security-policy-report-only': "default-src 'none'" },
+        body: 'ok',
+      },
+    })
+
+    expect(outcome.findings).toEqual([])
+  })
+
   it('aceita frame-ancestors na CSP em vez de X-Frame-Options', async () => {
     const outcome = await run({
       'https://cliente.pt': {

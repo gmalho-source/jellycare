@@ -134,9 +134,25 @@ export const securityHeadersCheck: CheckDefinition<SecurityHeadersConfig> = {
     }
 
     const csp = response.headers.get('content-security-policy')
+    const cspReportOnly = response.headers.get('content-security-policy-report-only')
     const xfo = response.headers.get('x-frame-options')
 
-    if (!ignore.has('missing_csp') && !csp) {
+    // Uma CSP só em Report-Only não bloqueia nada, mas é o primeiro passo certo:
+    // fica uma semana a observar antes de passar a obrigatória. Contá-la como
+    // «falta uma CSP» apagava esse trabalho do painel e do relatório; passa a
+    // um estado próprio, informativo, que fecha quando a CSP fica obrigatória.
+    if (!ignore.has('missing_csp') && !csp && cspReportOnly) {
+      findings.push({
+        code: 'csp_report_only',
+        severity: 'info',
+        title: 'Content-Security-Policy em observação (Report-Only)',
+        detail:
+          'A CSP está publicada em modo Report-Only: o browser só avisa do que bloquearia. ' +
+          'Passa a obrigatória (Content-Security-Policy) depois de uns dias sem avisos nas ' +
+          'páginas principais.',
+        evidence: { policy: cspReportOnly.slice(0, 2000) },
+      })
+    } else if (!ignore.has('missing_csp') && !csp) {
       findings.push({
         code: 'missing_csp',
         severity: 'low',

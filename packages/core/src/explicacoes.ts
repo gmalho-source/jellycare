@@ -190,6 +190,15 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     oQueFazemos:
       'Preparamos a política a partir do que o site usa de verdade e ativamo-la primeiro em modo de observação, para não partir funcionalidades.',
   },
+  csp_report_only: {
+    titulo: 'A política de conteúdo permitido está em observação',
+    oQueE:
+      'A lista de sítios de onde o browser pode carregar scripts e conteúdos já está publicada, mas ainda em modo de observação: o browser avisa do que bloquearia, sem bloquear.',
+    porqueImporta:
+      'É o passo seguro antes de a ativar. Uma política ativada às cegas pode partir funcionalidades do site, como estatísticas, avisos de cookies ou formulários.',
+    oQueFazemos:
+      'Acompanhamos os avisos durante uns dias, acertamos o que faltar e depois ativamo-la a sério. Nessa altura este ponto fecha sozinho.',
+  },
   missing_content_type_options: {
     titulo: 'Falta uma proteção contra ficheiros disfarçados',
     oQueE:
