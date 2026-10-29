@@ -1,4 +1,4 @@
-import { destinatariosDoRelatorio, schema } from '@jellycare/db'
+import { destinatariosDoRelatorio, registarAtividadeSemFalhar, schema } from '@jellycare/db'
 import { and, desc, eq } from 'drizzle-orm'
 import type { EmailMontado } from './aviso-email'
 import { getDb } from './db'
@@ -183,5 +183,25 @@ export async function registarEEnviar(options: {
     .update(schema.clientNotifications)
     .set({ sentAt: new Date() })
     .where(eq(schema.clientNotifications.id, id))
+
+  const [problema] = await db
+    .select({ siteId: schema.findings.siteId, title: schema.findings.title, code: schema.findings.code })
+    .from(schema.findings)
+    .where(eq(schema.findings.id, options.findingId))
+    .limit(1)
+  if (problema) {
+    await registarAtividadeSemFalhar(db, {
+      siteId: problema.siteId,
+      findingId: options.findingId,
+      tipo: 'aviso_ao_cliente',
+      actorId: options.userId,
+      dados: {
+        titulo: problema.title,
+        codigo: problema.code,
+        assunto: options.email.assunto,
+        destinatarios: options.destinatarios.length,
+      },
+    })
+  }
   return { ok: true, id }
 }

@@ -1144,3 +1144,32 @@ export const claudeResolveRequests = pgTable(
   },
   (table) => [uniqueIndex('claude_resolve_requests_finding_idx').on(table.findingId)],
 )
+
+/**
+ * O registo de atividade. Ver `@jellycare/core/atividade`.
+ *
+ * Só se acrescenta. O problema a que uma linha se refere pode ser apagado pela
+ * retenção antes da linha; por isso `set null`, e o título fica guardado nos
+ * dados à data do acontecimento. `actor_id` nulo quer dizer que foi o próprio
+ * Jellycare, numa verificação ou numa tarefa automática.
+ */
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    findingId: uuid('finding_id').references(() => findings.id, { onDelete: 'set null' }),
+    /** Um de `TIPOS_DE_ATIVIDADE`. Texto e não enum: acrescentar um tipo não pede migração. */
+    kind: text('kind').notNull(),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('activity_events_site_idx').on(table.siteId, table.occurredAt),
+    index('activity_events_occurred_idx').on(table.occurredAt),
+    index('activity_events_finding_idx').on(table.findingId),
+  ],
+)

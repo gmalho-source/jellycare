@@ -13,6 +13,7 @@ import {
   parseMaintenanceSchedule,
   parseFormTestUrls,
   parseSiteSettings,
+  registarAtividadeSemFalhar,
   requestReport,
   revokeAccess,
   revokeSession,
@@ -317,7 +318,14 @@ export async function updateFindingState(formData: FormData): Promise<void> {
 
   const db = getDb()
   const rows = await db
-    .select({ siteId: schema.findings.siteId, organizationId: schema.sites.organizationId })
+    .select({
+      siteId: schema.findings.siteId,
+      organizationId: schema.sites.organizationId,
+      state: schema.findings.state,
+      title: schema.findings.title,
+      code: schema.findings.code,
+      severity: schema.findings.severity,
+    })
     .from(schema.findings)
     .innerJoin(schema.sites, eq(schema.sites.id, schema.findings.siteId))
     .where(eq(schema.findings.id, parsed.data.findingId))
@@ -342,6 +350,22 @@ export async function updateFindingState(formData: FormData): Promise<void> {
       acknowledgedAt: reabrir ? null : new Date(),
     })
     .where(eq(schema.findings.id, parsed.data.findingId))
+
+  // Carregar duas vezes no mesmo botão não é atividade nenhuma.
+  if (finding.state !== parsed.data.state) {
+    await registarAtividadeSemFalhar(db, {
+      siteId: finding.siteId,
+      findingId: parsed.data.findingId,
+      tipo:
+        parsed.data.state === 'acknowledged'
+          ? 'problema_reconhecido'
+          : parsed.data.state === 'ignored'
+            ? 'problema_silenciado'
+            : 'problema_reativado',
+      actorId: user.id,
+      dados: { titulo: finding.title, codigo: finding.code, severidade: finding.severity },
+    })
+  }
 
   revalidatePath(`/sites/${finding.siteId}`)
 }

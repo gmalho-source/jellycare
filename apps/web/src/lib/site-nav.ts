@@ -20,6 +20,7 @@ export const SITE_SECTIONS: SiteSection[] = [
   { slug: '', label: 'Visão geral' },
   { slug: 'desempenho', label: 'Desempenho' },
   { slug: 'problemas', label: 'Problemas' },
+  { slug: 'atividade', label: 'Atividade' },
   { slug: 'seguranca', label: 'Verificações' },
   { slug: 'formularios', label: 'Formulários' },
   { slug: 'wordpress', label: 'WordPress', requiresConnector: true },

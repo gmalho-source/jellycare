@@ -347,3 +347,88 @@ describe('reconcileFindings — vários findings no mesmo run', () => {
     expect(result.notifications.map((n) => n.kind).sort()).toEqual(['opened', 'resolved'])
   })
 })
+
+describe('reconcileFindings — eventos para o registo de atividade', () => {
+  const kinds = (result: { events: { kind: string }[] }) => result.events.map((e) => e.kind)
+
+  it('regista a deteção de um problema confirmado, mas não a de um pendente', () => {
+    const confirmado = reconcileFindings({ siteId: SITE, checkType: CHECK, observed: [observed()], existing: [], now: NOW })
+    expect(kinds(confirmado)).toEqual(['detected'])
+
+    const pendente = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [observed()],
+      existing: [],
+      confirmationsRequired: 2,
+      now: NOW,
+    })
+    expect(kinds(pendente)).toEqual([])
+  })
+
+  it('regista a resolução mesmo quando não notifica ninguém', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [stored({ severity: 'low' })],
+      now: NOW,
+    })
+    expect(result.notifications).toEqual([])
+    expect(kinds(result)).toEqual(['resolved'])
+  })
+
+  it('um pendente que desaparece não deixa rasto', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [stored({ state: 'pending', occurrences: 1 })],
+      now: NOW,
+    })
+    expect(kinds(result)).toEqual([])
+  })
+
+  it('regista o agravamento com a gravidade anterior, e a reabertura', () => {
+    const agravou = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [observed({ severity: 'high' })],
+      existing: [stored()],
+      now: NOW,
+    })
+    expect(agravou.events).toEqual([expect.objectContaining({ kind: 'escalated', severity: 'high', previousSeverity: 'medium' })])
+
+    const reabriu = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [observed()],
+      existing: [stored({ state: 'resolved', resolvedAt: new Date('2026-09-15T10:00:00Z') })],
+      now: NOW,
+    })
+    expect(kinds(reabriu)).toEqual(['reopened'])
+  })
+
+  it('um problema silenciado não gera eventos, nem se agravar', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [observed({ severity: 'critical' })],
+      existing: [stored({ state: 'ignored' })],
+      now: NOW,
+    })
+    expect(result.events).toEqual([])
+  })
+
+  it('um run falhado não resolve nada, nem no registo', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [stored()],
+      runSucceeded: false,
+      now: NOW,
+    })
+    expect(result.events).toEqual([])
+  })
+})

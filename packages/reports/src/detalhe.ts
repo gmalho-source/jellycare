@@ -345,6 +345,15 @@ export interface ReportEvent {
   texto: string
 }
 
+/** Uma linha do ciclo de vida de um problema, tirada do registo de atividade. */
+export interface ReportProblemEvent {
+  tipo: 'detetado' | 'voltou' | 'corrigido'
+  quando: Date
+  code: string
+  title: string
+  severity: Severity
+}
+
 export interface TimelineInput {
   period: ReportPeriod
   monitoredFrom: Date | null
@@ -358,6 +367,8 @@ export interface TimelineInput {
   incidents: readonly Incident[]
   updates: readonly { name: string; fromVersion: string | null; toVersion: string | null; orderedAt: Date }[]
   notices: readonly { sentAt: Date; subject: string }[]
+  /** Quando vem, substitui as datas dos problemas. Ver `ReportInput.problemEvents`. */
+  problemEvents?: readonly ReportProblemEvent[]
   mobile: readonly { startedAt: Date; score: number }[]
 }
 
@@ -401,10 +412,21 @@ export function buildTimeline(input: TimelineInput): ReportEvent[] {
     eventos.push({ quando: input.monitoredFrom, texto: 'O site entra em acompanhamento.' })
   }
 
-  for (const grupo of porDia(input.findings.filter((f) => dentro(f.firstSeenAt)), (f) => f.firstSeenAt)) {
+  // Do registo quando o há; das datas de cada problema quando não.
+  const ciclo: readonly ReportProblemEvent[] =
+    input.problemEvents ??
+    input.findings.flatMap((f) => [
+      { tipo: 'detetado' as const, quando: f.firstSeenAt, code: f.code, title: f.title, severity: f.severity },
+      ...(f.resolvedAt
+        ? [{ tipo: 'corrigido' as const, quando: f.resolvedAt, code: f.code, title: f.title, severity: f.severity }]
+        : []),
+    ])
+  const doTipo = (tipo: ReportProblemEvent['tipo']) => ciclo.filter((e) => e.tipo === tipo && dentro(e.quando))
+
+  for (const grupo of porDia(doTipo('detetado'), (e) => e.quando)) {
     const graves = grupo.filter((f) => f.severity === 'critical' || f.severity === 'high').length
     eventos.push({
-      quando: grupo[0]!.firstSeenAt,
+      quando: grupo[0]!.quando,
       texto:
         grupo.length === 1
           ? `Detetado: ${titulo(grupo[0]!).toLowerCase()}.`
@@ -412,9 +434,19 @@ export function buildTimeline(input: TimelineInput): ReportEvent[] {
     })
   }
 
-  for (const grupo of porDia(input.findings.filter((f) => dentro(f.resolvedAt)), (f) => f.resolvedAt!)) {
+  for (const grupo of porDia(doTipo('voltou'), (e) => e.quando)) {
     eventos.push({
-      quando: grupo[0]!.resolvedAt!,
+      quando: grupo[0]!.quando,
+      texto:
+        grupo.length === 1
+          ? `Voltou a aparecer: ${titulo(grupo[0]!).toLowerCase()}.`
+          : `${grupo.length} pontos voltaram a aparecer: ${lista(grupo.map((f) => titulo(f).toLowerCase()))}.`,
+    })
+  }
+
+  for (const grupo of porDia(doTipo('corrigido'), (e) => e.quando)) {
+    eventos.push({
+      quando: grupo[0]!.quando,
       texto:
         grupo.length === 1
           ? `Corrigido: ${titulo(grupo[0]!).toLowerCase()}.`

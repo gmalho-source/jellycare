@@ -1465,6 +1465,15 @@ describeE2E('fluxo de entrada e painel', () => {
     expect(await ligacao.getAttribute('href')).toBe(`https://github.com/${repo}/issues/42`)
     expect(await linhaDe(`Falta HSTS ${marca}`).locator('button:has-text("Claude Resolve")').count()).toBe(0)
     expect(pedidosAoGitHub.filter((pedido) => pedido.url === `/repos/${repo}/issues`)).toHaveLength(1)
+
+    // E fica no registo de atividade da equipa, com a ligação para a issue.
+    await equipa.goto(`${baseUrl}/atividade?tipo=equipa`)
+    const registo = equipa.locator('[data-atividade="claude_resolve_pedido"]', { hasText: `Falta HSTS ${marca}` })
+    await registo.waitFor()
+    expect(await registo.innerText()).toContain('issue #42')
+    expect(await registo.locator('a:has-text("ver issue")').getAttribute('href')).toBe(
+      `https://github.com/${repo}/issues/42`,
+    )
     await equipa.close()
   }, 180_000)
 
@@ -1518,6 +1527,20 @@ describeE2E('fluxo de entrada e painel', () => {
       .locator('button:has-text("Reativar")')
       .click()
     await equipa.waitForSelector(`li:has-text("Cabeçalho de teste ${marca}") button:has-text("Silenciar")`)
+
+    // As duas ações ficam no registo do site, com quem as fez.
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/atividade`)
+    const silenciado = equipa.locator('[data-atividade="problema_silenciado"]', { hasText: `Cabeçalho de teste ${marca}` })
+    await silenciado.waitFor()
+    expect(await silenciado.innerText()).toContain(email)
+    expect(
+      await equipa.locator('[data-atividade="problema_reativado"]', { hasText: `Cabeçalho de teste ${marca}` }).count(),
+    ).toBe(1)
+
+    // Mas não no portal: o cliente não vê quem silenciou o quê.
+    await equipa.goto(`${baseUrl}/portal/sites/${siteVerificado}/atividade`)
+    await equipa.waitForSelector('[data-resumo-de-atividade]')
+    expect(await equipa.locator(`text=Cabeçalho de teste ${marca}`).count()).toBe(0)
     await equipa.close()
 
     // E voltou mesmo ao estado aberto, com o carimbo de quem o silenciou

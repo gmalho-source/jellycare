@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, lt, or, sql } from 'drizzle-orm'
 import type { Database } from './client.js'
 import {
+  activityEvents,
   checkRuns,
   findings,
   formRuns,
@@ -43,6 +44,7 @@ export interface RetentionOutcome {
   formRuns: number
   notificationDeliveries: number
   resolvedFindings: number
+  activityEvents: number
   reports: number
   loginTokens: number
   sessions: number
@@ -114,6 +116,11 @@ export async function applyRetention(
       ),
   )
 
+  // O registo de atividade vive o mesmo que os relatórios que o contam.
+  const deletedActivity = await deleteCount(
+    db.delete(activityEvents).where(lt(activityEvents.occurredAt, aggregateCutoff)),
+  )
+
   const deletedReports = await deleteCount(
     db.delete(reports).where(lt(reports.generatedAt, aggregateCutoff)),
   )
@@ -136,6 +143,7 @@ export async function applyRetention(
     formRuns: deletedFormRuns,
     notificationDeliveries: deletedDeliveries,
     resolvedFindings: deletedFindings,
+    activityEvents: deletedActivity,
     reports: deletedReports,
     loginTokens: deletedTokens,
     sessions: deletedSessions,

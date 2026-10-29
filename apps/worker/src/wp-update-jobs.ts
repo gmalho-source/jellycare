@@ -1,6 +1,6 @@
 import type { CheckOutcome, ObservedFinding, Site } from '@jellycare/core'
 import { WpUmbrellaClient, WpUmbrellaError } from '@jellycare/connectors'
-import { isInAnyMaintenanceWindow, schema, type Database } from '@jellycare/db'
+import { isInAnyMaintenanceWindow, registarAtividadeSemFalhar, schema, type Database } from '@jellycare/db'
 import { and, desc, eq, inArray } from 'drizzle-orm'
 
 /**
@@ -396,6 +396,24 @@ export async function reconcilePending(
       })
       .where(eq(schema.wpUpdates.id, linha.id))
     fechados++
+
+    // `unknown` não entra no registo: não se sabe se aconteceu alguma coisa.
+    if (novo !== 'unknown') {
+      await registarAtividadeSemFalhar(db, {
+        siteId,
+        tipo: novo === 'succeeded' ? 'wp_atualizado' : 'wp_atualizacao_falhou',
+        quando: now,
+        dados: {
+          componente: {
+            tipo: linha.kind,
+            nome: linha.name,
+            de: linha.fromVersion,
+            para: linha.toVersion,
+            vulneravel: linha.vulnerable,
+          },
+        },
+      })
+    }
   }
 
   return fechados

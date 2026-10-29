@@ -15,6 +15,7 @@ import {
   type ReportCheckItem,
   type ReportDay,
   type ReportEvent,
+  type ReportProblemEvent,
 } from './detalhe.js'
 import { includedSections, type ReportSectionKey } from './sections.js'
 import { summariseUptime, type UptimeSample, type UptimeSummary } from './uptime.js'
@@ -115,6 +116,15 @@ export interface ReportInput {
   monitoredFrom?: Date
   /** Avisos enviados ao cliente no período, para o registo de atividade. */
   notices?: readonly { sentAt: Date; subject: string }[]
+  /**
+   * O ciclo de vida dos problemas no período, do registo de atividade.
+   *
+   * Quando vem, é daqui que saem as linhas de detetado, voltou e corrigido, e
+   * não das datas de cada problema: essas guardam só a última volta, e um
+   * problema que se corrigiu, voltou e se corrigiu outra vez no mesmo mês
+   * contava uma vez só.
+   */
+  problemEvents?: readonly ReportProblemEvent[]
 }
 
 export interface PageSpeedStrategySummary {
@@ -603,6 +613,7 @@ export function buildReport(input: ReportInput): ReportData {
       incidents: uptime.incidents,
       updates: wordpress?.updatesApplied ?? [],
       notices: input.notices ?? [],
+      ...(input.problemEvents ? { problemEvents: input.problemEvents } : {}),
       mobile: performance.mobile?.series ?? [],
     }),
     summary: buildSummary(uptime, findings, forms, pedidos),
@@ -612,3 +623,4 @@ export function buildReport(input: ReportInput): ReportData {
 }
 
 export { formatDuration, formatPercent }
+export type { ReportProblemEvent }

@@ -27,6 +27,7 @@ import { signOut } from '../(app)/actions'
 const SECCOES = [
   { slug: '', label: 'Visão geral', icone: 'geral' },
   { slug: 'desempenho', label: 'Desempenho', icone: 'desempenho' },
+  { slug: 'atividade', label: 'Atividade', icone: 'atividade' },
   { slug: 'relatorios', label: 'Relatórios', icone: 'relatorios' },
 ]
 

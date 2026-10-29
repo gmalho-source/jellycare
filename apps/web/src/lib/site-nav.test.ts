@@ -24,6 +24,7 @@ describe('sectionsFor', () => {
       '',
       'desempenho',
       'problemas',
+      'atividade',
       'seguranca',
       'formularios',
       'relatorios',

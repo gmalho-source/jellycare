@@ -141,6 +141,13 @@
       "when": 1793263714534,
       "tag": "0019_bright_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793292242011,
+      "tag": "0020_strong_patriot",
+      "breakpoints": true
     }
   ]
 }
