@@ -73,6 +73,31 @@ async function freePort(): Promise<number> {
  * Guarda os corpos recebidos, que é como se afirma o que foi mesmo enviado
  * para fora.
  */
+/**
+ * Um GitHub falso, só com o que o Claude Resolve usa: abrir uma issue.
+ * Guarda os pedidos, para o teste confirmar o que foi enviado e com que token.
+ */
+function githubFalso() {
+  const recebidos: { url: string; autorizacao: string; corpo: Record<string, unknown> }[] = []
+  const servidor = createHttpServer((pedido, resultado) => {
+    let corpo = ''
+    pedido.on('data', (pedaco) => {
+      corpo += pedaco
+    })
+    pedido.on('end', () => {
+      recebidos.push({
+        url: pedido.url ?? '',
+        autorizacao: String(pedido.headers.authorization ?? ''),
+        corpo: JSON.parse(corpo || '{}'),
+      })
+      const repo = /^\/repos\/([^/]+\/[^/]+)\/issues$/.exec(pedido.url ?? '')?.[1]
+      resultado.writeHead(201, { 'content-type': 'application/json' })
+      resultado.end(JSON.stringify({ number: 42, html_url: `https://github.com/${repo}/issues/42` }))
+    })
+  })
+  return { servidor, recebidos }
+}
+
 function anthropicFalso(resposta: string) {
   const recebidos: Record<string, unknown>[] = []
   const servidor = createHttpServer((pedido, resultado) => {
@@ -165,6 +190,8 @@ describeE2E('fluxo de entrada e painel', () => {
   let logBuffer = ''
   let siteId: string
   let anthropic: Server
+  let github: Server
+  let pedidosAoGitHub: ReturnType<typeof githubFalso>['recebidos']
   let pedidosAoModelo: Record<string, unknown>[]
 
   const email = `e2e-${Date.now()}@jelly.pt`
@@ -464,6 +491,14 @@ describeE2E('fluxo de entrada e painel', () => {
       process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${porta}`
       process.env.ANTHROPIC_API_KEY = 'chave-de-teste'
     }
+    {
+      const falso = githubFalso()
+      github = falso.servidor
+      pedidosAoGitHub = falso.recebidos
+      const porta = await freePort()
+      await new Promise<void>((resolve) => github.listen(porta, '127.0.0.1', resolve))
+      process.env.GITHUB_API_URL = `http://127.0.0.1:${porta}`
+    }
 
     const port = await freePort()
     // `localhost` em ambos os lados: o cookie de sessão é por host, e servir em
@@ -477,6 +512,8 @@ describeE2E('fluxo de entrada e painel', () => {
         DATABASE_URL: DATABASE_URL as string,
         JELLYCARE_APP_URL: baseUrl,
         ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL as string,
+        GITHUB_API_URL: process.env.GITHUB_API_URL as string,
+        GITHUB_RESOLVE_TOKEN: 'token-github-de-teste',
         ANTHROPIC_API_KEY: 'chave-de-teste',
         CANARY_INBOX_WEBHOOK_SECRET: INBOX_SECRET,
         // Sem chave de email, a ligação de entrada é escrita na consola — é
@@ -516,6 +553,7 @@ describeE2E('fluxo de entrada e painel', () => {
     await browser?.close()
     child?.kill('SIGTERM')
     await new Promise<void>((resolve) => anthropic?.close(() => resolve()))
+    await new Promise<void>((resolve) => github?.close(() => resolve()))
   })
 
   /**
@@ -1350,6 +1388,84 @@ describeE2E('fluxo de entrada e painel', () => {
     await fora.goto(`${baseUrl}/sites/${siteDeOutroCliente}`)
     expect(fora.url()).not.toContain(siteDeOutroCliente)
     await fora.close()
+  }, 180_000)
+
+  it('Claude Resolve: liga o repositório e leva o problema ao GitHub como issue', async () => {
+    const marca = Date.now()
+    const daEquipa = `resolve-${marca}@jelly.pt`
+    const repo = `jelly-pt/site-e2e-${marca}`
+    let elegivel: string
+    {
+      const { db, close } = createDatabase({ url: DATABASE_URL as string, maxConnections: 2 })
+      try {
+        await db.insert(schema.users).values({ email: daEquipa, isStaff: true })
+        const base = {
+          siteId: siteVerificado,
+          severity: 'medium' as const,
+          state: 'open' as const,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        }
+        const [hsts] = await db
+          .insert(schema.findings)
+          .values({ ...base, checkType: 'security_headers', code: 'missing_hsts', fingerprint: `hsts-${marca}`, title: `Falta HSTS ${marca}` })
+          .returning({ id: schema.findings.id })
+        elegivel = hsts!.id
+        await db.insert(schema.findings).values({
+          ...base,
+          checkType: 'exposed_files',
+          code: 'exposed_env',
+          fingerprint: `env-${marca}`,
+          title: `Ficheiro exposto ${marca}`,
+        })
+      } finally {
+        await close()
+      }
+    }
+
+    // Quem é da equipa da organização, mas não da Equipa Jelly, não vê nada.
+    const membro = await entrarComo(email)
+    await membro.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    await membro.waitForSelector(`text=Falta HSTS ${marca}`)
+    expect(await membro.locator('[data-claude-resolve], button:has-text("Claude Resolve")').count()).toBe(0)
+    await membro.close()
+
+    const equipa = await entrarComo(daEquipa)
+    const linhaDe = (titulo: string) => equipa.locator('li', { hasText: titulo }).last()
+
+    // Sem repositório, o problema elegível aponta para as definições; o que
+    // não tem procedimento não mostra nada.
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    await equipa.waitForSelector(`text=Falta HSTS ${marca}`)
+    expect(await linhaDe(`Falta HSTS ${marca}`).locator('[data-claude-resolve="sem-repositorio"]').count()).toBe(1)
+    expect(await linhaDe(`Ficheiro exposto ${marca}`).locator('text=Claude Resolve').count()).toBe(0)
+
+    // Ligar o repositório, colado como URL, que fica guardado como dono/nome.
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/definicoes`)
+    await equipa.fill('input[name="repo"]', `https://github.com/${repo}.git`)
+    await equipa.locator('#claude-resolve button:has-text("Guardar")').click()
+    await equipa.waitForSelector(`text=Ligado a ${repo}`)
+
+    // E enviar o problema.
+    await equipa.goto(`${baseUrl}/sites/${siteVerificado}/problemas`)
+    await linhaDe(`Falta HSTS ${marca}`).locator('button:has-text("Claude Resolve")').click()
+    // O painel refaz a lista com a ligação para a issue no lugar do botão.
+    await linhaDe(`Falta HSTS ${marca}`).locator('[data-claude-resolve="enviado"]').waitFor()
+
+    const enviado = pedidosAoGitHub.find((pedido) => pedido.url === `/repos/${repo}/issues`)
+    expect(enviado?.autorizacao).toBe('Bearer token-github-de-teste')
+    expect(enviado?.corpo.labels).toEqual(['claude-resolve'])
+    expect(String(enviado?.corpo.body)).toContain('`missing_hsts`')
+    expect(String(enviado?.corpo.body)).toContain(`jellycare:finding=${elegivel}`)
+
+    // Depois de recarregar, a ligação para a issue fica no lugar do botão, e
+    // um segundo clique não é possível.
+    await equipa.reload()
+    const ligacao = linhaDe(`Falta HSTS ${marca}`).locator('[data-claude-resolve="enviado"]')
+    expect(await ligacao.getAttribute('href')).toBe(`https://github.com/${repo}/issues/42`)
+    expect(await linhaDe(`Falta HSTS ${marca}`).locator('button:has-text("Claude Resolve")').count()).toBe(0)
+    expect(pedidosAoGitHub.filter((pedido) => pedido.url === `/repos/${repo}/issues`)).toHaveLength(1)
+    await equipa.close()
   }, 180_000)
 
   it('silenciar deixa de ser uma porta sem volta', async () => {

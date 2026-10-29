@@ -165,6 +165,12 @@ export const sites = pgTable(
     /** Quem recebe o relatório mensal deste site. */
     reportRecipients: jsonb('report_recipients').$type<string[]>().notNull().default([]),
     /**
+     * O repositório do site no GitHub, `dono/nome`, para o Claude Resolve.
+     * Um por site: as credenciais e o código de um cliente nunca ficam ao
+     * alcance de uma sessão que trata de outro.
+     */
+    githubRepo: text('github_repo'),
+    /**
      * Os módulos do relatório que ficam de fora para este cliente.
      *
      * Guarda-se o que sai e não o que entra, de propósito: um módulo novo
@@ -1111,4 +1117,30 @@ export const organizationContacts = pgTable(
       sql`not ${table.receivesReports} or ${table.email} is not null`,
     ),
   ],
+)
+
+/**
+ * Pedidos ao Claude Resolve: um problema enviado para o repositório do site,
+ * como issue, para o Claude preparar a correção num pull request.
+ *
+ * Um por problema. A linha nasce antes da issue, para dois cliques seguidos
+ * não abrirem duas; se o GitHub recusar, é apagada e o botão volta.
+ */
+export const claudeResolveRequests = pgTable(
+  'claude_resolve_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => findings.id, { onDelete: 'cascade' }),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    repo: text('repo').notNull(),
+    issueNumber: integer('issue_number'),
+    issueUrl: text('issue_url'),
+    requestedBy: uuid('requested_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('claude_resolve_requests_finding_idx').on(table.findingId)],
 )

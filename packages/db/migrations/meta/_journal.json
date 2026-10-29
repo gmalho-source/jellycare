@@ -134,6 +134,13 @@
       "when": 1790929966886,
       "tag": "0018_curvy_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793263714534,
+      "tag": "0019_bright_lockjaw",
+      "breakpoints": true
     }
   ]
 }

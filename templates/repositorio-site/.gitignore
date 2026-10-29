@@ -1,0 +1,10 @@
+# Nada de segredos neste repositório.
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+wp-config.php
+*.sql
+*.sql.gz
