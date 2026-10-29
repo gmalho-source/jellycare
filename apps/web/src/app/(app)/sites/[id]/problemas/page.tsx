@@ -1,10 +1,16 @@
+import { familiaClaudeResolve } from '@jellycare/core'
+import { pedidosAoClaudeDoSite, schema } from '@jellycare/db'
+import { eq } from 'drizzle-orm'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Icone } from '@/components/icons'
 import { Card, CardHeader, EmptyState, SeverityBadge, formatRelative } from '@/components/ui'
+import { getDb } from '@/lib/db'
 import { getSiteFindings } from '@/lib/queries'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import { updateFindingState } from '../../../actions'
 import { Apoio } from './apoio'
+import { BotaoClaudeResolve } from './claude-resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +24,13 @@ export default async function ProblemasPage({ params }: { params: Promise<{ id: 
   if (!detail) notFound()
   assertMembership(user, detail.organizationId)
   const manageable = canManage(user, detail.organizationId)
+
+  // O Claude Resolve é só da Equipa Jelly, e só nos problemas que já têm
+  // procedimento escrito no repositório-modelo.
+  const [site] = user.isStaff
+    ? await getDb().select({ githubRepo: schema.sites.githubRepo }).from(schema.sites).where(eq(schema.sites.id, id))
+    : []
+  const pedidos = user.isStaff ? await pedidosAoClaudeDoSite(getDb(), id) : new Map()
 
   return (
     <>
@@ -43,6 +56,14 @@ export default async function ProblemasPage({ params }: { params: Promise<{ id: 
                   acoes={
                     manageable ? (
                       <>
+                        {user.isStaff && familiaClaudeResolve(finding.code) ? (
+                          <ClaudeResolve
+                            siteId={id}
+                            findingId={finding.id}
+                            repo={site?.githubRepo ?? null}
+                            pedido={pedidos.get(finding.id)}
+                          />
+                        ) : null}
                         {finding.state !== 'acknowledged' && (
                           <form action={updateFindingState}>
                             <input type="hidden" name="findingId" value={finding.id} />
@@ -164,4 +185,43 @@ export default async function ProblemasPage({ params }: { params: Promise<{ id: 
       )}
     </>
   )
+}
+
+/**
+ * O lugar do Claude Resolve num problema: a ligação para a issue já aberta,
+ * o botão, ou o caminho para ligar o repositório.
+ */
+function ClaudeResolve({
+  siteId,
+  findingId,
+  repo,
+  pedido,
+}: {
+  siteId: string
+  findingId: string
+  repo: string | null
+  pedido: { issueNumber: number | null; issueUrl: string | null } | undefined
+}) {
+  if (pedido?.issueUrl) {
+    return (
+      <a
+        href={pedido.issueUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={`${BOTAO} text-ink-900`}
+        data-claude-resolve="enviado"
+      >
+        Claude Resolve · issue #{pedido.issueNumber}
+      </a>
+    )
+  }
+  if (pedido) return <span className="text-xs text-ink-400">Claude Resolve · a enviar…</span>
+  if (!repo) {
+    return (
+      <Link href={`/sites/${siteId}/definicoes#claude-resolve`} className={BOTAO} data-claude-resolve="sem-repositorio">
+        Ligar repositório para o Claude Resolve
+      </Link>
+    )
+  }
+  return <BotaoClaudeResolve findingId={findingId} />
 }

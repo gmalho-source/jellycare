@@ -170,6 +170,20 @@ de um domínio verificado no Resend, senão o envio é recusado e fica registado
 como falhado. Ver `docs/assistente.md` para o que vai no
 contexto, quanto custa, e a nota sobre subcontratantes.
 
+### 3c. Claude Resolve (GitHub)
+
+Token com que o botão «Claude Resolve» abre issues nos repositórios dos sites.
+Fine-grained personal access token de uma pessoa da equipa (não de um bot: o
+workflow ignora issues abertas por bots), na organização dos repositórios,
+com acesso só aos `site-*` e só à permissão **Issues: Read and write**.
+
+```
+fly secrets set GITHUB_RESOLVE_TOKEN=... -a jellycare-web
+```
+
+Sem o token, o botão continua à vista e diz a razão. Ver
+`docs/claude-resolve.md` para o resto da montagem.
+
 ### 4. Resend
 
 Adicionar `jellycare.pt` como domínio de envio e publicar os registos DNS que o

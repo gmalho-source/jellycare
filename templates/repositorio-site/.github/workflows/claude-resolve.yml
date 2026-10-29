@@ -1,0 +1,52 @@
+# Claude Resolve
+#
+# O Jellycare abre uma issue com a etiqueta `claude-resolve`; o Claude lê-a,
+# confirma o problema de fora e prepara a correção num pull request. Uma pessoa
+# da Jelly revê e aplica. A equipa pode pedir mais com `@claude` na issue ou no
+# pull request.
+#
+# Segredos deste repositório: só ANTHROPIC_API_KEY. Nenhuma credencial do site.
+
+name: Claude Resolve
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: claude-resolve-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  claude:
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'claude-resolve') ||
+      (github.event_name != 'issues' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Ferramentas de diagnóstico
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          label_trigger: claude-resolve
+          trigger_phrase: '@claude'
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(curl:*),Bash(dig:*),Bash(git:*),Bash(ls:*),Bash(cat:*)"

@@ -14,6 +14,8 @@ import { listUmbrellaProjects, projectsForHostname } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import Link from 'next/link'
 import { MoverSite } from '../../../organizacoes/formularios'
+import { claudeResolveConfigurado } from '@/lib/claude-resolve'
+import { RepositorioDoSite } from '../problemas/claude-resolve'
 import { AccessPanel } from '../access-panel'
 import { DangerPanel } from '../danger-panel'
 import { LegalPanel } from '../legal-panel'
@@ -114,6 +116,17 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
           <p className="px-5 py-4 text-sm text-ink-600">{daOrganizacao?.name}</p>
         )}
       </Card>
+
+      {user.isStaff ? (
+        <Card id="claude-resolve">
+          <CardHeader title="Claude Resolve" />
+          <RepositorioDoSite
+            siteId={detail.site.id}
+            repo={detail.site.githubRepo}
+            configurado={claudeResolveConfigurado()}
+          />
+        </Card>
+      ) : null}
 
       {manageable ? (
         <Card>

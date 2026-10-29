@@ -1,0 +1,36 @@
+# Ficha do site. Lida pelo Claude antes de qualquer trabalho.
+#
+# SEM SEGREDOS. Palavras-passe, chaves de API e chaves SSH nunca entram neste
+# ficheiro nem em nenhum outro do repositório. Ver docs/acessos.md.
+
+site:
+  nome: ""                 # ex.: ACPA
+  url: "https://"          # o endereço público, como no Jellycare
+  jellycare: ""            # ligação para o site no Jellycare
+
+plataforma: wordpress      # wordpress | nextjs | estatico | shopify | webflow | wix | outro
+codigo_neste_repositorio: false   # true quando o código do site estiver em site/
+
+alojamento:
+  fornecedor: ""           # ex.: cPanel na PTisp, Plesk, Kinsta, Vercel, Netlify
+  servidor_web: apache     # apache | litespeed | nginx | iis | vercel | netlify | gerido | desconhecido
+  acesso: painel           # ssh | painel | api | nenhum — como a equipa entra para aplicar
+  cloudflare: false        # o tráfego passa pelo Cloudflare (proxy laranja)?
+
+dns:
+  fornecedor: ""           # ex.: Cloudflare, PTisp, GoDaddy, o próprio alojamento
+
+email:
+  fornecedor: ""           # ex.: Google Workspace, Microsoft 365, o alojamento
+  # Serviços que enviam email em nome do domínio. Esquecer um aqui é a forma
+  # mais rápida de um SPF ou DMARC novo mandar emails verdadeiros para o spam.
+  envia_tambem: []         # ex.: [Mailchimp, Brevo, formulários do site, faturação]
+
+wordpress:
+  wp_umbrella: true        # ligado à WP Umbrella pelo Jellycare
+  plugins_criticos: []     # ex.: [woocommerce, wpml] — atualizar um de cada vez, com cópia antes
+  staging: false           # há uma cópia de testes?
+
+manutencao:
+  janela: ""               # ex.: terças, 22h–24h (Lisboa) — mudanças só aqui
+  contacto_tecnico: ""     # nome e função do lado do cliente, sem telefone nem email
