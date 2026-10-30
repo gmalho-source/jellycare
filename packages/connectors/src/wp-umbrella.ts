@@ -165,6 +165,20 @@ function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/** Pedido por página. A API respeita-o; o que vier a menos não quer dizer que acabou. */
+const POR_PAGINA = 100
+
+/** O número da página num URL de paginação, ou `null` se não houver. */
+function paginaDe(url: unknown): number | null {
+  if (typeof url !== 'string') return null
+  try {
+    const page = Number(new URL(url).searchParams.get('page'))
+    return Number.isInteger(page) && page > 0 ? page : null
+  } catch {
+    return null
+  }
+}
+
 function rows(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object') : []
 }
@@ -250,10 +264,15 @@ export class WpUmbrellaClient {
   }
 
   /** A frota inteira. Traz já plugins e temas embutidos, mas sem paginação. */
+  /**
+   * Todos os projetos da conta.
+   *
+   * Paginado como o resto, embora a especificação não o diga: sem `page`, a
+   * API devolve os dez primeiros e cala-se sobre o resto. Com mais de dez
+   * sites na WP Umbrella, os que ficavam de fora não apareciam para ligar.
+   */
   async listProjects(): Promise<UmbrellaProject[]> {
-    const payload = (await this.get('/projects')) as { data?: unknown }
-
-    return rows(payload?.data).map((row) => {
+    return this.paginate('/projects', (row) => {
       const connectivity = row.connectivity as Record<string, unknown> | undefined
       return {
         id: Number(row.id),
@@ -541,7 +560,7 @@ export class WpUmbrellaClient {
     }
   }
 
-  /** Limite de páginas, para um `next` que aponte a si próprio não nos prender. */
+  /** Limite de páginas, para uma paginação que nunca acaba não nos prender. */
   private static readonly MAX_PAGES = 20
 
   private async paginate<T>(
@@ -549,24 +568,37 @@ export class WpUmbrellaClient {
     map: (row: Record<string, unknown>) => T,
   ): Promise<T[]> {
     const out: T[] = []
-    let page = 1
+    let anterior: string | null = null
 
-    while (page <= WpUmbrellaClient.MAX_PAGES) {
+    for (let page = 1; page <= WpUmbrellaClient.MAX_PAGES; page++) {
       const separator = path.includes('?') ? '&' : '?'
-      const payload = (await this.get(`${path}${separator}page=${page}&per_page=100`)) as {
+      const payload = (await this.get(`${path}${separator}page=${page}&per_page=${POR_PAGINA}`)) as {
         data?: unknown
+        links?: { pagination?: { last?: unknown } }
       }
 
       const batch = rows(payload?.data)
+      if (batch.length === 0) break
+
+      // Um servidor que ignore `page` devolve a mesma página outra vez; contá-la
+      // duas vezes inventava plugins.
+      const assinatura = JSON.stringify(batch[0])
+      if (assinatura === anterior) break
+      anterior = assinatura
+
       out.push(...batch.map(map))
 
-      // Sem `per_page` cheio, não há mais nada para trás. É mais robusto do
-      // que confiar nos links de paginação, que no exemplo da especificação
-      // apontam `first` e `last` para a mesma página.
-      if (batch.length < 100) break
-      page++
+      // Há mais quando a página veio cheia, ou quando a ligação para a última
+      // página aponta para depois desta. As duas coisas, porque nenhuma chega
+      // sozinha: um servidor que limite o tamanho abaixo do pedido devolve
+      // páginas «incompletas» que não são a última, e no exemplo da
+      // especificação a ligação para a última aponta para a primeira.
+      const ultima = paginaDe(payload?.links?.pagination?.last)
+      const haMais = batch.length >= POR_PAGINA || (ultima !== null && ultima > page)
+      if (!haMais) break
     }
 
     return out
   }
+
 }

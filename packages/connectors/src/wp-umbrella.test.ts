@@ -337,6 +337,86 @@ describe('paginação', () => {
   })
 })
 
+describe('paginação dos projetos', () => {
+  function servidor(total: number, porPagina: number, registo: string[]) {
+    return (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      registo.push(url.pathname + url.search)
+      const page = Number(url.searchParams.get('page') ?? '1')
+      const ultima = Math.max(1, Math.ceil(total / porPagina))
+      const inicio = (page - 1) * porPagina
+      const data = Array.from({ length: Math.max(0, Math.min(porPagina, total - inicio)) }, (_, i) => ({
+        id: inicio + i + 1,
+        name: `Projeto ${inicio + i + 1}`,
+        base_url: `https://site${inicio + i + 1}.pt`,
+      }))
+      const corpo = {
+        code: 'success',
+        data,
+        links: {
+          pagination: {
+            first: `https://api.exemplo/projects?page=1&per_page=${porPagina}`,
+            last: `https://api.exemplo/projects?page=${ultima}&per_page=${porPagina}`,
+          },
+        },
+      }
+      return new Response(JSON.stringify(corpo), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof globalThis.fetch
+  }
+
+  it('lê todos os projetos, mesmo quando a API os dá de dez em dez', async () => {
+    // Foi o que aconteceu: 24 projetos na conta, o painel só via os 10 primeiros.
+    const registo: string[] = []
+    const projetos = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      baseUrl: 'https://api.exemplo',
+      fetchImpl: servidor(24, 10, registo),
+    }).listProjects()
+
+    expect(projetos).toHaveLength(24)
+    expect(projetos.at(-1)?.baseUrl).toBe('https://site24.pt')
+    expect(registo).toEqual([
+      '/projects?page=1&per_page=100',
+      '/projects?page=2&per_page=100',
+      '/projects?page=3&per_page=100',
+    ])
+  })
+
+  it('pára numa página só quando a API respeita o tamanho pedido', async () => {
+    const registo: string[] = []
+    const projetos = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      baseUrl: 'https://api.exemplo',
+      fetchImpl: servidor(24, 100, registo),
+    }).listProjects()
+
+    expect(projetos).toHaveLength(24)
+    expect(registo).toEqual(['/projects?page=1&per_page=100'])
+  })
+
+  it('não conta duas vezes uma página repetida por um servidor que ignore `page`', async () => {
+    const registo: string[] = []
+    const sempreIgual = (async (input: RequestInfo | URL) => {
+      registo.push(new URL(String(input)).search)
+      const corpo = {
+        code: 'success',
+        data: Array.from({ length: 10 }, (_, i) => ({ id: i + 1, name: `P${i}`, base_url: `https://p${i}.pt` })),
+        links: { pagination: { last: 'https://api.exemplo/projects?page=5' } },
+      }
+      return new Response(JSON.stringify(corpo), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof globalThis.fetch
+
+    const projetos = await new WpUmbrellaClient({
+      token: 'token-de-teste',
+      baseUrl: 'https://api.exemplo',
+      fetchImpl: sempreIgual,
+    }).listProjects()
+
+    expect(projetos).toHaveLength(10)
+    expect(registo).toHaveLength(2)
+  })
+})
+
 describe('erros', () => {
   it('diz o que fazer quando as credenciais são recusadas', async () => {
     const mau = new WpUmbrellaClient({
