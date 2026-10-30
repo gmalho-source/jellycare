@@ -10,7 +10,7 @@ import { Card, CardHeader } from '@/components/ui'
 import { getDb } from '@/lib/db'
 import { getLegalState } from '@/lib/legal'
 import { getSiteDetail } from '@/lib/queries'
-import { listUmbrellaProjects, projectsForHostname } from '@/lib/umbrella'
+import { listUmbrellaProjects, projectsForHostname, similarProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import Link from 'next/link'
 import { MoverSite } from '../../../organizacoes/formularios'
@@ -89,6 +89,12 @@ export default async function DefinicoesPage({ params }: { params: Promise<{ id:
               connectivity: project.connectivity,
             }))}
             {...(umbrella.unavailable ? { unavailable: umbrella.unavailable } : {})}
+            hostname={detail.site.hostname}
+            totalProjects={umbrella.projects.length}
+            similar={similarProjects(umbrella.projects, detail.site.hostname).map((project) => ({
+              name: project.name,
+              baseUrl: project.baseUrl,
+            }))}
             canManage={manageable}
           />
         </Card>
