@@ -30,6 +30,27 @@ export function projectsForHostname(
   return projects.filter((project) => projectMatchesHostname(project.baseUrl, hostname))
 }
 
+/**
+ * Projetos que não são deste site mas se parecem com ele: o mesmo nome de
+ * domínio noutro sufixo, um subdomínio, um endereço provisório do alojamento.
+ *
+ * Não servem para ligar — o servidor recusa — mas servem para explicar porque
+ * é que a lista veio vazia. Sem isto, quem procura o projeto vê só «Não
+ * ligado» e não tem por onde perceber que o endereço na WP Umbrella é outro.
+ */
+export function similarProjects(
+  projects: readonly UmbrellaProject[],
+  hostname: string,
+): UmbrellaProject[] {
+  const site = hostSemWww(hostname)
+  const nome = site.split('.')[0] ?? ''
+  if (nome.length < 3) return []
+  return projects.filter((project) => {
+    if (projectMatchesHostname(project.baseUrl, hostname)) return false
+    return project.baseUrl.toLowerCase().includes(nome) || project.name.toLowerCase().includes(nome)
+  })
+}
+
 /** Porque é que a lista não pode ser pedida, quando a causa é a configuração. */
 export function umbrellaNotConfiguredReason(): string | undefined {
   if (process.env.WP_UMBRELLA_TOKEN) return undefined

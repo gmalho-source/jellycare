@@ -27,12 +27,19 @@ export function UmbrellaLink({
   linkedId,
   options,
   unavailable,
+  hostname,
+  totalProjects,
+  similar = [],
   canManage,
 }: {
   siteId: string
   linkedId: string | null
   options: UmbrellaOption[]
   unavailable?: string
+  /** Para explicar uma lista vazia. Ver `similarProjects`. */
+  hostname?: string
+  totalProjects?: number
+  similar?: { name: string; baseUrl: string }[]
   canManage: boolean
 }) {
   const [state, action, pending] = useActionState<ConnectorState, FormData>(
@@ -94,6 +101,35 @@ export function UmbrellaLink({
               {pending ? 'A guardar…' : 'Guardar'}
             </button>
           </div>
+
+          {options.length === 0 && hostname ? (
+            <div className="mt-2 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-600" data-umbrella-sem-projeto>
+              <p>
+                Nenhum dos {totalProjects ?? 0} projetos da WP Umbrella tem o endereço {hostname}. O projeto tem de
+                estar lá registado com este endereço (com ou sem www).
+              </p>
+              {similar.length > 0 ? (
+                <>
+                  <p className="mt-1.5">Há projetos parecidos, registados com outro endereço:</p>
+                  <ul className="mt-1 list-disc pl-4">
+                    {similar.map((projeto) => (
+                      <li key={projeto.baseUrl}>
+                        {projeto.name} — {projeto.baseUrl}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5">
+                    Se for um destes, corrija o endereço na WP Umbrella, ou o deste site nas definições acima.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1.5">
+                  Confirme na WP Umbrella que o site foi acrescentado e que o plugin está ligado. A lista é lida de
+                  novo sempre que esta página abre.
+                </p>
+              )}
+            </div>
+          ) : null}
 
           <p className="mt-2 text-xs text-ink-400">
             {linkedId && !ligadoAqui
