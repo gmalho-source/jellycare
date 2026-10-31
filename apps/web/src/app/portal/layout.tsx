@@ -72,20 +72,23 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   }))
 
   return (
-    <Shell
-      email={user.email}
-      inicio={{ href: '/portal', label: 'Os meus sites', icone: 'sites', exato: true }}
-      globais={[{ href: '/legal/aceitar', label: 'Tratamento de dados', icone: 'relatorios' }]}
-      grupo="Os seus sites"
-      sites={naBarra}
-      sair={signOut}
-    >
-      {children}
+    // O portal veste a marca Jelly; ver `.tema-jelly` em globals.css.
+    <div className="tema-jelly">
+      <Shell
+        email={user.email}
+        inicio={{ href: '/portal', label: 'Os meus sites', icone: 'sites', exato: true }}
+        globais={[{ href: '/legal/aceitar', label: 'Tratamento de dados', icone: 'relatorios' }]}
+        grupo="Os seus sites"
+        sites={naBarra}
+        sair={signOut}
+      >
+        {children}
 
-      <footer className="mt-10 text-xs text-ink-400">
-        Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o nosso trabalho e
-        explicá-los faz parte dele.
-      </footer>
-    </Shell>
+        <footer className="mt-10 text-xs text-ink-400">
+          Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o nosso trabalho e
+          explicá-los faz parte dele.
+        </footer>
+      </Shell>
+    </div>
   )
 }

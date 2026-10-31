@@ -314,3 +314,165 @@ body {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Tema Jelly: o portal do cliente                                            */
+/* -------------------------------------------------------------------------- */
+
+/* O portal é a parte do Jellycare que o cliente vê, e por isso veste a marca
+   Jelly: o Jelly Design System (Poppins no texto, Bree Serif nos títulos no
+   lugar da Jubilat, papel #f4f6f8, ink #151719 e slate #2a384a, cartões de
+   20px). O painel interno fica com a tipografia técnica, que é ferramenta de
+   trabalho e não montra.
+
+   Só se trocam variáveis, dentro de `.tema-jelly`: os componentes são os
+   mesmos dos dois lados e não sabem em que tema estão. As cores de estado
+   (gravidades, alarme, verde do saudável) não mudam — são estado, não marca,
+   e um crítico tem de se ler igual em todo o lado.
+
+   Servidas por nós, como as outras, e só os subconjuntos latinos. Poppins e
+   Bree Serif são ambas SIL Open Font License. */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/poppins-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/poppins-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/poppins-500-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/poppins-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/poppins-600-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/poppins-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/poppins-700-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/poppins-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Bree Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/bree-serif-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Bree Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/bree-serif-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+.tema-jelly {
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bree Serif', Georgia, serif;
+  /* Os rótulos em versaletes são eyebrows na marca: Poppins, não mono. */
+  --font-mono: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+
+  /* Neutros frios da marca. O cinzento dos textos secundários é um passo mais
+     escuro do que o «muted» do brand book para passar 4,5:1 no papel. */
+  --color-ink-50: #f4f6f8;
+  --color-ink-100: #e8ecf0;
+  --color-ink-200: #d6dbe1;
+  --color-ink-400: #5c6878;
+  --color-ink-600: #2a384a;
+  --color-ink-900: #151719;
+
+  --color-shell: #151719;
+  --color-shell-raised: #2a384a;
+  --color-shell-line: #2a384a;
+  --color-shell-text: #a8b0bb;
+  --color-shell-muted: #8a94a1;
+
+  /* Cartões de 20px e botões de 8px, não em pílula. */
+  --radius-2xl: 20px;
+  --radius-xl: 8px;
+
+  --shadow-card: 0 2px 6px rgb(21 23 25 / 0.08);
+  --shadow-raised: 0 8px 24px rgb(21 23 25 / 0.12);
+
+  background: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+/* Fora das camadas do Tailwind de propósito, para ganhar aos utilitários. A
+   Bree Serif só tem um peso, e um «semibold» pedido a ela sai em negrito
+   falso; o slab já é pesado de si. */
+.tema-jelly .font-display {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Os rótulos pequenos em maiúsculas são as eyebrows da marca: vermelho (o
+   tom que passa 4,5:1 em branco), Poppins 600, espaçamento de 0,08em. Só no
+   conteúdo: na barra escura o vermelho não passa os 4,5:1 e os rótulos ficam
+   como estão. */
+.tema-jelly main .font-mono.uppercase {
+  color: var(--color-jelly-600);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* Os números em Poppins alinham em coluna como faziam em mono. */
+.tema-jelly .tabular-nums,
+.tema-jelly dd {
+  font-variant-numeric: tabular-nums;
+}
+
+/* O papel por trás da página, para o fundo não mudar de tom ao puxar para lá
+   do fim no telemóvel. */
+body:has(.tema-jelly) {
+  background: #f4f6f8;
+}

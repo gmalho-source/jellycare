@@ -61,7 +61,7 @@ function Mostrador({ nome, score }: { nome: string; score: number | null }) {
           role="img"
           aria-label={score === null ? `${nome}: sem medição` : `${nome}: ${score} em 100, ${PALAVRA[estado]}`}
         >
-          <circle cx="38" cy="38" r={raio} fill="none" stroke="#f0ede8" strokeWidth={6} />
+          <circle cx="38" cy="38" r={raio} fill="none" style={{ stroke: 'var(--color-ink-100, #f0ede8)' }} strokeWidth={6} />
           {score !== null ? (
             <circle
               cx="38"
