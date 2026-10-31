@@ -191,6 +191,12 @@ export interface ReportData {
   /** O início do acompanhamento, quando cai dentro do período. Nulo de resto. */
   monitoredFrom: Date | null
   brand: { name: string; url: string }
+  /**
+   * Sai com a marca Jelly (o Jelly Design System). Só quando a marca é a da
+   * Jellycare: um relatório com a marca de outra agência não pode vestir a
+   * nossa.
+   */
+  marcaJelly: boolean
   uptime: UptimeSummary
   findings: FindingsSummary
   forms: FormsSummary
@@ -590,6 +596,7 @@ export function buildReport(input: ReportInput): ReportData {
     period: input.period,
     monitoredFrom,
     brand: input.brand ?? { name: 'Jellycare', url: 'https://jellycare.pt' },
+    marcaJelly: input.brand === undefined,
     uptime,
     findings,
     forms,

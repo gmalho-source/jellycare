@@ -2,6 +2,7 @@ import { explicacaoDe, type Leitura, type Severity } from '@jellycare/core'
 import type { ReportData } from './build.js'
 import { formatDuration, formatPercent } from './build.js'
 import { COR, COR_SEMAFORO, corDaPontuacao, fracao, linha, mostrador, tiraDiaria } from './graficos.js'
+import { FONTES_JELLY_CSS, LOGO_JELLYCARE_SVG } from './marca-jelly.js'
 
 /**
  * Template do relatório.
@@ -581,6 +582,79 @@ export function rodape(data: ReportData): string {
   return `Relatório gerado automaticamente por ${data.brand.name} em ${formatDate(data.generatedAt)} · ${data.brand.url}`
 }
 
+/**
+ * O relatório com a marca Jelly, por cima do estilo de base.
+ *
+ * O Jelly Design System, o mesmo do portal: Poppins no texto, Bree Serif nos
+ * títulos, ink #151719 e slate #2a384a, papel #f4f6f8, cartões de 20px e os
+ * rótulos em maiúsculas como eyebrows vermelhas. A capa é uma faixa escura com
+ * o wordmark, que é branco e vermelho e só se lê em fundo escuro. As cores de
+ * gravidade e de estado não mudam: são estado, não marca.
+ *
+ * Por cima e não em vez: um relatório com a marca de outra agência continua
+ * com o estilo neutro, e as duas versões partilham a estrutura toda.
+ */
+const CSS_JELLY = `
+  body.jelly { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; color: #151719; font-size: 9.5pt; line-height: 1.55; }
+  body.jelly svg text { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; }
+
+  body.jelly header.capa { background: #151719; border: 0; border-radius: 20px; padding: 18px 22px 20px; margin-bottom: 22px; }
+  body.jelly .capa-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  body.jelly .capa-topo svg { height: 22px; width: auto; display: block; }
+  body.jelly .capa-eyebrow { color: #ff9aa5; font-size: 7.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+  body.jelly header.capa h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 22pt; line-height: 1.15; color: #ffffff; margin: 16px 0 4px; letter-spacing: 0; }
+  body.jelly header.capa .subtitle, body.jelly header.capa .muted { color: #a8b0bb; }
+
+  body.jelly h2 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 14pt; text-transform: none; letter-spacing: 0; color: #151719; margin: 0 0 12px; }
+  body.jelly h3 { font-weight: 600; font-size: 10pt; }
+
+  body.jelly .summary { background: #f4f6f8; border-left: 0; border-radius: 20px; padding: 16px 18px; }
+  body.jelly .team-notes { border-color: #d6dbe1; border-radius: 20px; }
+  body.jelly .metric { border-color: #d6dbe1; border-radius: 12px; }
+  body.jelly .metric-value, body.jelly .kpi-value { font-weight: 600; letter-spacing: -0.01em; }
+  body.jelly .kpi { background: #f4f6f8; border-radius: 12px; }
+  body.jelly .estado-card { border-color: #d6dbe1; border-radius: 20px; }
+  body.jelly .estado-titulo, body.jelly .check-title { font-weight: 600; }
+  body.jelly .estado-linha { color: #2a384a; }
+
+  /* As eyebrows: o vermelho que passa 4,5:1 em branco e no papel. */
+  body.jelly .metric-label, body.jelly .kpi-label, body.jelly th { color: #c42a3d; font-weight: 600; letter-spacing: 0.08em; }
+
+  body.jelly th { border-bottom-color: #d6dbe1; }
+  body.jelly td, body.jelly ul.findings li, body.jelly ul.check li { border-color: #e8ecf0; }
+  body.jelly .timeline { border-left-color: #e8ecf0; }
+
+  body.jelly .subtitle, body.jelly .note, body.jelly ul.findings p, body.jelly ul.resolved li,
+  body.jelly .check-detail, body.jelly .gauge-label { color: #2a384a; }
+  body.jelly .muted, body.jelly .estado-detalhe, body.jelly .timeline .when, body.jelly .legend,
+  body.jelly .mono, body.jelly .empty, body.jelly .kpi-foot, body.jelly footer { color: #5c6878; }
+`
+
+/** O cabeçalho da primeira página: faixa escura com o wordmark na versão Jelly. */
+function cabecalho(data: ReportData): string {
+  const linhas = `<h1>${escapeHtml(data.site.label)}</h1>
+    <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)} · ${escapeHtml(data.period.label)}${
+      data.monitoredFrom ? ` · acompanhamento desde ${formatDate(data.monitoredFrom)}` : ''
+    }</p>
+    ${
+      data.period.partial
+        ? '<p class="subtitle muted">Relatório provisório: o mês ainda não acabou. O relatório do mês completo substitui este.</p>'
+        : ''
+    }`
+
+  if (data.marcaJelly) {
+    return `<header class="capa">
+    <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+    ${linhas}
+  </header>`
+  }
+
+  return `<header>
+    <div class="brand">${escapeHtml(data.brand.name)} <span>relatório mensal</span></div>
+    ${linhas}
+  </header>`
+}
+
 export function renderReportHtml(data: ReportData): string {
   return `<!doctype html>
 <html lang="pt-PT">
@@ -708,20 +782,10 @@ export function renderReportHtml(data: ReportData): string {
   .timeline li::before { content: ''; position: absolute; left: -23px; top: 5px; width: 10px; height: 10px; border-radius: 99px; background: #fff; border: 2px solid #dd364a; }
   .timeline .when { color: #8b8b96; font-size: 8pt; }
 </style>
+${data.marcaJelly ? `<style>${FONTES_JELLY_CSS}\n${CSS_JELLY}</style>` : ''}
 </head>
-<body>
-  <header>
-    <div class="brand">${escapeHtml(data.brand.name)} <span>relatório mensal</span></div>
-    <h1>${escapeHtml(data.site.label)}</h1>
-    <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)} · ${escapeHtml(data.period.label)}${
-      data.monitoredFrom ? ` · acompanhamento desde ${formatDate(data.monitoredFrom)}` : ''
-    }</p>
-    ${
-      data.period.partial
-        ? '<p class="subtitle muted">Relatório provisório: o mês ainda não acabou. O relatório do mês completo substitui este.</p>'
-        : ''
-    }
-  </header>
+<body${data.marcaJelly ? ' class="jelly"' : ''}>
+  ${cabecalho(data)}
 
   ${primeiraPagina(data)}
 

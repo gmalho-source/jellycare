@@ -170,6 +170,21 @@ describe('renderReportHtml', () => {
     expect(html).toContain('Estúdio X')
     expect(html).toContain('https://estudiox.pt')
   })
+
+  it('veste a marca Jelly só quando a marca é a da Jellycare', () => {
+    const jelly = renderReportHtml(COMPLETO())
+    expect(jelly).toContain('<body class="jelly">')
+    expect(jelly).toContain("font-family:'Poppins'")
+    expect(jelly).toContain('aria-label="Jellycare"')
+    // Embutido, sem pedir nada a ninguém: o Chromium do worker não sai para a rede.
+    expect(jelly).not.toMatch(/url\((?!data:)/)
+
+    // Um relatório com a marca de outra agência não pode levar a nossa.
+    const outra = renderReportHtml(report({ brand: { name: 'Estúdio X', url: 'https://estudiox.pt' } }))
+    expect(outra).not.toContain('class="jelly"')
+    expect(outra).not.toContain('Poppins')
+    expect(outra).not.toContain('aria-label="Jellycare"')
+  })
 })
 
 describe('reportFileName', () => {
