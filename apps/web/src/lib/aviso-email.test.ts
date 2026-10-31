@@ -8,6 +8,7 @@ const AVISO = {
     'Os emails que envia a partir de acpa.pt não trazem a autorização que os servidores de destino procuram.\n\n' +
     'Precisamos que peça a quem gere o domínio que acrescente este registo:\nv=spf1 include:_spf.google.com ~all',
   site: { label: 'ACPA', url: 'https://acpa.pt' },
+  origem: 'https://jellycare.pt',
 }
 
 describe('montarAvisoEmail', () => {
@@ -35,6 +36,13 @@ describe('montarAvisoEmail', () => {
     expect(texto).toContain('v=spf1 include:_spf.google.com ~all')
     expect(texto).toContain('Equipa Jelly')
     expect(texto).not.toContain('<')
+  })
+
+  it('leva o wordmark da Jelly, servido pela aplicação, e não o da Jellycare', () => {
+    const { html } = montarAvisoEmail(AVISO)
+    expect(html).toContain('src="https://jellycare.pt/email/jelly.png"')
+    expect(html).toContain('alt="Jelly"')
+    expect(html).not.toContain('<svg')
   })
 
   it('assina como Jelly e diz ao cliente que pode responder', () => {

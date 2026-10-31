@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { appOrigin } from '@/lib/app-url'
 import { problemaParaQuemGere } from '@/lib/assistente'
 import { destinatariosInvalidos, lerDestinatarios, montarAvisoEmail } from '@/lib/aviso-email'
 import { lerAvisos, registarEEnviar } from '@/lib/aviso'
@@ -99,6 +100,7 @@ export async function POST(
     assunto,
     corpo: texto,
     site: { label: problema.contexto.site.label, url: problema.contexto.site.url },
+    origem: appOrigin(),
   })
 
   const resultado = await registarEEnviar({

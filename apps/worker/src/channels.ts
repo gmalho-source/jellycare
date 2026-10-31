@@ -141,6 +141,7 @@ export interface ReportEmail {
   to: string[]
   subject: string
   text: string
+  html?: string
   attachment: { filename: string; content: Buffer }
 }
 
@@ -167,6 +168,7 @@ export function createReportSender(config: ChannelConfig = {}) {
         to: message.to,
         subject: message.subject,
         text: message.text,
+        ...(message.html ? { html: message.html } : {}),
         attachments: [
           {
             filename: message.attachment.filename,
