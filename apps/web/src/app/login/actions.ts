@@ -1,6 +1,7 @@
 'use server'
 
 import { isIP } from 'node:net'
+import { montarEmailJelly } from '@jellycare/core'
 import { createLoginToken } from '@jellycare/db'
 import { headers } from 'next/headers'
 import { after } from 'next/server'
@@ -86,6 +87,15 @@ async function sendLoginEmail(to: string, link: string): Promise<void> {
         'Use a ligação abaixo para entrar na Jellycare. É válida durante 15 minutos e só pode ' +
         `ser usada uma vez.\n\n${link}\n\n` +
         'Se não foi você que a pediu, ignore esta mensagem.',
+      html: montarEmailJelly({
+        titulo: 'A sua ligação de entrada na Jellycare',
+        origem: new URL(link).origin,
+        marca: 'jellycare',
+        eyebrow: 'Ligação de entrada',
+        paragrafos: ['Use o botão abaixo para entrar na Jellycare. É válido durante 15 minutos e só pode ser usado uma vez.'],
+        botao: { texto: 'Entrar na Jellycare', url: link },
+        rodape: 'Se não foi você que pediu esta ligação, ignore esta mensagem: sem ela ninguém entra.',
+      }),
     }),
   })
 

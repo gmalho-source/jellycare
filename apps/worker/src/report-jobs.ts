@@ -19,7 +19,7 @@ import {
   type ReportProblemEvent,
   type ReportWordPress,
 } from '@jellycare/reports'
-import type { Severity } from '@jellycare/core'
+import { montarEmailJelly, type Severity } from '@jellycare/core'
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm'
 import type { Browser } from 'playwright'
 
@@ -45,6 +45,8 @@ export interface ReportMessage {
   to: string[]
   subject: string
   text: string
+  /** Só com a marca da Jellycare. Um relatório com outra marca vai em texto. */
+  html?: string
   attachment: { filename: string; content: Buffer }
 }
 
@@ -83,12 +85,46 @@ function messageFor(data: ReportData, fileName: string, pdf: Buffer, to: string[
     `${data.brand.name} — ${data.brand.url}`,
   ]
 
+  const subject = `${data.site.label} — relatório de ${data.period.label}`
   return {
     to,
-    subject: `${data.site.label} — relatório de ${data.period.label}`,
+    subject,
     text: lines.join('\n'),
+    ...(data.marcaJelly
+      ? {
+          html: montarEmailJelly({
+            titulo: subject,
+            previa: data.summary[0] ?? subject,
+            origem: origemDaAplicacao(),
+            marca: 'jellycare',
+            eyebrow: `Relatório de ${data.period.label}`,
+            paragrafos: [
+              `Segue em anexo o relatório de ${data.period.label} do site ${data.site.label}.`,
+              ...data.summary,
+              'O relatório completo está no PDF em anexo. O histórico e os relatórios anteriores estão também no portal.',
+            ],
+            botao: { texto: 'Abrir o portal', url: `${origemDaAplicacao()}/portal` },
+            assinatura: { nome: 'Equipa Jelly', nota: 'Basta responder a este email para falar connosco.' },
+            rodape: `Enviado porque a Jelly acompanha ${data.site.url}.`,
+          }),
+        }
+      : {}),
     attachment: { filename: fileName, content: pdf },
   }
+}
+
+/**
+ * De onde vêm o logótipo do email e a ligação para o portal. O mesmo
+ * JELLYCARE_APP_URL do painel; sem ele, o domínio de produção.
+ */
+function origemDaAplicacao(): string {
+  const configurada = process.env.JELLYCARE_APP_URL?.trim()
+  try {
+    if (configurada) return new URL(configurada).origin
+  } catch {
+    // Um valor estragado não pode impedir o relatório de sair.
+  }
+  return 'https://jellycare.pt'
 }
 
 /**

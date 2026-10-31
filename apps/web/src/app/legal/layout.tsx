@@ -10,8 +10,9 @@ import { Brand } from '@/components/brand'
  * não se avalia antes de assinar.
  */
 export default function LegalLayout({ children }: { children: ReactNode }) {
+  // O cliente lê e aceita aqui, por isso com a marca Jelly, como o portal.
   return (
-    <div className="min-h-screen bg-ink-50">
+    <div className="tema-jelly min-h-screen bg-ink-50">
       <header className="bg-ink-900">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
           <Link href="/" className="flex min-w-0 items-center gap-2.5">

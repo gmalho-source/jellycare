@@ -20,21 +20,25 @@ export const dynamic = 'force-dynamic'
 export default async function LoginPage() {
   if (await getCurrentUser()) redirect('/')
 
+  // A porta de entrada do portal: com a marca Jelly. O tema fica por fora,
+  // para o fundo ink desta página não dar lugar ao papel do tema.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Brand className="h-9" />
-          <p className="mt-3.5 text-sm text-shell-muted">
-            Manutenção ativa e proativa de websites
+    <div className="tema-jelly">
+      <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <Brand className="h-9" />
+            <p className="mt-3.5 text-sm text-shell-muted">
+              Manutenção ativa e proativa de websites
+            </p>
+          </div>
+
+          <LoginForm />
+
+          <p className="mt-6 text-center text-xs text-shell-muted">
+            Um produto Jelly. O acesso é por convite.
           </p>
         </div>
-
-        <LoginForm />
-
-        <p className="mt-6 text-center text-xs text-shell-muted">
-          Um produto Jelly. O acesso é por convite.
-        </p>
       </div>
     </div>
   )
