@@ -35,7 +35,8 @@ const ESTADOS = {
   bom: { fill: '#1f9370', label: 'Sem falhas' },
   degradado: { fill: '#b87d00', label: 'Falhas pontuais' },
   mau: { fill: '#c0243a', label: 'Indisponível' },
-  vazio: { fill: '#e6e3de', label: 'Sem observações' },
+  // O vazio é neutro e segue o tema; os outros três são estado e não mudam.
+  vazio: { fill: 'var(--color-ink-200, #e6e3de)', label: 'Sem observações' },
 } as const
 
 type Estado = keyof typeof ESTADOS

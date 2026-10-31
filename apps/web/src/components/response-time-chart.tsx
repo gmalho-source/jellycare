@@ -238,7 +238,7 @@ export function ResponseTimeChart({ days }: { days: DiaResposta[] }) {
                     x2={L}
                     y1={(yPct(marca) / 100) * A}
                     y2={(yPct(marca) / 100) * A}
-                    stroke="#e6e3de"
+                    style={{ stroke: 'var(--color-ink-200, #e6e3de)' }}
                     strokeWidth={1}
                     vectorEffect="non-scaling-stroke"
                   />
