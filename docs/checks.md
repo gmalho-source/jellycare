@@ -430,6 +430,41 @@ desativar por formulário.
   do Lighthouse (acessibilidade, práticas recomendadas, SEO, navegação com agência)
 - páginas com erro 5xx detetadas durante o crawl
 
+### A causa de cada interrupção
+
+Cada amostra em baixo guarda a causa em `uptime_samples.failure_reason`, e é
+essa que aparece na lista de interrupções. Um erro de rede traz o código da
+rede (`timeout`, `dns_failure`, `connection_refused`…); uma resposta HTTP de
+erro traz o código HTTP (`http_403`, `http_503`). Antes vinha só `site_down`,
+que não distinguia um 503 do servidor de um 403 de uma firewall.
+
+`connect_timeout` é o servidor que não responde à ligação de todo — nem
+aceita, nem recusa. Ou está desligado, ou a firewall dele descarta os pacotes
+da probe. A segunda é a mais comum quando o resto do mundo abre o site: as
+sondas diárias de ficheiros expostos (`/.env`, `/.git/HEAD`…) são exatamente
+o que o CSF, o Imunify360 ou o fail2ban castigam com o bloqueio do IP. Antes
+aparecia como `network_error`, com a mensagem «fetch failed», e mandava
+procurar o problema no site.
+
+### Quando a firewall do CDN barra a probe
+
+A Vercel e a Cloudflare assinam as respostas da sua própria proteção com um
+cabeçalho (`x-vercel-mitigated`, `cf-mitigated`). Uma resposta de erro com um
+desses cabeçalhos não veio do site: foi a firewall à frente dele que achou que
+a probe era um bot. Nesse caso:
+
+- não se grava amostra. O site não foi observado, e uma amostra teria de dizer
+  em cima ou em baixo e mentir num dos dois sentidos. Fica uma lacuna: não
+  abre interrupção nem entra na percentagem, e baixa a cobertura do período,
+  que é onde pertence;
+- o run é *inconclusivo* (`CheckOutcome.inconclusive`): conta como verificação
+  bem-sucedida, mas não resolve nada do que estava aberto. Um bloqueio a meio
+  de uma queda verdadeira não dá o site por recuperado;
+- abre-se `monitor_blocked`, de severidade média, com o fornecedor e a ação da
+  firewall na evidência. Com as duas confirmações do uptime, um bloqueio
+  isolado fica pendente; um que se repete fica aberto para a equipa pôr a
+  probe em lista branca.
+
 ### Tempo de resposta
 
 Vem das amostras de disponibilidade (`uptime_samples.response_time_ms`), de

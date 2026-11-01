@@ -1,4 +1,5 @@
 import type { Severity } from '@jellycare/core'
+import { latestIncidents } from '@jellycare/reports/data'
 import type { DashboardData } from '@/lib/dashboard'
 import {
   Card,
@@ -35,6 +36,13 @@ import { UptimeStrip } from './uptime-strip'
  */
 
 export type Audiencia = 'equipa' | 'cliente' 
+
+/**
+ * Quantas interrupções cabem no cartão. As mais recentes, e o resto contado
+ * por baixo: um site que cai todos os dias tem de o dizer, não esconder a
+ * segunda semana atrás de um corte.
+ */
+const INCIDENTES_NO_CARTAO = 8
 
 const SEVERITY_LABEL: Record<Severity, string> = {
   critical: 'críticos',
@@ -220,7 +228,7 @@ export function DashboardOverview({
             <EmptyState>Nenhuma interrupção nos últimos 30 dias.</EmptyState>
           ) : (
             <ul className="divide-y divide-ink-100">
-              {uptime.incidents.slice(0, 8).map((incident) => (
+              {latestIncidents(uptime.incidents, INCIDENTES_NO_CARTAO).map((incident) => (
                 <li key={incident.start.toISOString()} className="px-5 py-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-ink-900">{formatDateTime(incident.start)}</span>
@@ -234,6 +242,12 @@ export function DashboardOverview({
                   ) : null}
                 </li>
               ))}
+              {uptime.incidents.length > INCIDENTES_NO_CARTAO ? (
+                <li className="px-5 py-3 text-xs text-ink-400">
+                  Mais {uptime.incidents.length - INCIDENTES_NO_CARTAO} anteriores nos últimos 30
+                  dias.
+                </li>
+              ) : null}
             </ul>
           )}
         </Card>

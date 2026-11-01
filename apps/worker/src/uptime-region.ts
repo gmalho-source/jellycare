@@ -124,11 +124,22 @@ export interface UptimeSampleInput {
  * A amostra é gravada mesmo quando o check falha por exceção: sem isso, um
  * período de instabilidade do próprio worker apareceria ao cliente como
  * disponibilidade perfeita, porque simplesmente não teria amostras.
+ *
+ * A exceção é o run inconclusivo — a firewall do CDN bloqueou a probe. Aí não
+ * há amostra nenhuma: o site não foi observado, e uma amostra teria de dizer
+ * `up` verdadeiro ou falso, e as duas coisas seriam mentira. Fica uma lacuna,
+ * que o resumo de disponibilidade já trata como tal: não abre interrupção,
+ * não entra na percentagem e baixa a cobertura, que é onde pertence. Um
+ * bloqueio de dez minutos no meio de amostras saudáveis desaparece do SLA; um
+ * bloqueio que dure horas aparece como monitorização em falta, e o finding
+ * `monitor_blocked` diz à equipa porquê.
  */
 export function toUptimeSample(
   outcome: CheckOutcome,
   options: { region: string; observedAt: Date },
-): UptimeSampleInput {
+): UptimeSampleInput | null {
+  if (outcome.status === 'ok' && outcome.inconclusive) return null
+
   const downFinding = outcome.findings.find(
     (finding) => finding.code === 'site_down' || finding.code === 'content_missing',
   )

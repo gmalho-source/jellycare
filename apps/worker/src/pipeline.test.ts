@@ -38,6 +38,8 @@ let siteId: string
 let organizationId: string
 let queue: Queue
 let siteResponds = true
+/** A firewall do CDN à frente do site barra a probe, como a da Vercel faz. */
+let firewallBlocks = false
 
 beforeEach(async () => {
   // Apenas os dados deste ficheiro: um `delete` global apagaria por baixo dos
@@ -66,6 +68,7 @@ beforeEach(async () => {
   siteId = site!.id
 
   siteResponds = true
+  firewallBlocks = false
 })
 
 afterAll(async () => {
@@ -81,6 +84,11 @@ afterAll(async () => {
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
 await new Promise<void>((resolve) => {
   server = createServer((_req, res) => {
+    if (firewallBlocks) {
+      res.writeHead(403, { 'content-type': 'text/plain', 'x-vercel-mitigated': 'deny' })
+      res.end('Forbidden')
+      return
+    }
     if (!siteResponds) {
       res.writeHead(503, { 'content-type': 'text/html' })
       res.end('<html><body>Serviço indisponível</body></html>')
@@ -354,7 +362,75 @@ describe('disponibilidade multi-região', () => {
 
     const rows = await samples()
     expect(rows[0]?.up).toBe(false)
-    expect(rows[0]?.failureReason).toBeTruthy()
+    // O código HTTP na causa: é o que chega à lista de interrupções.
+    expect(rows[0]?.failureReason).toBe('http_503')
+    expect(rows[0]?.statusCode).toBe(503)
+  })
+
+  it('um bloqueio da firewall do CDN não grava amostra, nem conta como queda', async () => {
+    await addCheck('uptime')
+    await addTarget()
+    const notifier = new RecordingNotifier()
+
+    await run(notifier)
+    firewallBlocks = true
+    await run(notifier)
+    await run(notifier)
+    firewallBlocks = false
+    await run(notifier)
+
+    // Duas amostras saudáveis e um buraco no meio: o site não foi observado,
+    // e não há `up` verdadeiro nem falso que o diga sem mentir.
+    const rows = await samples()
+    expect(rows.map((row) => row.up)).toEqual([true, true])
+
+    // Ninguém foi acordado: não houve queda, e o bloqueio é médio.
+    expect(notifier.sent).toHaveLength(0)
+
+    const findings = await openFindings()
+    expect(findings.map((f) => f.code)).toEqual(['monitor_blocked'])
+    expect(findings[0]).toMatchObject({ severity: 'medium', state: 'resolved' })
+    expect(findings[0]?.evidence).toMatchObject({ provider: 'vercel', action: 'deny', status: 403 })
+  })
+
+  it('o bloqueio repetido fica aberto para a equipa', async () => {
+    await addCheck('uptime')
+    firewallBlocks = true
+    await run()
+    await run()
+
+    const findings = await openFindings()
+    expect(findings).toHaveLength(1)
+    expect(findings[0]).toMatchObject({
+      code: 'monitor_blocked',
+      discriminator: 'vercel',
+      severity: 'medium',
+      state: 'open',
+    })
+
+    const [execucao] = await db
+      .select()
+      .from(schema.checkRuns)
+      .where(eq(schema.checkRuns.siteId, siteId))
+      .limit(1)
+    // Correu bem — não é uma verificação falhada da nossa parte.
+    expect(execucao?.status).toBe('ok')
+  })
+
+  it('um bloqueio a meio de uma queda não dá o site como recuperado', async () => {
+    await addCheck('uptime')
+    siteResponds = false
+    await run()
+    await run()
+    expect((await openFindings()).find((f) => f.code === 'site_down')?.state).toBe('open')
+
+    firewallBlocks = true
+    await run()
+
+    // O run não viu o site: não pode resolver a queda só por não a ter visto.
+    const findings = await openFindings()
+    expect(findings.find((f) => f.code === 'site_down')?.state).toBe('open')
+    expect(findings.find((f) => f.code === 'monitor_blocked')?.state).toBe('pending')
   })
 
   it('mantém o alerta crítico quando só existe uma região', async () => {

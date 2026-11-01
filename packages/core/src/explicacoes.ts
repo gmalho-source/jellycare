@@ -46,6 +46,15 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     oQueFazemos:
       'Confirmamos se é um problema de rede passageiro ou uma configuração que está a bloquear tráfego legítimo, e corrigimos o que for nosso.',
   },
+  monitor_blocked: {
+    titulo: 'A proteção do site barrou a nossa monitorização',
+    oQueE:
+      'A firewall que protege o site contra bots confundiu a nossa verificação com um e não a deixou passar. O site não esteve em baixo por isso — simplesmente não o conseguimos ver nesse momento.',
+    porqueImporta:
+      'Não afeta quem visita o site e não conta como indisponibilidade. Mas, enquanto durar, a vigilância tem um ponto cego, e se o bloqueio se tornar permanente deixamos de dar conta de uma paragem verdadeira.',
+    oQueFazemos:
+      'Acertamos a regra da firewall para deixar passar a nossa verificação, sem baixar a proteção contra o resto.',
+  },
   connection_refused: {
     titulo: 'O servidor recusou a ligação',
     oQueE: 'O servidor está de pé mas recusou atender o pedido.',
@@ -68,6 +77,22 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     porqueImporta:
       'Sem isto o site não abre para ninguém, e o email do domínio também pode deixar de funcionar.',
     oQueFazemos: 'Vamos ao registo do domínio ver o que mudou ou expirou, e repomos.',
+  },
+  connect_timeout: {
+    titulo: 'O servidor não aceitou a ligação',
+    oQueE:
+      'Tentámos ligar ao servidor do site e ele não respondeu de todo — nem a aceitar, nem a recusar.',
+    porqueImporta:
+      'Ou o servidor está desligado, e ninguém abre o site, ou a firewall dele está a bloquear a nossa verificação, e o site está de pé mas fica sem vigilância.',
+    oQueFazemos:
+      'Confirmamos de outro sítio se o site abre. Se abrir, desbloqueamos a nossa verificação na firewall; se não, tratamos da paragem com quem aloja o site.',
+  },
+  host_unreachable: {
+    titulo: 'Não havia caminho de rede até ao servidor',
+    oQueE: 'A rede não conseguiu encaminhar o pedido até ao servidor do site.',
+    porqueImporta:
+      'Costuma ser um problema do alojamento ou da rede dele. Enquanto durar, o site não abre para quem passa por esse caminho.',
+    oQueFazemos: 'Levamos as datas e horas a quem aloja o site e acompanhamos até estar resolvido.',
   },
   network_error: {
     titulo: 'Houve um erro de rede a chegar ao site',

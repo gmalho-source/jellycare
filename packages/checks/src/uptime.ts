@@ -29,6 +29,39 @@ function containsExpected(body: string, expected: string): boolean {
   return body.toLowerCase().includes(expected.toLowerCase())
 }
 
+/**
+ * Os cabeçalhos com que um CDN assina uma resposta da sua própria proteção.
+ *
+ * Quando estão presentes, o 403 ou o 429 não veio do site: veio da firewall
+ * à frente dele, que decidiu que a nossa probe parecia um bot. Ver
+ * `firewallBlock`.
+ */
+const MITIGATION_HEADERS = [
+  { header: 'x-vercel-mitigated', provider: 'vercel', label: 'Vercel' },
+  { header: 'cf-mitigated', provider: 'cloudflare', label: 'Cloudflare' },
+] as const
+
+export interface FirewallBlock {
+  provider: (typeof MITIGATION_HEADERS)[number]['provider']
+  label: string
+  /** O valor do cabeçalho: `challenge`, `deny`, `rate_limit`… */
+  action: string
+}
+
+/**
+ * A resposta é a firewall do CDN a bloquear a probe?
+ *
+ * Só conta numa resposta de erro. Um 200 com o cabeçalho é a firewall a
+ * deixar passar depois de um desafio, e esse pedido viu o site.
+ */
+export function firewallBlock(headers: Headers): FirewallBlock | null {
+  for (const { header, provider, label } of MITIGATION_HEADERS) {
+    const value = headers.get(header)
+    if (value !== null) return { provider, label, action: value.trim() || 'blocked' }
+  }
+  return null
+}
+
 export const uptimeCheck: CheckDefinition<UptimeConfig> = {
   type: 'uptime',
   defaultIntervalMinutes: 5,
@@ -67,6 +100,40 @@ export const uptimeCheck: CheckDefinition<UptimeConfig> = {
       ? response.status === expectedStatus
       : response.status >= 200 && response.status < 400
 
+    const blocked = statusOk ? null : firewallBlock(response.headers)
+    if (blocked) {
+      // A borda do CDN respondeu e recusou-nos. Não sabemos se o site atrás
+      // dela está de pé, por isso o run é inconclusivo: não conta como
+      // indisponibilidade para o cliente, não resolve o que estava aberto, e
+      // não grava tempo de resposta, que seria o da firewall e não o do site.
+      //
+      // Fica um finding próprio para a equipa: uma proteção que barra a
+      // monitorização é para pôr em lista branca, e se for permanente o site
+      // deixa de estar vigiado sem ninguém dar por isso.
+      findings.push({
+        code: 'monitor_blocked',
+        discriminator: blocked.provider,
+        severity: 'medium',
+        title: `A proteção da ${blocked.label} bloqueou a verificação (HTTP ${response.status})`,
+        detail:
+          `A firewall da ${blocked.label} respondeu ${response.status} com a ação «${blocked.action}» ` +
+          'em vez de deixar o pedido chegar ao site. O site não foi observado nesta verificação; ' +
+          'não conta como indisponibilidade.',
+        evidence: {
+          reason: `firewall_${blocked.provider}`,
+          provider: blocked.provider,
+          action: blocked.action,
+          status: response.status,
+          finalUrl: response.finalUrl,
+        },
+      })
+      return {
+        findings,
+        inconclusive: true,
+        metrics: { blocked: 1, statusCode: response.status },
+      }
+    }
+
     if (!statusOk) {
       findings.push({
         code: 'site_down',
@@ -74,6 +141,11 @@ export const uptimeCheck: CheckDefinition<UptimeConfig> = {
         title: `Site responde HTTP ${response.status}`,
         detail: `Esperado ${expectedStatus ?? '2xx/3xx'}, obtido ${response.status}.`,
         evidence: {
+          // O código vai na razão para chegar à amostra de disponibilidade e
+          // dali à lista de interrupções. Sem isto a interrupção dizia apenas
+          // `site_down`, que é o que já se sabia, e um 403 de uma firewall
+          // ficava igual a um 503 de um servidor em baixo.
+          reason: `http_${response.status}`,
           status: response.status,
           finalUrl: response.finalUrl,
           redirectChain: response.redirectChain,
