@@ -613,6 +613,7 @@ const CSS_JELLY = `
   body.jelly .capa-base { position: absolute; left: 18mm; right: 18mm; bottom: 22mm; }
   body.jelly .capa-traco { width: 44px; height: 4px; border-radius: 2px; background: #dd364a; margin-bottom: 18px; }
   body.jelly .capa-base h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 34pt; line-height: 1.1; color: #ffffff; margin: 0 0 18px; letter-spacing: 0; max-width: 150mm; }
+  body.jelly .capa-para { color: #ffffff; font-size: 10pt; margin: 0 0 4px; }
   body.jelly .capa-site { font-family: 'Bree Serif', Georgia, serif; font-size: 18pt; line-height: 1.2; color: #ffffff; margin: 0 0 6px; }
   body.jelly .capa-base .subtitle, body.jelly .capa-base .muted { color: #ffffff; font-size: 10pt; margin: 0; }
 
@@ -648,8 +649,8 @@ const CSS_JELLY = `
 
 /**
  * A capa da versão Jelly: a fotografia a página inteira, escurecida, com o
- * wordmark e o mês no topo e, em baixo, o título do relatório, o site e o
- * cliente.
+ * wordmark e o mês no topo e, em baixo, o serviço, para quem é o relatório e
+ * o site.
  */
 function capa(data: ReportData): string {
   if (!data.marcaJelly) return ''
@@ -659,9 +660,15 @@ function capa(data: ReportData): string {
     <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">${escapeHtml(data.period.label)}</span></div>
     <div class="capa-base">
       <div class="capa-traco"></div>
-      <h1>Relatório mensal de manutenção ativa e proativa de websites</h1>
-      <p class="capa-site">${escapeHtml(data.site.label)}</p>
-      <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)}</p>
+      <h1>Manutenção ativa e proativa de websites</h1>
+      <p class="capa-para">Relatório mensal preparado para:</p>
+      <p class="capa-site">${escapeHtml(data.organizationName)}</p>
+      <p class="subtitle">${
+        // O nome do site só quando diz mais do que o do cliente.
+        data.site.label.trim().toLowerCase() === data.organizationName.trim().toLowerCase()
+          ? escapeHtml(data.site.url)
+          : `${escapeHtml(data.site.label)} · ${escapeHtml(data.site.url)}`
+      }</p>
       ${
         data.period.partial
           ? '<p class="subtitle muted">Relatório provisório: o mês ainda não acabou.</p>'
