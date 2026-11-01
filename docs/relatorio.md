@@ -29,6 +29,13 @@ cabeçalho, o painel e o portal marcam-no, e quando sai o do mês completo este
 toma-lhe o lugar em vez de ser impedido por ele. As notas «só no próximo» que
 o provisório levou voltam à fila e seguem no definitivo.
 
+**Um relatório mandado à mão a outra pessoa não conta como o envio do mês**
+(`reports.recipients_override`). Mandar o do mês passado a um colega a dia 1
+deixava-o gerado, e o envio agendado de dia 3 saltava-o: o cliente ficava sem
+relatório. Agora o agendado regenera-o e manda-o aos destinatários do site e
+aos contactos que recebem relatórios. Um «Enviar agora» sem endereço próprio
+vai para esses mesmos destinatários e conta como o envio do mês.
+
 ## O que o relatório mostra
 
 **Primeira página — está tudo bem?** Os semáforos de segurança e de desempenho,

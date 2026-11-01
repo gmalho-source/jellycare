@@ -428,6 +428,26 @@ describe('runReportRequests', () => {
     expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(1)
   }, 120_000)
 
+  it('um relatório mandado à mão a outra pessoa não impede o envio do mês ao cliente', async () => {
+    // Mandar o relatório de junho a um colega a dia 1 de julho deixava-o
+    // gerado, e o envio agendado de dia 3 via-o e saltava: o cliente ficava
+    // sem o relatório do mês.
+    await seedUptime()
+    await requestReport(db, { siteId, recipients: ['pontual@exemplo.pt'] })
+    await runReportRequests(deps())
+    expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(0)
+
+    const result = await generatePendingReports(deps())
+    expect(result.sent).toBe(1)
+    expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(1)
+
+    // E fica entregue: a passagem seguinte não o volta a mandar.
+    const segunda = await generatePendingReports(deps())
+    expect(segunda.generated).toBe(0)
+    expect(sent.filter((message) => message.to.includes('cliente@exemplo.pt'))).toHaveLength(1)
+    expect(await storedReports()).toHaveLength(1)
+  }, 180_000)
+
   it('marca o pedido como concluído, com o período e para quem foi', async () => {
     const { request } = await requestReport(db, { siteId, recipients: ['pontual@exemplo.pt'] })
 

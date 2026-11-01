@@ -331,7 +331,11 @@ export async function generateReport(
   }
 
   const existing = await db
-    .select({ id: schema.reports.id, partial: schema.reports.partial })
+    .select({
+      id: schema.reports.id,
+      partial: schema.reports.partial,
+      recipientsOverride: schema.reports.recipientsOverride,
+    })
     .from(schema.reports)
     .where(
       and(
@@ -345,7 +349,12 @@ export async function generateReport(
   if (existing[0]) {
     // Um relatório provisório do mês em curso dá lugar ao do mês completo.
     // Sem isto, pedir o parcial a dia 30 impedia o definitivo de sair a 3.
-    if (!existing[0].partial || period.partial) {
+    //
+    // E um mandado à mão a outra pessoa não é o envio do mês: o agendado
+    // (sem destinatários próprios) regenera-o e manda-o ao cliente.
+    const provisorio = existing[0].partial && !period.partial
+    const soParaOutros = existing[0].recipientsOverride && !recipientsOverride && !period.partial
+    if (!provisorio && !soParaOutros) {
       return { status: 'skipped', reason: 'Relatório já existe para este período' }
     }
     await db.delete(schema.reports).where(eq(schema.reports.id, existing[0].id))
@@ -511,6 +520,7 @@ export async function generateReport(
       },
       generatedAt: deps.now ?? new Date(),
       partial: period.partial ?? false,
+      recipientsOverride: recipientsOverride !== undefined,
     })
     // Duas instâncias de worker podem chegar aqui ao mesmo tempo. O índice
     // único decide, e quem perder não rebenta nem duplica.

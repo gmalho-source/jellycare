@@ -621,6 +621,13 @@ export const reports = pgTable(
      * do mês completo toma-lhe o lugar, em vez de ser impedido por ele.
      */
     partial: boolean('partial').notNull().default(false),
+    /**
+     * Pedido no painel para endereços escolhidos à mão, em vez dos
+     * destinatários do site. Não conta como o envio do mês ao cliente: o
+     * envio agendado regenera-o e manda-o a quem o deve receber. Sem isto,
+     * mandar o relatório a um colega a dia 1 impedia o do cliente a dia 3.
+     */
+    recipientsOverride: boolean('recipients_override').notNull().default(false),
   },
   (table) => [
     // Um relatório por site e por mês. É o que torna a geração idempotente:
