@@ -599,19 +599,22 @@ const CSS_JELLY = `
   body.jelly { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; color: #151719; font-size: 9.5pt; line-height: 1.55; }
   body.jelly svg text { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; }
 
-  /* A capa: a fotografia a sangrar a página toda, sem margens, e o painel ink
-     com o wordmark em baixo. Sem gradiente por cima da fotografia: a marca é
-     de cor lisa, e o painel é o que dá contraste ao texto. */
+  /* A capa: a fotografia a sangrar a página toda, escurecida por uma camada
+     lisa de ink, e a marca e o texto por cima. Sem gradiente, que a marca é de
+     cor lisa. A opacidade é a que deixa o branco acima de 4,5:1 mesmo sobre o
+     branco da fotografia. */
   @page capa { margin: 0; }
-  body.jelly .capa-pagina { page: capa; position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; }
+  body.jelly .capa-pagina { page: capa; position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; color: #ffffff; }
   body.jelly .capa-foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-  body.jelly .capa-painel { position: absolute; left: 14mm; right: 14mm; bottom: 16mm; background: #151719; border-radius: 20px; padding: 22px 26px 24px; }
-  body.jelly .capa-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  body.jelly .capa-topo svg { height: 24px; width: auto; display: block; }
-  body.jelly .capa-eyebrow { color: #ff9aa5; font-size: 7.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-  body.jelly .capa-painel h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 30pt; line-height: 1.1; color: #ffffff; margin: 22px 0 6px; letter-spacing: 0; }
-  body.jelly .capa-periodo { font-family: 'Bree Serif', Georgia, serif; font-size: 15pt; color: #ff9aa5; margin: 0 0 10px; }
-  body.jelly .capa-painel .subtitle, body.jelly .capa-painel .muted { color: #a8b0bb; }
+  body.jelly .capa-veu { position: absolute; inset: 0; background: rgba(21, 23, 25, 0.62); }
+  body.jelly .capa-topo { position: absolute; top: 18mm; left: 18mm; right: 18mm; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  body.jelly .capa-topo svg { height: 32px; width: auto; display: block; }
+  body.jelly .capa-eyebrow { color: #ffffff; font-size: 8pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
+  body.jelly .capa-base { position: absolute; left: 18mm; right: 18mm; bottom: 22mm; }
+  body.jelly .capa-traco { width: 44px; height: 4px; border-radius: 2px; background: #dd364a; margin-bottom: 18px; }
+  body.jelly .capa-base h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 44pt; line-height: 1.05; color: #ffffff; margin: 0 0 10px; letter-spacing: 0; }
+  body.jelly .capa-periodo { font-family: 'Bree Serif', Georgia, serif; font-size: 20pt; line-height: 1.2; color: #ffffff; margin: 0 0 14px; }
+  body.jelly .capa-base .subtitle, body.jelly .capa-base .muted { color: #ffffff; font-size: 10pt; margin: 0; }
 
   /* A primeira página do relatório, depois da capa: sem faixa, que a capa já a tem. */
   body.jelly header.inicio { border: 0; padding: 0; margin-bottom: 22px; }
@@ -644,15 +647,17 @@ const CSS_JELLY = `
 `
 
 /**
- * A capa da versão Jelly: a fotografia a página inteira e, em baixo, o painel
- * ink com o wordmark, o site, o mês e o cliente.
+ * A capa da versão Jelly: a fotografia a página inteira, escurecida, com o
+ * wordmark e o texto por cima — o site, o mês e o cliente.
  */
 function capa(data: ReportData): string {
   if (!data.marcaJelly) return ''
   return `<section class="capa-pagina">
     <img class="capa-foto" src="data:image/jpeg;base64,${CAPA_JELLY_JPEG}" alt="">
-    <div class="capa-painel">
-      <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+    <div class="capa-veu"></div>
+    <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+    <div class="capa-base">
+      <div class="capa-traco"></div>
       <h1>${escapeHtml(data.site.label)}</h1>
       <p class="capa-periodo">${escapeHtml(data.period.label)}</p>
       <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)}</p>
