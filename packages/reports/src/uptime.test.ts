@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monthPeriod } from './period.js'
-import { summariseUptime, type UptimeSample } from './uptime.js'
+import { latestIncidents, summariseUptime, type UptimeSample } from './uptime.js'
 
 const PERIOD = monthPeriod(2026, 6, 'Europe/Lisbon')
 const INTERVAL = 5 * 60_000
@@ -151,5 +151,47 @@ describe('summariseUptime', () => {
 
     expect(summary.incidents).toHaveLength(1)
     expect(summary.incidents[0]?.start).toEqual(PERIOD.start)
+  })
+})
+
+describe('amostras em falta por bloqueio da firewall', () => {
+  it('um buraco curto entre amostras saudáveis não abre interrupção nem conta para o SLA', () => {
+    // O que o worker grava quando a firewall do CDN barra a probe duas vezes:
+    // nada. Ficam as amostras de antes e de depois, a quinze minutos umas das
+    // outras.
+    const blocked = new Set([3, 4])
+    const summary = summarise(series(Array(8).fill(true)).filter((_, index) => !blocked.has(index)))
+
+    expect(summary.incidents).toHaveLength(0)
+    expect(summary.uptimePercent).toBe(100)
+  })
+})
+
+describe('latestIncidents', () => {
+  const day = (n: number) => new Date(Date.UTC(2026, 9, n, 23, 0))
+  const incident = (n: number) => ({
+    start: day(n),
+    end: new Date(day(n).getTime() + 11 * 60_000),
+    durationMs: 11 * 60_000,
+    reason: 'site_down',
+    ongoing: false,
+  })
+
+  it('devolve as mais recentes primeiro, e não as mais antigas do período', () => {
+    // O caso que o motivou: uma interrupção por dia, e o cartão a mostrar as
+    // oito do início do mês como se tivessem parado aí.
+    const chronological = Array.from({ length: 20 }, (_, index) => incident(index + 1))
+    const shown = latestIncidents(chronological, 8)
+
+    expect(shown).toHaveLength(8)
+    expect(shown[0]?.start).toEqual(day(20))
+    expect(shown.at(-1)?.start).toEqual(day(13))
+  })
+
+  it('não altera a lista do resumo, que o relatório usa por ordem cronológica', () => {
+    const chronological = [incident(1), incident(2)]
+    latestIncidents(chronological, 8)
+
+    expect(chronological[0]?.start).toEqual(day(1))
   })
 })

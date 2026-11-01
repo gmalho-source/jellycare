@@ -360,15 +360,19 @@ async function settleUptime(
   const { outcome, siteId, region, now } = input
 
   const sample = toUptimeSample(outcome, { region, observedAt: now })
-  await deps.db.insert(schema.uptimeSamples).values({
-    siteId,
-    region: sample.region,
-    observedAt: sample.observedAt,
-    up: sample.up,
-    statusCode: sample.statusCode,
-    responseTimeMs: sample.responseTimeMs,
-    failureReason: sample.failureReason,
-  })
+  // Sem amostra quando a probe foi barrada pela firewall do CDN: não vimos o
+  // site, e não há `up` verdadeiro nem falso que o diga. Ver `toUptimeSample`.
+  if (sample) {
+    await deps.db.insert(schema.uptimeSamples).values({
+      siteId,
+      region: sample.region,
+      observedAt: sample.observedAt,
+      up: sample.up,
+      statusCode: sample.statusCode,
+      responseTimeMs: sample.responseTimeMs,
+      failureReason: sample.failureReason,
+    })
+  }
 
   if (!outcome.findings.some((finding) => finding.code === 'site_down')) return outcome
 

@@ -42,6 +42,69 @@ describe('uptimeCheck', () => {
     expect(tls.findings[0]?.evidence).toMatchObject({ reason: 'tls_failure' })
   })
 
+  it('guarda o código HTTP como causa, para a interrupção dizer qual foi', async () => {
+    const forbidden = await run({ 'https://cliente.pt': { status: 403 } })
+    expect(forbidden.findings[0]?.code).toBe('site_down')
+    expect(forbidden.findings[0]?.evidence).toMatchObject({ reason: 'http_403', status: 403 })
+
+    const unavailable = await run({ 'https://cliente.pt': { status: 503 } })
+    expect(unavailable.findings[0]?.evidence).toMatchObject({ reason: 'http_503', status: 503 })
+  })
+
+  it('reconhece a firewall da Vercel a barrar a probe e não a conta como queda', async () => {
+    const outcome = await run({
+      'https://cliente.pt': { status: 403, headers: { 'x-vercel-mitigated': 'deny' } },
+    })
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.inconclusive).toBe(true)
+    expect(outcome.findings).toHaveLength(1)
+    expect(outcome.findings[0]).toMatchObject({
+      code: 'monitor_blocked',
+      discriminator: 'vercel',
+      severity: 'medium',
+      evidence: { reason: 'firewall_vercel', provider: 'vercel', action: 'deny', status: 403 },
+    })
+    // Nem em cima nem em baixo: o site não foi observado.
+    expect(outcome.metrics.up).toBeUndefined()
+    expect(outcome.metrics.blocked).toBe(1)
+    // O tempo seria o da firewall, não o do site.
+    expect(outcome.metrics.responseTimeMs).toBeUndefined()
+  })
+
+  it('reconhece o desafio da Cloudflare', async () => {
+    const outcome = await run({
+      'https://cliente.pt': { status: 403, headers: { 'cf-mitigated': 'challenge' } },
+    })
+
+    expect(outcome.inconclusive).toBe(true)
+    expect(outcome.findings[0]).toMatchObject({
+      code: 'monitor_blocked',
+      discriminator: 'cloudflare',
+      evidence: { action: 'challenge' },
+    })
+  })
+
+  it('não confunde um 429 com bloqueio só por não trazer o cabeçalho', async () => {
+    const outcome = await run({
+      'https://cliente.pt': { status: 429, headers: { server: 'Vercel' } },
+    })
+
+    expect(outcome.inconclusive).toBeUndefined()
+    expect(outcome.findings[0]?.code).toBe('site_down')
+  })
+
+  it('uma resposta 200 com o cabeçalho de mitigação viu o site', async () => {
+    // A firewall desafiou e deixou passar: a página chegou, o site está de pé.
+    const outcome = await run({
+      'https://cliente.pt': { body: '<h1>Cliente</h1>', headers: { 'x-vercel-mitigated': 'challenge' } },
+    })
+
+    expect(outcome.inconclusive).toBeUndefined()
+    expect(outcome.findings).toHaveLength(0)
+    expect(outcome.metrics.up).toBe(1)
+  })
+
   it('separa erro do servidor de erro do cliente na severidade', async () => {
     const server = await run({ 'https://cliente.pt': { status: 503 } })
     expect(server.findings[0]?.severity).toBe('critical')

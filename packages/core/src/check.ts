@@ -58,6 +58,17 @@ export interface CheckOutcome {
    * Fica registado na execução, para quem opera a plataforma.
    */
   warnings?: string[]
+  /**
+   * Correu, mas não chegou a ver aquilo que devia verificar.
+   *
+   * O caso que o motivou: a firewall do CDN do cliente (Vercel, Cloudflare)
+   * responde à nossa probe com um desafio ou um bloqueio. A borda está de pé e
+   * o site também deve estar, mas nós não o vimos. Isso não é o site em baixo
+   * e também não é o site em cima, por isso um run destes não resolve nada do
+   * que estava aberto e não conta para o SLA. Só regista o que observou: o
+   * próprio bloqueio.
+   */
+  inconclusive?: boolean
   /** Ver `CheckCapture`. Só numa execução com sucesso. */
   capture?: CheckCapture
   durationMs: number
@@ -81,6 +92,8 @@ export interface CheckResult {
   metrics?: Record<string, number>
   /** Ver `CheckOutcome.warnings`. */
   warnings?: string[]
+  /** Ver `CheckOutcome.inconclusive`. */
+  inconclusive?: boolean
   capture?: CheckCapture
 }
 
@@ -102,6 +115,7 @@ export async function runCheck<TConfig>(
       findings: result.findings,
       metrics: result.metrics ?? {},
       ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+      ...(result.inconclusive ? { inconclusive: true } : {}),
       ...(result.capture ? { capture: result.capture } : {}),
       durationMs: Date.now() - startedAt,
     }

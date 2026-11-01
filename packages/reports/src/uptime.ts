@@ -191,3 +191,16 @@ export function summariseUptime(
     coverage,
   }
 }
+
+/**
+ * As interrupções mais recentes primeiro, até `limit`.
+ *
+ * `summariseUptime` devolve-as por ordem cronológica, que é a certa para o
+ * relatório mensal — lê-se como um registo do mês. Num cartão que mostra só
+ * algumas, cortar as primeiras dava as mais antigas e escondia as de ontem.
+ */
+export function latestIncidents(incidents: readonly Incident[], limit: number): Incident[] {
+  return [...incidents]
+    .sort((a, b) => b.start.getTime() - a.start.getTime())
+    .slice(0, Math.max(0, limit))
+}

@@ -46,6 +46,15 @@ export const EXPLICACOES: Record<string, ExplicacaoParaCliente> = {
     oQueFazemos:
       'Confirmamos se é um problema de rede passageiro ou uma configuração que está a bloquear tráfego legítimo, e corrigimos o que for nosso.',
   },
+  monitor_blocked: {
+    titulo: 'A proteção do site barrou a nossa monitorização',
+    oQueE:
+      'A firewall que protege o site contra bots confundiu a nossa verificação com um e não a deixou passar. O site não esteve em baixo por isso — simplesmente não o conseguimos ver nesse momento.',
+    porqueImporta:
+      'Não afeta quem visita o site e não conta como indisponibilidade. Mas, enquanto durar, a vigilância tem um ponto cego, e se o bloqueio se tornar permanente deixamos de dar conta de uma paragem verdadeira.',
+    oQueFazemos:
+      'Acertamos a regra da firewall para deixar passar a nossa verificação, sem baixar a proteção contra o resto.',
+  },
   connection_refused: {
     titulo: 'O servidor recusou a ligação',
     oQueE: 'O servidor está de pé mas recusou atender o pedido.',

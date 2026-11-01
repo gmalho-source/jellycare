@@ -171,9 +171,9 @@ describe('toUptimeSample', () => {
       { region: 'eu-west', observedAt: NOW },
     )
 
-    expect(sampleRow.up).toBe(false)
-    expect(sampleRow.failureReason).toBe('connection_refused')
-    expect(sampleRow.statusCode).toBeNull()
+    expect(sampleRow?.up).toBe(false)
+    expect(sampleRow?.failureReason).toBe('connection_refused')
+    expect(sampleRow?.statusCode).toBeNull()
   })
 
   it('não conta um check rebentado como site em cima', () => {
@@ -183,8 +183,8 @@ describe('toUptimeSample', () => {
       { region: 'eu-west', observedAt: NOW },
     )
 
-    expect(sampleRow.up).toBe(false)
-    expect(sampleRow.failureReason).toBe('ETIMEDOUT')
+    expect(sampleRow?.up).toBe(false)
+    expect(sampleRow?.failureReason).toBe('ETIMEDOUT')
   })
 
   it('trata conteúdo em falta como indisponibilidade para efeitos de SLA', () => {
@@ -198,7 +198,39 @@ describe('toUptimeSample', () => {
       { region: 'eu-west', observedAt: NOW },
     )
 
-    expect(sampleRow.up).toBe(false)
-    expect(sampleRow.failureReason).toBe('content_missing')
+    expect(sampleRow?.up).toBe(false)
+    expect(sampleRow?.failureReason).toBe('content_missing')
+  })
+
+  it('leva o código HTTP para a causa da queda', () => {
+    const httpDown: ObservedFinding = {
+      code: 'site_down',
+      severity: 'high',
+      title: 'Site responde HTTP 403',
+      evidence: { reason: 'http_403', status: 403 },
+    }
+    const sampleRow = toUptimeSample(
+      outcome({ findings: [httpDown], metrics: { up: 0, statusCode: 403, responseTimeMs: 40 } }),
+      { region: 'eu-central', observedAt: NOW },
+    )
+
+    expect(sampleRow).toMatchObject({ up: false, statusCode: 403, failureReason: 'http_403' })
+  })
+
+  it('não grava amostra quando a firewall do CDN barrou a probe', () => {
+    // Nem em cima nem em baixo: uma amostra teria de escolher, e as duas
+    // escolhas mentiam ao SLA. Fica uma lacuna.
+    const blocked: ObservedFinding = {
+      code: 'monitor_blocked',
+      severity: 'medium',
+      title: 'A proteção da Vercel bloqueou a verificação (HTTP 403)',
+      evidence: { reason: 'firewall_vercel', status: 403 },
+    }
+    const sampleRow = toUptimeSample(
+      outcome({ findings: [blocked], metrics: { blocked: 1, statusCode: 403 }, inconclusive: true }),
+      { region: 'eu-central', observedAt: NOW },
+    )
+
+    expect(sampleRow).toBeNull()
   })
 })
