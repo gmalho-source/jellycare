@@ -36,7 +36,16 @@ export default async function LoginPage() {
           <LoginForm />
 
           <p className="mt-6 text-center text-xs text-shell-muted">
-            Um produto Jelly. O acesso é por convite.
+            Um produto{' '}
+            <a
+              href="https://jelly.pt"
+              target="_blank"
+              rel="noopener"
+              className="underline underline-offset-2 hover:text-white"
+            >
+              Jelly
+            </a>
+            . O acesso é por convite.
           </p>
         </div>
       </div>
