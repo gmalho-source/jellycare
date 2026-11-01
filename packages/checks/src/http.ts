@@ -54,19 +54,60 @@ const DEFAULT_MAX_REDIRECTS = 5
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
 
 /**
+ * O código do erro de rede, onde quer que o `fetch` o tenha posto.
+ *
+ * O `fetch` do Node embrulha tudo num `TypeError: fetch failed` e põe a causa
+ * verdadeira em `cause`. Quando o host tem vários endereços, a causa pode
+ * ainda ser um `AggregateError` com uma tentativa por endereço.
+ */
+function causeCode(error: unknown, depth = 0): string {
+  if (!error || typeof error !== 'object' || depth > 4) return ''
+  const node = error as { code?: unknown; cause?: unknown; errors?: unknown }
+  if (depth > 0 && typeof node.code === 'string') return node.code
+  const fromCause = causeCode(node.cause, depth + 1)
+  if (fromCause) return fromCause
+  if (Array.isArray(node.errors)) {
+    for (const inner of node.errors) {
+      const code = causeCode(inner, depth + 1)
+      if (code) return code
+    }
+  }
+  return ''
+}
+
+const TLS_CODE_PREFIXES = [
+  'ERR_TLS',
+  'ERR_SSL',
+  'CERT_',
+  'UNABLE_TO_VERIFY',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'SELF_SIGNED_CERT',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+]
+
+/**
  * Classifica um erro de rede num código estável.
  *
  * Importa para o relatório: "não conseguimos resolver o domínio" e "o
  * certificado é inválido" são problemas diferentes, com responsáveis
  * diferentes, e não podem aparecer os dois como "site em baixo".
+ *
+ * O `connect_timeout` ganhou lugar próprio depois de um site alojado no
+ * servidor da Jelly ter aparecido 45 horas em baixo como `network_error`: a
+ * firewall do servidor tinha posto o IP da probe na lista negra e descartava
+ * as ligações sem responder. O site estava de pé para toda a gente. Um erro
+ * genérico mandava procurar o problema no site; este manda ver primeiro se é
+ * a probe que está a ser barrada.
  */
 export function classifyNetworkError(error: unknown): { code: string; message: string } {
   const message = error instanceof Error ? error.message : String(error)
-  const cause = (error as { cause?: { code?: string } })?.cause
-  const raw = cause?.code ?? ''
+  const raw = causeCode(error)
 
   if (error instanceof Error && error.name === 'AbortError') {
     return { code: 'timeout', message: 'O pedido excedeu o tempo limite' }
+  }
+  if (raw === 'UND_ERR_HEADERS_TIMEOUT' || raw === 'UND_ERR_BODY_TIMEOUT') {
+    return { code: 'timeout', message: 'O servidor aceitou a ligação mas não respondeu a tempo' }
   }
   if (raw === 'ENOTFOUND' || raw === 'EAI_AGAIN') {
     return { code: 'dns_failure', message: 'Não foi possível resolver o domínio' }
@@ -74,13 +115,26 @@ export function classifyNetworkError(error: unknown): { code: string; message: s
   if (raw === 'ECONNREFUSED') {
     return { code: 'connection_refused', message: 'Ligação recusada pelo servidor' }
   }
-  if (raw === 'ECONNRESET') {
+  if (raw === 'ECONNRESET' || raw === 'UND_ERR_SOCKET') {
     return { code: 'connection_reset', message: 'Ligação terminada pelo servidor' }
   }
-  if (raw.startsWith('ERR_TLS') || raw.startsWith('CERT_') || raw.startsWith('UNABLE_TO_VERIFY')) {
+  if (raw === 'UND_ERR_CONNECT_TIMEOUT' || raw === 'ETIMEDOUT') {
+    return {
+      code: 'connect_timeout',
+      message:
+        'O servidor não aceitou a ligação: sem resposta nenhuma. Costuma ser uma firewall a ' +
+        'descartar o IP da probe, ou o servidor desligado',
+    }
+  }
+  if (raw === 'EHOSTUNREACH' || raw === 'ENETUNREACH') {
+    return { code: 'host_unreachable', message: 'Não há caminho de rede até ao servidor' }
+  }
+  if (TLS_CODE_PREFIXES.some((prefix) => raw.startsWith(prefix))) {
     return { code: 'tls_failure', message: `Falha TLS: ${raw}` }
   }
-  return { code: 'network_error', message }
+  // O que não se reconhece leva o código cru na mensagem: «fetch failed»
+  // sozinho não deixa ninguém perceber o que se passou.
+  return { code: 'network_error', message: raw ? `${message} (${raw})` : message }
 }
 
 async function readLimited(response: Response, maxBytes: number): Promise<string> {

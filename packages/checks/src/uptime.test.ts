@@ -40,6 +40,12 @@ describe('uptimeCheck', () => {
 
     const tls = await run({ 'https://cliente.pt': { error: networkError('CERT_HAS_EXPIRED') } })
     expect(tls.findings[0]?.evidence).toMatchObject({ reason: 'tls_failure' })
+
+    // Uma firewall que descarta as ligações da probe: o site pode estar de pé.
+    const dropped = await run({
+      'https://cliente.pt': { error: networkError('UND_ERR_CONNECT_TIMEOUT') },
+    })
+    expect(dropped.findings[0]?.evidence).toMatchObject({ reason: 'connect_timeout' })
   })
 
   it('guarda o código HTTP como causa, para a interrupção dizer qual foi', async () => {
