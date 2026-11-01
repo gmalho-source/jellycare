@@ -2,6 +2,7 @@ import { explicacaoDe, type Leitura, type Severity } from '@jellycare/core'
 import type { ReportData } from './build.js'
 import { formatDuration, formatPercent } from './build.js'
 import { COR, COR_SEMAFORO, corDaPontuacao, fracao, linha, mostrador, tiraDiaria } from './graficos.js'
+import { CAPA_JELLY_JPEG } from './capa-jelly.js'
 import { FONTES_JELLY_CSS, LOGO_JELLYCARE_SVG } from './marca-jelly.js'
 
 /**
@@ -598,12 +599,24 @@ const CSS_JELLY = `
   body.jelly { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; color: #151719; font-size: 9.5pt; line-height: 1.55; }
   body.jelly svg text { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; }
 
-  body.jelly header.capa { background: #151719; border: 0; border-radius: 20px; padding: 18px 22px 20px; margin-bottom: 22px; }
+  /* A capa: a fotografia a sangrar a página toda, sem margens, e o painel ink
+     com o wordmark em baixo. Sem gradiente por cima da fotografia: a marca é
+     de cor lisa, e o painel é o que dá contraste ao texto. */
+  @page capa { margin: 0; }
+  body.jelly .capa-pagina { page: capa; position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; }
+  body.jelly .capa-foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  body.jelly .capa-painel { position: absolute; left: 14mm; right: 14mm; bottom: 16mm; background: #151719; border-radius: 20px; padding: 22px 26px 24px; }
   body.jelly .capa-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  body.jelly .capa-topo svg { height: 22px; width: auto; display: block; }
+  body.jelly .capa-topo svg { height: 24px; width: auto; display: block; }
   body.jelly .capa-eyebrow { color: #ff9aa5; font-size: 7.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-  body.jelly header.capa h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 22pt; line-height: 1.15; color: #ffffff; margin: 16px 0 4px; letter-spacing: 0; }
-  body.jelly header.capa .subtitle, body.jelly header.capa .muted { color: #a8b0bb; }
+  body.jelly .capa-painel h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 30pt; line-height: 1.1; color: #ffffff; margin: 22px 0 6px; letter-spacing: 0; }
+  body.jelly .capa-periodo { font-family: 'Bree Serif', Georgia, serif; font-size: 15pt; color: #ff9aa5; margin: 0 0 10px; }
+  body.jelly .capa-painel .subtitle, body.jelly .capa-painel .muted { color: #a8b0bb; }
+
+  /* A primeira página do relatório, depois da capa: sem faixa, que a capa já a tem. */
+  body.jelly header.inicio { border: 0; padding: 0; margin-bottom: 22px; }
+  body.jelly header.inicio .capa-eyebrow { color: #c42a3d; }
+  body.jelly header.inicio h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 20pt; line-height: 1.15; color: #151719; margin: 6px 0 4px; letter-spacing: 0; }
 
   body.jelly h2 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 14pt; text-transform: none; letter-spacing: 0; color: #151719; margin: 0 0 12px; }
   body.jelly h3 { font-weight: 600; font-size: 10pt; }
@@ -630,7 +643,29 @@ const CSS_JELLY = `
   body.jelly .mono, body.jelly .empty, body.jelly .kpi-foot, body.jelly footer { color: #5c6878; }
 `
 
-/** O cabeçalho da primeira página: faixa escura com o wordmark na versão Jelly. */
+/**
+ * A capa da versão Jelly: a fotografia a página inteira e, em baixo, o painel
+ * ink com o wordmark, o site, o mês e o cliente.
+ */
+function capa(data: ReportData): string {
+  if (!data.marcaJelly) return ''
+  return `<section class="capa-pagina">
+    <img class="capa-foto" src="data:image/jpeg;base64,${CAPA_JELLY_JPEG}" alt="">
+    <div class="capa-painel">
+      <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+      <h1>${escapeHtml(data.site.label)}</h1>
+      <p class="capa-periodo">${escapeHtml(data.period.label)}</p>
+      <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)}</p>
+      ${
+        data.period.partial
+          ? '<p class="subtitle muted">Relatório provisório: o mês ainda não acabou.</p>'
+          : ''
+      }
+    </div>
+  </section>`
+}
+
+/** O cabeçalho da primeira página do relatório; na versão Jelly vem depois da capa. */
 function cabecalho(data: ReportData): string {
   const linhas = `<h1>${escapeHtml(data.site.label)}</h1>
     <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)} · ${escapeHtml(data.period.label)}${
@@ -643,8 +678,8 @@ function cabecalho(data: ReportData): string {
     }`
 
   if (data.marcaJelly) {
-    return `<header class="capa">
-    <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+    return `<header class="inicio">
+    <span class="capa-eyebrow">Relatório mensal · ${escapeHtml(data.period.label)}</span>
     ${linhas}
   </header>`
   }
@@ -785,6 +820,7 @@ export function renderReportHtml(data: ReportData): string {
 ${data.marcaJelly ? `<style>${FONTES_JELLY_CSS}\n${CSS_JELLY}</style>` : ''}
 </head>
 <body${data.marcaJelly ? ' class="jelly"' : ''}>
+  ${capa(data)}
   ${cabecalho(data)}
 
   ${primeiraPagina(data)}

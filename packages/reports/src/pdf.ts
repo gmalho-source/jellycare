@@ -1,4 +1,5 @@
 import { launchBrowser, type BrowserOptions } from '@jellycare/forms/browser'
+import { PDFDocument } from 'pdf-lib'
 import type { Browser } from 'playwright'
 import type { ReportData } from './build.js'
 import { escapeHtml, renderReportHtml, rodape } from './render.js'
@@ -31,17 +32,32 @@ export async function renderReportPdf(
     // fora, e esperar por rede que nunca vem custaria segundos por relatório.
     await page.setContent(renderReportHtml(data), { waitUntil: 'domcontentloaded' })
 
-    return await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
+    const base = { format: 'A4', printBackground: true, preferCSSPageSize: true } as const
+    const comRodape = {
+      ...base,
       displayHeaderFooter: true,
       headerTemplate: '<div></div>',
       footerTemplate: `<div style="width:100%;font-size:7px;color:#8b8b96;padding:0 14mm;display:flex;justify-content:space-between;">
         <span>${escapeHtml(rodape(data))}</span>
         <span><span class="pageNumber"></span>/<span class="totalPages"></span></span>
       </div>`,
-    })
+    }
+
+    if (!data.marcaJelly) return await page.pdf(comRodape)
+
+    // A capa sai sem rodapé: o Chromium põe o rodapé em todas as páginas, e
+    // por cima da fotografia lia-se mal e numerava a capa. Imprime-se a capa
+    // à parte e junta-se ao resto.
+    const [capa, corpo] = [
+      await page.pdf({ ...base, pageRanges: '1' }),
+      await page.pdf({ ...comRodape, pageRanges: '2-' }),
+    ]
+    const junto = await PDFDocument.create()
+    for (const parte of [capa, corpo]) {
+      const documento = await PDFDocument.load(parte)
+      for (const pagina of await junto.copyPages(documento, documento.getPageIndices())) junto.addPage(pagina)
+    }
+    return Buffer.from(await junto.save())
   } finally {
     await context.close().catch(() => {})
     if (ownBrowser) await ownBrowser.close().catch(() => {})

@@ -176,6 +176,9 @@ describe('renderReportHtml', () => {
     expect(jelly).toContain('<body class="jelly">')
     expect(jelly).toContain("font-family:'Poppins'")
     expect(jelly).toContain('aria-label="Jellycare"')
+    // A capa, com a fotografia embutida a página inteira.
+    expect(jelly).toContain('class="capa-pagina"')
+    expect(jelly).toContain('src="data:image/jpeg;base64,')
     // Embutido, sem pedir nada a ninguém: o Chromium do worker não sai para a rede.
     expect(jelly).not.toMatch(/url\((?!data:)/)
 
@@ -184,6 +187,7 @@ describe('renderReportHtml', () => {
     expect(outra).not.toContain('class="jelly"')
     expect(outra).not.toContain('Poppins')
     expect(outra).not.toContain('aria-label="Jellycare"')
+    expect(outra).not.toContain('capa-pagina')
   })
 })
 
@@ -213,6 +217,16 @@ describe('renderReportPdf', () => {
     // Assinatura do formato: sem isto, um buffer vazio passaria no teste.
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
     expect(pdf.length).toBeGreaterThan(5_000)
+  }, 120_000)
+
+  it('a capa da versão Jelly é a primeira página, e o relatório com outra marca não a tem', async () => {
+    const { PDFDocument } = await import('pdf-lib')
+    const paginas = async (data: ReturnType<typeof report>) =>
+      (await PDFDocument.load(await renderReportPdf(data, { launch }))).getPageCount()
+
+    const comCapa = await paginas(COMPLETO())
+    const semCapa = await paginas({ ...COMPLETO(), marcaJelly: false })
+    expect(comCapa).toBe(semCapa + 1)
   }, 120_000)
 
   it('gera PDF também quando não há dados nenhuns', async () => {
