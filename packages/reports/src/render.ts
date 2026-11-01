@@ -612,8 +612,8 @@ const CSS_JELLY = `
   body.jelly .capa-eyebrow { color: #ffffff; font-size: 8pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
   body.jelly .capa-base { position: absolute; left: 18mm; right: 18mm; bottom: 22mm; }
   body.jelly .capa-traco { width: 44px; height: 4px; border-radius: 2px; background: #dd364a; margin-bottom: 18px; }
-  body.jelly .capa-base h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 44pt; line-height: 1.05; color: #ffffff; margin: 0 0 10px; letter-spacing: 0; }
-  body.jelly .capa-periodo { font-family: 'Bree Serif', Georgia, serif; font-size: 20pt; line-height: 1.2; color: #ffffff; margin: 0 0 14px; }
+  body.jelly .capa-base h1 { font-family: 'Bree Serif', Georgia, serif; font-weight: 400; font-size: 34pt; line-height: 1.1; color: #ffffff; margin: 0 0 18px; letter-spacing: 0; max-width: 150mm; }
+  body.jelly .capa-site { font-family: 'Bree Serif', Georgia, serif; font-size: 18pt; line-height: 1.2; color: #ffffff; margin: 0 0 6px; }
   body.jelly .capa-base .subtitle, body.jelly .capa-base .muted { color: #ffffff; font-size: 10pt; margin: 0; }
 
   /* A primeira página do relatório, depois da capa: sem faixa, que a capa já a tem. */
@@ -648,18 +648,19 @@ const CSS_JELLY = `
 
 /**
  * A capa da versão Jelly: a fotografia a página inteira, escurecida, com o
- * wordmark e o texto por cima — o site, o mês e o cliente.
+ * wordmark e o mês no topo e, em baixo, o título do relatório, o site e o
+ * cliente.
  */
 function capa(data: ReportData): string {
   if (!data.marcaJelly) return ''
   return `<section class="capa-pagina">
     <img class="capa-foto" src="data:image/jpeg;base64,${CAPA_JELLY_JPEG}" alt="">
     <div class="capa-veu"></div>
-    <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">Relatório mensal</span></div>
+    <div class="capa-topo">${LOGO_JELLYCARE_SVG}<span class="capa-eyebrow">${escapeHtml(data.period.label)}</span></div>
     <div class="capa-base">
       <div class="capa-traco"></div>
-      <h1>${escapeHtml(data.site.label)}</h1>
-      <p class="capa-periodo">${escapeHtml(data.period.label)}</p>
+      <h1>Relatório mensal de manutenção ativa e proativa de websites</h1>
+      <p class="capa-site">${escapeHtml(data.site.label)}</p>
       <p class="subtitle">${escapeHtml(data.organizationName)} · ${escapeHtml(data.site.url)}</p>
       ${
         data.period.partial
