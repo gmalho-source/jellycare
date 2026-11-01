@@ -79,8 +79,8 @@ export const organizations = pgTable('organizations', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   /**
-   * Dia do mês em que o relatório do mês anterior é enviado. Nunca o dia 1: o
-   * relatório sai depois de os dados assentarem.
+   * Já não é usado: o relatório sai no primeiro dia útil do mês, às nove (ver
+   * `horaDoRelatorio` em @jellycare/reports). Fica até uma migração o tirar.
    */
   reportSendDay: integer('report_send_day').notNull().default(3),
   /** Marca a apresentar no relatório. Vazio usa a da Jellycare. */
@@ -621,6 +621,13 @@ export const reports = pgTable(
      * do mês completo toma-lhe o lugar, em vez de ser impedido por ele.
      */
     partial: boolean('partial').notNull().default(false),
+    /**
+     * Pedido no painel para endereços escolhidos à mão, em vez dos
+     * destinatários do site. Não conta como o envio do mês ao cliente: o
+     * envio agendado regenera-o e manda-o a quem o deve receber. Sem isto,
+     * mandar o relatório a um colega na véspera impedia o do cliente.
+     */
+    recipientsOverride: boolean('recipients_override').notNull().default(false),
   },
   (table) => [
     // Um relatório por site e por mês. É o que torna a geração idempotente:

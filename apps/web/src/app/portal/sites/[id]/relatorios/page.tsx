@@ -22,7 +22,7 @@ export default async function PortalRelatoriosPage({
       <CardHeader title="Relatórios mensais" />
       {detail.reports.length === 0 ? (
         <EmptyState>
-          O primeiro relatório é enviado no início do mês seguinte ao arranque.
+          O primeiro relatório é enviado no primeiro dia útil do mês seguinte ao arranque.
         </EmptyState>
       ) : (
         <ul className="divide-y divide-ink-100">

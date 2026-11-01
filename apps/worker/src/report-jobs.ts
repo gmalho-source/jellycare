@@ -7,6 +7,7 @@ import {
 } from '@jellycare/db'
 import {
   buildReport,
+  horaDoRelatorio,
   monthPeriod,
   monthToDate,
   previousMonth,
@@ -63,14 +64,6 @@ export type ReportOutcome =
   | { status: 'skipped'; reason: string }
 
 const DEFAULT_TIME_ZONE = 'Europe/Lisbon'
-
-/** Dia do mês, no fuso do cliente. */
-function zonedDayOfMonth(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, day: '2-digit' }).formatToParts(
-    instant,
-  )
-  return Number(parts.find((entry) => entry.type === 'day')?.value)
-}
 
 function messageFor(data: ReportData, fileName: string, pdf: Buffer, to: string[]): ReportMessage {
   const lines = [
@@ -331,7 +324,11 @@ export async function generateReport(
   }
 
   const existing = await db
-    .select({ id: schema.reports.id, partial: schema.reports.partial })
+    .select({
+      id: schema.reports.id,
+      partial: schema.reports.partial,
+      recipientsOverride: schema.reports.recipientsOverride,
+    })
     .from(schema.reports)
     .where(
       and(
@@ -344,8 +341,13 @@ export async function generateReport(
 
   if (existing[0]) {
     // Um relatório provisório do mês em curso dá lugar ao do mês completo.
-    // Sem isto, pedir o parcial a dia 30 impedia o definitivo de sair a 3.
-    if (!existing[0].partial || period.partial) {
+    // Sem isto, pedir o parcial a dia 30 impedia o definitivo de sair no mês seguinte.
+    //
+    // E um mandado à mão a outra pessoa não é o envio do mês: o agendado
+    // (sem destinatários próprios) regenera-o e manda-o ao cliente.
+    const provisorio = existing[0].partial && !period.partial
+    const soParaOutros = existing[0].recipientsOverride && !recipientsOverride && !period.partial
+    if (!provisorio && !soParaOutros) {
       return { status: 'skipped', reason: 'Relatório já existe para este período' }
     }
     await db.delete(schema.reports).where(eq(schema.reports.id, existing[0].id))
@@ -511,6 +513,7 @@ export async function generateReport(
       },
       generatedAt: deps.now ?? new Date(),
       partial: period.partial ?? false,
+      recipientsOverride: recipientsOverride !== undefined,
     })
     // Duas instâncias de worker podem chegar aqui ao mesmo tempo. O índice
     // único decide, e quem perder não rebenta nem duplica.
@@ -571,8 +574,9 @@ export interface ReportSweepResult {
 /**
  * Passagem periódica: gera o que falta do mês anterior.
  *
- * Só depois do dia configurado, para dar tempo aos dados do fim do mês de
- * assentarem — nomeadamente à avaliação de entrega das últimas submissões.
+ * Só a partir das nove do primeiro dia útil do mês (fins de semana e feriados
+ * nacionais de fora): o email chega em horário de trabalho e os dados do fim
+ * do mês tiveram a noite para assentar.
  */
 export async function generatePendingReports(
   deps: ReportJobDeps,
@@ -580,24 +584,21 @@ export async function generatePendingReports(
   const now = deps.now ?? new Date()
   const timeZone = deps.timeZone ?? DEFAULT_TIME_ZONE
   const period = previousMonth(now, timeZone)
-  const today = zonedDayOfMonth(now, timeZone)
+  // No primeiro dia útil do mês, a partir das nove. Ver `horaDoRelatorio`.
+  if (!horaDoRelatorio(now, timeZone)) return { considered: 0, generated: 0, sent: 0 }
 
   const sites = await deps.db
     .select({
       id: schema.sites.id,
-      organizationId: schema.sites.organizationId,
-      sendDay: schema.organizations.reportSendDay,
       createdAt: schema.sites.createdAt,
     })
     .from(schema.sites)
-    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.sites.organizationId))
     .where(eq(schema.sites.state, 'active'))
 
   let generated = 0
   let sent = 0
 
   for (const site of sites) {
-    if (today < site.sendDay) continue
     // Um site criado a meio do período seguinte não tem mês anterior nenhum
     // para reportar.
     if (site.createdAt.getTime() >= period.end.getTime()) continue

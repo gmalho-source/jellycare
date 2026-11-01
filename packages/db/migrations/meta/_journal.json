@@ -148,6 +148,13 @@
       "when": 1793292242011,
       "tag": "0020_strong_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793523805862,
+      "tag": "0021_smooth_grandmaster",
+      "breakpoints": true
     }
   ]
 }
