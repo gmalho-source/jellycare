@@ -6,8 +6,13 @@ destinatários do site com o PDF anexado. Configura-se por site, em
 
 ## Período
 
-O relatório agendado cobre o mês anterior, no fuso do cliente, e sai no dia
-configurado na organização (`report_send_day`, dia 3 por omissão).
+O relatório agendado cobre o mês anterior, no fuso do cliente, e sai no
+**primeiro dia útil do mês, a partir das 09:00 de Lisboa**: de segunda a sexta,
+fora dos feriados nacionais (os fixos, a Sexta-feira Santa e o Corpo de Deus;
+sem o Carnaval nem os municipais). Um relatório a 1 de novembro, ou a um
+sábado, chegava a uma caixa que ninguém abre. As nove dão aos dados do último
+dia a noite para assentar. Um worker parado nessa manhã envia quando voltar.
+Ver `packages/reports/src/dia-util.ts`. (`report_send_day` já não é usado.)
 
 **Um site que entrou a meio do mês é medido a partir do dia em que entrou.**
 O cabeçalho diz «acompanhamento desde 22 de setembro de 2026», e a cobertura e
@@ -31,7 +36,7 @@ o provisório levou voltam à fila e seguem no definitivo.
 
 **Um relatório mandado à mão a outra pessoa não conta como o envio do mês**
 (`reports.recipients_override`). Mandar o do mês passado a um colega a dia 1
-deixava-o gerado, e o envio agendado de dia 3 saltava-o: o cliente ficava sem
+deixava-o gerado, e o envio agendado saltava-o: o cliente ficava sem
 relatório. Agora o agendado regenera-o e manda-o aos destinatários do site e
 aos contactos que recebem relatórios. Um «Enviar agora» sem endereço próprio
 vai para esses mesmos destinatários e conta como o envio do mês.

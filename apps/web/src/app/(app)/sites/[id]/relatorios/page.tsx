@@ -45,7 +45,7 @@ export default async function RelatoriosPage({ params }: { params: Promise<{ id:
         />
         {detail.reports.length === 0 ? (
           <EmptyState>
-            Ainda não há relatórios. O primeiro é gerado no início do mês seguinte.
+            Ainda não há relatórios. O primeiro é enviado no primeiro dia útil do mês seguinte.
           </EmptyState>
         ) : (
           <ul className="divide-y divide-ink-100">

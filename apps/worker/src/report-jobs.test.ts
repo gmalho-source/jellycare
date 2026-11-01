@@ -244,12 +244,12 @@ describe('generatePendingReports', () => {
     expect(report?.periodMonth).toBe(6)
   }, 120_000)
 
-  it('espera pelo dia de envio configurado', async () => {
+  it('espera pelas nove do primeiro dia útil do mês', async () => {
     await seedUptime()
 
-    // Dia 2 de julho, com envio configurado para o dia 3.
+    // 1 de julho de 2026 é quarta-feira: útil. Às 08:00 em Lisboa ainda não.
     const result = await generatePendingReports(
-      deps({ now: new Date('2026-07-02T09:00:00Z') }),
+      deps({ now: new Date('2026-07-01T07:00:00Z') }),
     )
 
     expect(result.generated).toBe(0)
@@ -429,9 +429,9 @@ describe('runReportRequests', () => {
   }, 120_000)
 
   it('um relatório mandado à mão a outra pessoa não impede o envio do mês ao cliente', async () => {
-    // Mandar o relatório de junho a um colega a dia 1 de julho deixava-o
-    // gerado, e o envio agendado de dia 3 via-o e saltava: o cliente ficava
-    // sem o relatório do mês.
+    // Mandar o relatório de junho a um colega antes do envio agendado
+    // deixava-o gerado, e o agendado via-o e saltava: o cliente ficava sem o
+    // relatório do mês.
     await seedUptime()
     await requestReport(db, { siteId, recipients: ['pontual@exemplo.pt'] })
     await runReportRequests(deps())
