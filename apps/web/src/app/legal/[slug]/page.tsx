@@ -1,15 +1,17 @@
 import { notFound } from 'next/navigation'
 import { formatDateTime } from '@/components/ui'
-import { daysUntil, getLegalDocument, LEGAL_SLUGS, renderLegalMarkdown } from '@/lib/legal'
+import { daysUntil, getLegalDocument, renderLegalMarkdown } from '@/lib/legal'
 
-// ISR a 5 minutos. Os slugs conhecidos pré-renderizam-se no build; uma
-// versão nova do mesmo documento chega a toda a gente no revalidate, sem
-// esperar pelo deploy seguinte. Um slug novo (raríssimo) gera-se à primeira
-// visita — `dynamicParams` fica no default.
+// ISR a 5 minutos, gerado sob pedido — não no `next build`.
+//
+// O CI e a imagem Docker constroem sem `DATABASE_URL` (só têm a base de
+// testes). Pré-renderizar os slugs no build lia a base e partia o Deploy
+// com «DATABASE_URL não está definida». Com lista vazia, a primeira visita
+// em produção gera a página e o `revalidate` mantém-na quente.
 export const revalidate = 300
 
 export function generateStaticParams() {
-  return Object.keys(LEGAL_SLUGS).map((slug) => ({ slug }))
+  return []
 }
 
 /**
