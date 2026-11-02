@@ -1,12 +1,16 @@
 import { notFound } from 'next/navigation'
 import { formatDateTime } from '@/components/ui'
-import { daysUntil, getLegalDocument, renderLegalMarkdown } from '@/lib/legal'
+import { daysUntil, getLegalDocument, LEGAL_SLUGS, renderLegalMarkdown } from '@/lib/legal'
 
-// Sem `generateStaticParams`: com ele o Next pré-renderia estas páginas no
-// build, e uma versão publicada a seguir só apareceria no deploy seguinte. Um
-// documento legal tem de refletir o que está na base de dados no momento em
-// que é lido.
-export const dynamic = 'force-dynamic'
+// ISR a 5 minutos. Os slugs conhecidos pré-renderizam-se no build; uma
+// versão nova do mesmo documento chega a toda a gente no revalidate, sem
+// esperar pelo deploy seguinte. Um slug novo (raríssimo) gera-se à primeira
+// visita — `dynamicParams` fica no default.
+export const revalidate = 300
+
+export function generateStaticParams() {
+  return Object.keys(LEGAL_SLUGS).map((slug) => ({ slug }))
+}
 
 /**
  * Um documento legal, na versão em vigor — e na anunciada, quando há uma.

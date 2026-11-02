@@ -1,4 +1,4 @@
-import { pageSpeedCheck, pageSpeedDesktopCheck } from '@jellycare/checks'
+import { pageSpeedCheck, pageSpeedDesktopCheck } from '@jellycare/checks/page-speed'
 import Link from 'next/link'
 import { Icone } from './icons'
 

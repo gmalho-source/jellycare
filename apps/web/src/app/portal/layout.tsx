@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
+import { FONTES_PORTAL, FontPreload } from '@/components/font-preload'
 import { Shell, type SiteNaBarra } from '@/components/shell'
 import { getLegalState } from '@/lib/legal'
 import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { requireUser } from '@/lib/session'
+import '@/styles/fonts-portal.css'
 import { signOut } from '../(app)/actions'
 
 /**
@@ -73,22 +75,25 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   return (
     // O portal veste a marca Jelly; ver `.tema-jelly` em globals.css.
-    <div className="tema-jelly">
-      <Shell
-        email={user.email}
-        inicio={{ href: '/portal', label: 'Os meus sites', icone: 'sites', exato: true }}
-        globais={[{ href: '/legal/aceitar', label: 'Tratamento de dados', icone: 'relatorios' }]}
-        grupo="Os seus sites"
-        sites={naBarra}
-        sair={signOut}
-      >
-        {children}
+    <>
+      <FontPreload hrefs={FONTES_PORTAL} />
+      <div className="tema-jelly">
+        <Shell
+          email={user.email}
+          inicio={{ href: '/portal', label: 'Os meus sites', icone: 'sites', exato: true }}
+          globais={[{ href: '/legal/aceitar', label: 'Tratamento de dados', icone: 'relatorios' }]}
+          grupo="Os seus sites"
+          sites={naBarra}
+          sair={signOut}
+        >
+          {children}
 
-        <footer className="mt-10 text-xs text-ink-400">
-          Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o nosso trabalho e
-          explicá-los faz parte dele.
-        </footer>
-      </Shell>
-    </div>
+          <footer className="mt-10 text-xs text-ink-400">
+            Alguma dúvida sobre o que está aqui? Fale connosco — estes números são o nosso trabalho e
+            explicá-los faz parte dele.
+          </footer>
+        </Shell>
+      </div>
+    </>
   )
 }

@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
+import { FONTES_APP, FontPreload } from '@/components/font-preload'
 import { Shell, type SiteNaBarra } from '@/components/shell'
 import { listSites, ordenarPorGravidade } from '@/lib/queries'
 import { canManage, isClientOnly, requireUser } from '@/lib/session'
 import { sectionHref, sectionsFor } from '@/lib/site-nav'
 import { lerVigia } from '@/lib/vigia'
+import '@/styles/fonts-app.css'
 import { signOut } from './actions'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -35,32 +37,35 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }))
 
   return (
-    <Shell
-      email={user.email}
-      vigia={resumo}
-      inicio={{
-        href: '/',
-        label: 'Sites',
-        icone: 'sites',
-        exato: true,
-        contagem: sites.filter((site) => site.worstSeverity !== null).length,
-      }}
-      globais={[
-        { href: '/sites/new', label: 'Adicionar site', icone: 'mais', exato: true },
-        // Só a Equipa Jelly gere clientes e a própria equipa.
-        ...(user.isStaff
-          ? [
-              { href: '/atividade', label: 'Atividade', icone: 'atividade', exato: true },
-              { href: '/organizacoes', label: 'Organizações', icone: 'organizacoes', exato: false },
-              { href: '/equipa', label: 'Equipa Jelly', icone: 'equipa', exato: true },
-            ]
-          : []),
-      ]}
-      grupo="Os seus sites"
-      sites={naBarra}
-      sair={signOut}
-    >
-      {children}
-    </Shell>
+    <>
+      <FontPreload hrefs={FONTES_APP} />
+      <Shell
+        email={user.email}
+        vigia={resumo}
+        inicio={{
+          href: '/',
+          label: 'Sites',
+          icone: 'sites',
+          exato: true,
+          contagem: sites.filter((site) => site.worstSeverity !== null).length,
+        }}
+        globais={[
+          { href: '/sites/new', label: 'Adicionar site', icone: 'mais', exato: true },
+          // Só a Equipa Jelly gere clientes e a própria equipa.
+          ...(user.isStaff
+            ? [
+                { href: '/atividade', label: 'Atividade', icone: 'atividade', exato: true },
+                { href: '/organizacoes', label: 'Organizações', icone: 'organizacoes', exato: false },
+                { href: '/equipa', label: 'Equipa Jelly', icone: 'equipa', exato: true },
+              ]
+            : []),
+        ]}
+        grupo="Os seus sites"
+        sites={naBarra}
+        sair={signOut}
+      >
+        {children}
+      </Shell>
+    </>
   )
 }

@@ -1,3 +1,4 @@
+import nextDynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import {
   listMembers,
@@ -13,17 +14,29 @@ import { getSiteDetail } from '@/lib/queries'
 import { listUmbrellaProjects, projectsForHostname, similarProjects } from '@/lib/umbrella'
 import { assertMembership, canManage, requireUser } from '@/lib/session'
 import Link from 'next/link'
-import { MoverSite } from '../../../organizacoes/formularios'
 import { claudeResolveConfigurado } from '@/lib/claude-resolve'
-import { RepositorioDoSite } from '../problemas/claude-resolve'
-import { AccessPanel } from '../access-panel'
-import { DangerPanel } from '../danger-panel'
-import { LegalPanel } from '../legal-panel'
 import { MaintenancePanel } from '../maintenance-panel'
-import { SettingsPanel } from '../settings-panel'
-import { UmbrellaLink } from '../umbrella-link'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Painéis abaixo da dobra: cada um é um cliente component autónoma. Em lazy
+ * o First Load desta rota deixa de carregar WordPress / legal / arquivo /
+ * Claude Resolve só porque a janela de manutenção está no topo.
+ */
+const SettingsPanel = nextDynamic(() =>
+  import('../settings-panel').then((m) => m.SettingsPanel),
+)
+const UmbrellaLink = nextDynamic(() => import('../umbrella-link').then((m) => m.UmbrellaLink))
+const MoverSite = nextDynamic(() =>
+  import('../../../organizacoes/formularios').then((m) => m.MoverSite),
+)
+const RepositorioDoSite = nextDynamic(() =>
+  import('../problemas/claude-resolve').then((m) => m.RepositorioDoSite),
+)
+const DangerPanel = nextDynamic(() => import('../danger-panel').then((m) => m.DangerPanel))
+const LegalPanel = nextDynamic(() => import('../legal-panel').then((m) => m.LegalPanel))
+const AccessPanel = nextDynamic(() => import('../access-panel').then((m) => m.AccessPanel))
 
 export default async function DefinicoesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

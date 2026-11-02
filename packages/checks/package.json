@@ -13,6 +13,14 @@
     "./test-utils": {
       "types": "./dist/test-utils.d.ts",
       "default": "./dist/test-utils.js"
+    },
+    "./verification": {
+      "types": "./dist/verification.d.ts",
+      "default": "./dist/verification.js"
+    },
+    "./page-speed": {
+      "types": "./dist/page-speed.d.ts",
+      "default": "./dist/page-speed.js"
     }
   },
   "scripts": {
