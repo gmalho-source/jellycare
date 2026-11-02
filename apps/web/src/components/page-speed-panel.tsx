@@ -1,4 +1,4 @@
-import { LIMIARES } from '@jellycare/checks'
+import { LIMIARES } from '@jellycare/checks/page-speed'
 import { COR_ESTADO } from '@/lib/chart-colors'
 import { formatNumero } from './ui'
 import type { PageSpeedHistory, PageSpeedPoint } from '@/lib/queries'

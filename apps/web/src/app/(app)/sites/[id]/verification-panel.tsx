@@ -1,6 +1,6 @@
 'use client'
 
-import type { VerificationChallenge } from '@jellycare/checks'
+import type { VerificationChallenge } from '@jellycare/checks/verification'
 import { useActionState, useState } from 'react'
 import { checkVerification, type ActionState } from '../../actions'
 

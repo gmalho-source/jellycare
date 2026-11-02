@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Brand } from '@/components/brand'
+import { FONTES_PORTAL, FontPreload } from '@/components/font-preload'
+import '@/styles/fonts-portal.css'
 
 /**
  * As páginas legais são públicas.
@@ -12,24 +14,27 @@ import { Brand } from '@/components/brand'
 export default function LegalLayout({ children }: { children: ReactNode }) {
   // O cliente lê e aceita aqui, por isso com a marca Jelly, como o portal.
   return (
-    <div className="tema-jelly min-h-screen bg-ink-50">
-      <header className="bg-ink-900">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5">
-            <Brand />
-          </Link>
-          <nav className="flex items-center gap-4 text-xs text-shell-muted">
-            <Link href="/legal/dpa" className="hover:text-white">
-              Tratamento de dados
+    <>
+      <FontPreload hrefs={FONTES_PORTAL} />
+      <div className="tema-jelly min-h-screen bg-ink-50">
+        <header className="bg-ink-900">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+            <Link href="/" className="flex min-w-0 items-center gap-2.5" prefetch={false}>
+              <Brand />
             </Link>
-            <Link href="/legal/subcontratantes" className="hover:text-white">
-              Subcontratantes
-            </Link>
-          </nav>
-        </div>
-      </header>
+            <nav className="flex items-center gap-4 text-xs text-shell-muted">
+              <Link href="/legal/dpa" className="hover:text-white" prefetch={false}>
+                Tratamento de dados
+              </Link>
+              <Link href="/legal/subcontratantes" className="hover:text-white" prefetch={false}>
+                Subcontratantes
+              </Link>
+            </nav>
+          </div>
+        </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">{children}</main>
-    </div>
+        <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">{children}</main>
+      </div>
+    </>
   )
 }

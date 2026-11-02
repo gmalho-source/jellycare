@@ -1,4 +1,4 @@
-import { buildChallenge } from '@jellycare/checks'
+import { buildChallenge } from '@jellycare/checks/verification'
 import { notFound } from 'next/navigation'
 import { Card, EmptyState } from '@/components/ui'
 import { MalwareCard } from '@/components/malware-card'

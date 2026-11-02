@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { Card, CardHeader, formatRelative } from '@/components/ui'
 import { PageSpeedPanel } from '@/components/page-speed-panel'
-import { ResponseTimeChart } from '@/components/response-time-chart'
+import { ResponseTimeChartLazy } from '@/components/response-time-chart-lazy'
 import {
   SeletorDispositivo,
   tipoDeVelocidade,
@@ -63,7 +63,7 @@ export default async function DesempenhoPage({
           title="Tempo de resposta do servidor"
           action={<span className="text-xs text-ink-400">Últimos 30 dias</span>}
         />
-        <ResponseTimeChart days={dias} />
+        <ResponseTimeChartLazy days={dias} />
       </Card>
     </>
   )
