@@ -48,12 +48,13 @@ agendador morto também não, e não está.
 A batida vive no **Postgres**, não no Redis. Um sinal de vida guardado na
 coisa que pode falhar não é sinal de vida nenhum.
 
-Quatro estados:
+Cinco estados:
 
 | Estado | O que significa |
 |---|---|
 | `ok` | Passou há menos de 5 minutos, sem erro, e as verificações concluem. |
-| `checks_late` | O agendador está bom, mas há verificações que não concluem. |
+| `sites_late` | Tudo bom na plataforma; alguns sites têm verificações sem sucesso. |
+| `checks_late` | O agendador está bom, mas um tipo de verificação deixou de concluir em todos os sites onde funcionava. |
 | `failing` | Continua a passar, mas a última passagem falhou. |
 | `stale` | Não há passagem há mais de 5 minutos. |
 
@@ -64,6 +65,15 @@ respondido «sim» o tempo inteiro.
 O `checks_late` cobre a falha seguinte, que esta avaria não chegou a mostrar:
 um worker que enfileira alegremente e falha todos os jobs. O agendador passaria
 no primeiro sinal sem tocar no segundo.
+
+O `sites_late` separa o que é do site do que é da plataforma. Até novembro de
+2026, um só site atrasado bastava para o 503: a acpa.pt e a mfpinto.com, no
+mesmo servidor e atrás da mesma firewall a descartar o IP da probe, puseram o
+alarme vermelho quatro dias seguidos com a plataforma de pé. Um alarme sempre
+vermelho esconde a avaria verdadeira que chegar a seguir. Agora, só um tipo de
+verificação parado em **todos** os sites onde já funcionou dá 503 (um browser
+partido, uma chave revogada); alguns sites atrasados ficam no corpo da resposta
+e no painel da equipa, com 200.
 
 ### Vivacidade por tipo de verificação
 
@@ -92,7 +102,8 @@ inteira, que é o que o vigia externo precisa de saber.
 ### Onde se lê
 
 - **`GET /api/health/scheduler`** — público, sem sessão. Devolve 200 quando
-  está `ok` e 503 em tudo o resto, para um vigia poder decidir sem ler JSON.
+  está `ok` ou `sites_late` e 503 em tudo o resto, para um vigia poder decidir
+  sem ler JSON.
 - **O painel da equipa** — faixa vermelha no topo, com a mensagem de erro
   exata. Não se pode fechar, e a frase «nenhum com problemas abertos»
   desaparece enquanto a monitorização estiver parada.
@@ -156,7 +167,8 @@ Se preferir fazê-lo à mão, é um monitor **HTTP(s)** com estes valores:
 | Contactos de alerta | pelo menos um; sem contacto o monitor deteta e não avisa |
 
 Não é preciso configurar palavras-chave nem códigos HTTP: o endpoint responde
-**503** quando o agendador para ou quando uma verificação deixa de concluir, e
+**503** quando o agendador para ou quando um tipo de verificação deixa de
+concluir em todos os sites, e
 qualquer serviço de uptime trata um 503 como «em baixo». Responde também
 `Cache-Control: no-store`, porque um sinal de vida servido de uma cache diz
 «está tudo bem» sobre um instante que já passou.

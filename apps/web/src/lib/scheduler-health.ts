@@ -191,6 +191,33 @@ export function summariseLiveness(
   })
 }
 
+/**
+ * O estado que o vigia externo lê, e o código HTTP que lhe corresponde.
+ *
+ * Três níveis, porque «um tipo de verificação deixou de funcionar» não é uma
+ * coisa só:
+ *
+ * - `checks_late` (503): um tipo está atrasado em **todos** os sites onde já
+ *   funcionou. Isso é a plataforma — um browser partido, uma chave revogada,
+ *   um worker que deixou de terminar jobs — e é para isso que o alarme existe.
+ * - `sites_late` (200): está atrasado só nalguns. É o site a barrar-nos — a
+ *   firewall de um alojador a descartar o IP da probe — e não a plataforma.
+ *   Fica no JSON e no painel da equipa, mas não acorda ninguém.
+ * - `ok` (200).
+ *
+ * Antes, um só site atrasado bastava para o 503. Dois sites atrás da mesma
+ * firewall puseram o alarme vermelho quatro dias seguidos com a plataforma de
+ * pé — e um alarme sempre vermelho esconde a avaria verdadeira que chegar a
+ * seguir. O estado do agendador continua a ter precedência sobre tudo.
+ */
+export type LivenessStatus = 'ok' | 'sites_late' | 'checks_late'
+
+export function livenessStatus(checks: readonly CheckLiveness[]): LivenessStatus {
+  if (checks.some((check) => check.tracked > 0 && check.late >= check.tracked)) return 'checks_late'
+  if (checks.some((check) => check.late > 0)) return 'sites_late'
+  return 'ok'
+}
+
 /** Há quanto tempo deixamos de olhar para trás à procura de sucessos. */
 const LOOKBACK_DAYS = 30
 

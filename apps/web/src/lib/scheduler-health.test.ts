@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   lateAfterMinutes,
   resumirVigia,
+  livenessStatus,
   summariseLiveness,
   type CheckLiveness,
   type SchedulerHealth,
@@ -179,5 +180,35 @@ describe('resumirVigia', () => {
 
     expect(resumo.estado).toBe('alerta')
     expect(resumo.titulo).toBe('Sem sinal do agendador')
+  })
+})
+
+describe('livenessStatus', () => {
+  const tipo = (checkType: string, tracked: number, late: number) => ({
+    checkType,
+    tracked,
+    late,
+    lastSuccessAt: null,
+    worstLateMinutes: late > 0 ? 7000 : null,
+  })
+
+  it('tudo em dia é ok', () => {
+    expect(livenessStatus([tipo('uptime', 6, 0), tipo('tls', 6, 0)])).toBe('ok')
+  })
+
+  it('alguns sites atrasados não são a plataforma em baixo', () => {
+    // O caso real: dois sites atrás da mesma firewall, quatro verificações
+    // sem sucesso há dias, e o resto da plataforma a trabalhar.
+    expect(livenessStatus([tipo('tls', 6, 2), tipo('exposed_files', 6, 2), tipo('uptime', 6, 0)])).toBe(
+      'sites_late',
+    )
+  })
+
+  it('um tipo parado em todos os sites é avaria da plataforma', () => {
+    expect(livenessStatus([tipo('page_speed', 6, 6), tipo('uptime', 6, 0)])).toBe('checks_late')
+  })
+
+  it('a avaria da plataforma prevalece sobre atrasos de sites', () => {
+    expect(livenessStatus([tipo('tls', 6, 2), tipo('page_speed', 4, 4)])).toBe('checks_late')
   })
 })
