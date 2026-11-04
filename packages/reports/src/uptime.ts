@@ -14,6 +14,8 @@ import { periodDurationMs } from './period.js'
 export interface UptimeSample {
   observedAt: Date
   up: boolean
+  /** Região da probe. Ausente nas amostras de quem corre uma região só. */
+  region?: string | null
   failureReason?: string | null
   responseTimeMs?: number | null
 }
@@ -83,6 +85,55 @@ function commonReason(samples: readonly UptimeSample[]): string | null {
   return best
 }
 
+/**
+ * Quanto tempo a última observação de uma região continua a valer quando se
+ * juntam as regiões. O mesmo valor da corroboração no worker: duas regiões com
+ * o uptime de cinco em cinco minutos cruzam-se sempre dentro desta janela.
+ */
+export const REGION_MERGE_WINDOW_MS = 10 * 60_000
+
+/**
+ * Junta as amostras de várias regiões numa só linha do tempo.
+ *
+ * Com duas probes, as amostras intercalam-se. Contadas uma a uma, uma região
+ * barrada pela firewall do servidor e outra que vê o site davam uma interrupção
+ * de dois minutos e meio a cada cinco — o site de pé para toda a gente e o
+ * relatório a dizer o contrário.
+ *
+ * A regra é a mesma da corroboração: o site está em cima se alguma região o
+ * viu em cima na sua observação mais recente (dentro da janela). Só está em
+ * baixo quando todas as regiões com observação recente o veem em baixo. Uma
+ * queda verdadeira começa assim a contar quando a segunda região a confirma,
+ * no máximo um intervalo depois — o preço de não acusar o caminho de rede.
+ *
+ * Cada amostra de entrada dá uma amostra de saída, ordenadas por data. Com uma
+ * região só, devolve as mesmas amostras por ordem.
+ */
+export function mergeRegionSamples(
+  samples: readonly UptimeSample[],
+  windowMs = REGION_MERGE_WINDOW_MS,
+): UptimeSample[] {
+  const sorted = [...samples].sort((a, b) => a.observedAt.getTime() - b.observedAt.getTime())
+  const regions = new Set(sorted.map((sample) => sample.region ?? ''))
+  if (regions.size <= 1) return sorted
+
+  const latest = new Map<string, UptimeSample>()
+  return sorted.map((sample) => {
+    latest.set(sample.region ?? '', sample)
+    const at = sample.observedAt.getTime()
+    const up = [...latest.values()].some(
+      (other) => other.up && at - other.observedAt.getTime() <= windowMs,
+    )
+    const merged: UptimeSample = { observedAt: sample.observedAt, up }
+    if (sample.region !== undefined) merged.region = sample.region
+    // A causa só interessa quando a amostra juntada está em baixo; o tempo de
+    // resposta só existe quando esta probe chegou mesmo ao site.
+    if (!up && sample.failureReason !== undefined) merged.failureReason = sample.failureReason
+    if (sample.up && sample.responseTimeMs !== undefined) merged.responseTimeMs = sample.responseTimeMs
+    return merged
+  })
+}
+
 export function summariseUptime(
   rawSamples: readonly UptimeSample[],
   options: UptimeOptions,
@@ -92,13 +143,13 @@ export function summariseUptime(
   const interval = options.expectedIntervalMs ?? DEFAULT_INTERVAL_MS
   const maxGapMs = options.maxGapMs ?? interval * 4
 
-  const samples = rawSamples
-    .filter(
+  const samples = mergeRegionSamples(
+    rawSamples.filter(
       (sample) =>
         sample.observedAt.getTime() >= period.start.getTime() &&
         sample.observedAt.getTime() < period.end.getTime(),
-    )
-    .sort((a, b) => a.observedAt.getTime() - b.observedAt.getTime())
+    ),
+  )
 
   if (samples.length === 0) {
     return {

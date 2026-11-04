@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  findingRegion,
   fingerprintOf,
   reconcileFindings,
   type ObservedFinding,
@@ -430,5 +431,82 @@ describe('reconcileFindings — eventos para o registo de atividade', () => {
       now: NOW,
     })
     expect(result.events).toEqual([])
+  })
+})
+
+describe('reconcileFindings com regiões', () => {
+  const bloqueio = stored({
+    code: 'site_unreachable_from_region',
+    discriminator: 'eu-central',
+    severity: 'medium',
+    state: 'pending',
+    occurrences: 1,
+  })
+
+  it('o run de outra região não resolve o bloqueio que não é seu', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [bloqueio],
+      region: 'eu-south',
+      now: NOW,
+    })
+
+    expect(result.updates).toEqual([])
+  })
+
+  it('a própria região resolve o seu bloqueio quando deixa de o ver', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [bloqueio],
+      region: 'eu-central',
+      now: NOW,
+    })
+
+    expect(result.updates[0]?.changes.state).toBe('resolved')
+  })
+
+  it('um finding marcado com a região na evidência pertence a essa região', () => {
+    const marcado = stored({ code: 'monitor_blocked', discriminator: 'cloudflare', evidence: { region: 'eu-central' } })
+    expect(findingRegion(marcado)).toBe('eu-central')
+
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [marcado],
+      region: 'eu-south',
+      now: NOW,
+    })
+    expect(result.updates).toEqual([])
+  })
+
+  it('os findings do site continuam a ser resolvidos por qualquer região', () => {
+    const queda = stored({ code: 'site_down', discriminator: undefined, severity: 'critical' })
+    expect(findingRegion(queda)).toBeUndefined()
+
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [queda],
+      region: 'eu-south',
+      now: NOW,
+    })
+    expect(result.updates[0]?.changes.state).toBe('resolved')
+  })
+
+  it('sem região, tudo se resolve como antes', () => {
+    const result = reconcileFindings({
+      siteId: SITE,
+      checkType: CHECK,
+      observed: [],
+      existing: [bloqueio],
+      now: NOW,
+    })
+    expect(result.updates[0]?.changes.state).toBe('resolved')
   })
 })

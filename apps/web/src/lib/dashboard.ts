@@ -130,6 +130,7 @@ export async function getSiteDashboard(siteId: string): Promise<DashboardData | 
     uptimeSamples: samples.map((sample) => ({
       observedAt: sample.observedAt,
       up: sample.up,
+      region: sample.region,
       failureReason: sample.failureReason,
       responseTimeMs: sample.responseTimeMs,
     })),

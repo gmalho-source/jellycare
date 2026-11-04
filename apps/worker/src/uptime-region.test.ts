@@ -140,6 +140,33 @@ describe('applyRegionCorroboration', () => {
 
     expect(result.reachableFrom).toEqual(['eu-central'])
   })
+
+  it('vale a observação mais recente de cada região, não uma antiga em cima', () => {
+    // A outra região viu o site em cima há oito minutos e em baixo há um: é o
+    // início de uma queda verdadeira, não um problema de encaminhamento.
+    const result = corroborate(
+      [DOWN],
+      [
+        sample({ region: 'eu-central', up: true, observedAt: new Date('2026-09-17T09:52:00Z') }),
+        sample({ region: 'eu-central', up: false, observedAt: new Date('2026-09-17T09:59:00Z') }),
+      ],
+    )
+
+    expect(result.verdict).toBe('corroborated')
+    expect(result.findings[0]?.code).toBe('site_down')
+  })
+
+  it('uma região que recuperou conta como alcançável', () => {
+    const result = corroborate(
+      [DOWN],
+      [
+        sample({ region: 'eu-central', up: false, observedAt: new Date('2026-09-17T09:52:00Z') }),
+        sample({ region: 'eu-central', up: true, observedAt: new Date('2026-09-17T09:59:00Z') }),
+      ],
+    )
+
+    expect(result.verdict).toBe('contradicted')
+  })
 })
 
 describe('toUptimeSample', () => {

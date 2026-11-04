@@ -9,6 +9,14 @@ import { batchDelayMs, computeNextRun, selectDue, type SchedulableCheck } from '
 export interface SchedulerOptions {
   db: Database
   queue: Queue<CheckJobData>
+  /**
+   * As filas de disponibilidade, uma por região, quando há mais do que uma.
+   *
+   * Com elas, cada verificação de uptime entra em todas — uma observação por
+   * região — e não na fila principal. Vazio ou omitido, o uptime vai para a
+   * fila principal como as outras. Ver `regions.ts`.
+   */
+  uptimeQueues?: readonly Queue<CheckJobData>[]
   /** Máximo de checks despachados por tick. */
   batchSize?: number
   /** Janela ao longo da qual o lote é espalhado. */
@@ -82,6 +90,8 @@ const PUBLIC_CHECK_TYPES = Object.values(CHECK_REGISTRY)
   .map((check) => check.definition.type)
 
 export const SCHEDULER_ID = 'checks'
+
+const UPTIME_CHECK_TYPE = 'uptime'
 
 /**
  * Regista que o agendador passou por aqui.
@@ -214,19 +224,31 @@ async function runTick(options: SchedulerOptions, agora: Date): Promise<TickResu
     const data: CheckJobData = { siteId: check.siteId, checkType: check.checkType }
     const delay = batchDelayMs(index, due.length, spreadMs)
 
-    try {
-      await options.queue.add(check.checkType, data, {
-        jobId: checkJobId(data, now),
-        delay,
-      })
-      enfileirados.push(check)
-    } catch (error) {
-      // Sem o id do site. A batida é uma linha partilhada por toda a equipa
-      // e o id não ajuda a ler o erro — o tipo de verificação chega.
-      falhas.push(
-        `${check.checkType}: ${publicErrorText(error instanceof Error ? error.message : String(error))}`,
-      )
+    const destinos =
+      check.checkType === UPTIME_CHECK_TYPE && options.uptimeQueues && options.uptimeQueues.length > 0
+        ? options.uptimeQueues
+        : [options.queue]
+
+    // Basta uma região ter recebido o job para o check contar como
+    // enfileirado: a região que falhou perde uma observação, e repetir o
+    // check inteiro duplicava-o nas que já o tinham. A falha é dita na mesma.
+    let entrou = false
+    for (const destino of destinos) {
+      try {
+        await destino.add(check.checkType, data, {
+          jobId: checkJobId(data, now),
+          delay,
+        })
+        entrou = true
+      } catch (error) {
+        // Sem o id do site. A batida é uma linha partilhada por toda a equipa
+        // e o id não ajuda a ler o erro — o tipo de verificação chega.
+        falhas.push(
+          `${check.checkType}: ${publicErrorText(error instanceof Error ? error.message : String(error))}`,
+        )
+      }
     }
+    if (entrou) enfileirados.push(check)
   }
 
   // Só os que entraram mesmo. Adiar um check que não foi enfileirado era

@@ -357,7 +357,18 @@ async function settleUptime(
   deps: RunnerDeps,
   input: SettleUptimeInput,
 ): Promise<CheckOutcome> {
-  const { outcome, siteId, region, now } = input
+  const { siteId, region, now } = input
+  // O bloqueio de uma firewall de CDN é visto por uma probe, não pelo site:
+  // fica marcado com a região, para que só ela o possa dar por resolvido. Ver
+  // `findingRegion`.
+  const outcome: CheckOutcome = {
+    ...input.outcome,
+    findings: input.outcome.findings.map((finding) =>
+      finding.code === 'monitor_blocked'
+        ? { ...finding, evidence: { ...finding.evidence, region } }
+        : finding,
+    ),
+  }
 
   const sample = toUptimeSample(outcome, { region, observedAt: now })
   // Sem amostra quando a probe foi barrada pela firewall do CDN: não vimos o

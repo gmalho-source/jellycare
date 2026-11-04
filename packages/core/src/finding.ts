@@ -127,7 +127,32 @@ export interface ReconcileInput {
    * um timeout de rede marcaria todos os problemas do site como resolvidos.
    */
   runSucceeded?: boolean
+  /**
+   * Região da probe que fez este run. Com ela, o run só resolve os findings
+   * que são seus ou de ninguém: o bloqueio que uma região vê não desaparece
+   * porque outra região passou sem o ver. Ver `findingRegion`.
+   */
+  region?: string
   now?: Date
+}
+
+/**
+ * A região a que um finding pertence, quando pertence a uma.
+ *
+ * Quase todos os findings são do site e qualquer região os pode resolver. Os
+ * de disponibilidade vistos só de um sítio — a probe barrada por uma firewall,
+ * o site inalcançável a partir de uma região — são dessa região. Com duas
+ * probes intercaladas, deixá-los resolver pela outra era abrir e fechar o
+ * mesmo problema de cinco em cinco minutos, sem nunca chegar a confirmar.
+ */
+export function findingRegion(
+  finding: Pick<StoredFinding, 'code' | 'discriminator' | 'evidence'>,
+): string | undefined {
+  const evidence = finding.evidence ?? {}
+  if (typeof evidence['region'] === 'string') return evidence['region']
+  if (typeof evidence['failingRegion'] === 'string') return evidence['failingRegion']
+  if (finding.code === 'site_unreachable_from_region') return finding.discriminator
+  return undefined
 }
 
 /**
@@ -324,6 +349,10 @@ export function reconcileFindings(input: ReconcileInput): ReconcileResult {
   for (const prior of existing) {
     if (seen.has(prior.fingerprint)) continue
     if (prior.state === 'resolved' || prior.state === 'ignored') continue
+    if (input.region !== undefined) {
+      const owner = findingRegion(prior)
+      if (owner !== undefined && owner !== input.region) continue
+    }
 
     updates.push({
       id: prior.id,
