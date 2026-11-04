@@ -4,7 +4,13 @@ import { ensureCheckConfigs } from './check-configs.js'
 import { createBrowserPool } from './browser-pool.js'
 import { createThrottledLogger, errorKey } from './log-throttle.js'
 import { MultiChannelNotifier, createReportSender } from './channels.js'
-import { createCheckQueue, createCheckWorker, uptimeQueueName, type CheckWorkerOptions } from './queues.js'
+import {
+  createCheckQueue,
+  createCheckWorker,
+  removeStaleUptimeQueues,
+  uptimeQueueName,
+  type CheckWorkerOptions,
+} from './queues.js'
 import { resolveTopology } from './regions.js'
 import { executeCheckJob } from './runner.js'
 import { generatePendingReports, runReportRequests } from './report-jobs.js'
@@ -60,6 +66,26 @@ async function main(): Promise<void> {
     ...(process.env.RESEND_API_KEY ? { resendApiKey: process.env.RESEND_API_KEY } : {}),
     ...(process.env.ALERT_FROM_EMAIL ? { fromEmail: process.env.ALERT_FROM_EMAIL } : {}),
   })
+
+  // Filas de uptime de regiões que já não existem: sem quem as leia, os jobs
+  // ficavam no Redis para sempre. Só a principal limpa, e uma falha aqui não
+  // impede o arranque — é arrumação, não trabalho.
+  if (topology.primary) {
+    try {
+      const apagadas = await removeStaleUptimeQueues(
+        connection,
+        topology.multiRegion ? topology.regions : [],
+      )
+      if (apagadas.length > 0) {
+        console.info(`Filas de uptime de regiões antigas apagadas: ${apagadas.join(', ')}.`)
+      }
+    } catch (error) {
+      console.warn(
+        'Não foi possível limpar as filas de uptime antigas:',
+        error instanceof Error ? error.message : error,
+      )
+    }
+  }
 
   // A fila principal só existe na região principal: é lá que o agendador
   // enfileira. As filas de disponibilidade por região, só com várias regiões.

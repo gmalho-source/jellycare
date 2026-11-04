@@ -13,7 +13,7 @@ describe('resolveTopology', () => {
 
   it('Frankfurt continua a chamar-se eu-central', () => {
     expect(resolveTopology({ FLY_REGION: 'fra' }).region).toBe('eu-central')
-    expect(resolveTopology({ FLY_REGION: 'mad' }).region).toBe('eu-south')
+    expect(resolveTopology({ FLY_REGION: 'cdg' }).region).toBe('eu-paris')
     expect(resolveTopology({ FLY_REGION: 'sin' }).region).toBe('fly-sin')
   })
 
@@ -22,14 +22,14 @@ describe('resolveTopology', () => {
   })
 
   it('a primeira região da lista é a principal', () => {
-    const env = { JELLYCARE_REGIONS: 'eu-central, eu-south' }
+    const env = { JELLYCARE_REGIONS: 'eu-central, eu-paris' }
     expect(resolveTopology({ ...env, FLY_REGION: 'fra' })).toMatchObject({
       region: 'eu-central',
       primary: true,
       multiRegion: true,
     })
-    expect(resolveTopology({ ...env, FLY_REGION: 'mad' })).toMatchObject({
-      region: 'eu-south',
+    expect(resolveTopology({ ...env, FLY_REGION: 'cdg' })).toMatchObject({
+      region: 'eu-paris',
       primary: false,
       multiRegion: true,
     })
@@ -37,7 +37,7 @@ describe('resolveTopology', () => {
 
   it('recusa uma instância fora da lista', () => {
     expect(() =>
-      resolveTopology({ JELLYCARE_REGIONS: 'eu-central,eu-south', FLY_REGION: 'ams' }),
+      resolveTopology({ JELLYCARE_REGIONS: 'eu-central,eu-paris', FLY_REGION: 'ams' }),
     ).toThrow(/não está em JELLYCARE_REGIONS/)
   })
 

@@ -90,11 +90,15 @@ partilhados (`packages/checks`, `packages/db`, `packages/report`).
 Uma segunda instância do worker, contra a mesma base de dados e o mesmo Redis,
 noutra região do Fly:
 
-1. em `fly/worker.toml`, `JELLYCARE_REGIONS = "eu-central,eu-south"`, e deploy;
-2. `fly machine clone <id-da-máquina-de-fra> --region mad -a jellycare-worker`.
+1. em `fly/worker.toml`, `JELLYCARE_REGIONS = "eu-central,eu-paris"`, e deploy;
+2. **só depois**, `fly machine clone <id-da-máquina-de-fra> --region cdg --vm-memory 512 -a jellycare-worker`.
 
-A região de cada máquina vem do `FLY_REGION` (`fra` → `eu-central`, `mad` →
-`eu-south`; `JELLYCARE_REGION` sobrepõe-se, se for preciso). A primeira região
+Madrid (`mad`) estava prevista, mas o Fly descontinuou-a e não aceita máquinas
+novas. As filas de uptime de regiões que saem da lista são apagadas pela região
+principal no arranque (`removeStaleUptimeQueues`).
+
+A região de cada máquina vem do `FLY_REGION` (`fra` → `eu-central`, `cdg` →
+`eu-paris`; `JELLYCARE_REGION` sobrepõe-se, se for preciso). A primeira região
 da lista é a **principal**: corre o agendador, todas as outras verificações, os
 relatórios, a retenção e as migrações. As restantes são **só probes de
 disponibilidade** — de propósito: uma probe secundária que corresse também as

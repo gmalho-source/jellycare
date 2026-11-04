@@ -1,11 +1,12 @@
 # Worker. Deploy: fly deploy -c fly/worker.toml
 #
 # Duas regiões de monitorização (ver docs/arquitetura.md): Frankfurt, a
-# principal, e uma probe de disponibilidade em Madrid. A máquina de Madrid só
+# principal, e uma probe de disponibilidade em Paris. A máquina de Paris só
 # pode ser criada depois de este JELLYCARE_REGIONS estar em produção — sem ele,
 # arrancava convencida de ser a única região, com agendador e tudo:
-#   fly machine clone <id-da-máquina-de-fra> --region mad -a jellycare-worker
-# A região de cada máquina vem do FLY_REGION (fra → eu-central, mad → eu-south),
+#   fly machine clone <id-da-máquina-de-fra> --region cdg --vm-memory 512 -a jellycare-worker
+# (Madrid estava prevista, mas o Fly descontinuou-a.)
+# A região de cada máquina vem do FLY_REGION (fra → eu-central, cdg → eu-paris),
 # por isso não há nada a definir por máquina. A primeira região da lista é a
 # principal; as outras são só probes de disponibilidade.
 app = "jellycare-worker"
@@ -16,7 +17,7 @@ primary_region = "fra"
 
 [env]
   JELLYCARE_CONCURRENCY = "5"
-  JELLYCARE_REGIONS = "eu-central,eu-south"
+  JELLYCARE_REGIONS = "eu-central,eu-paris"
 
 # Sem [http_service]: o worker não serve pedidos. Nunca pode adormecer — tem um
 # ciclo de agendamento e uma passagem horária de relatórios.
