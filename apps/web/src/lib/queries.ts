@@ -1,5 +1,6 @@
 import { maxSeverity, severityRank, type Severity } from '@jellycare/core'
 import { schema } from '@jellycare/db'
+import { bestRegionCount, type RegionCount } from './uptime-regions'
 import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { getDb } from './db'
@@ -90,6 +91,7 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
     db
       .select({
         siteId: schema.uptimeSamples.siteId,
+        region: schema.uptimeSamples.region,
         up: sql<number>`sum(case when ${schema.uptimeSamples.up} then 1 else 0 end)::int`,
         total: sql<number>`count(*)::int`,
       })
@@ -100,7 +102,8 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
           gte(schema.uptimeSamples.observedAt, new Date(Date.now() - 24 * 3600_000)),
         ),
       )
-      .groupBy(schema.uptimeSamples.siteId),
+      // Por região e não só por site: ver `bestRegionCount`.
+      .groupBy(schema.uptimeSamples.siteId, schema.uptimeSamples.region),
 
     db
       .select({
@@ -131,8 +134,17 @@ const lerSites = cache(async (chave: string): Promise<SiteSummary[]> => {
   const comConector = new Set(connectorRows.map((row) => row.siteId))
   const capturaBySite = new Map(capturaRows.map((row) => [row.siteId, row.capturedAt]))
   const lastRunBySite = new Map(lastRuns.map((row) => [row.siteId, row.lastRunAt]))
+  const uptimeRowsBySite = new Map<string, RegionCount[]>()
+  for (const row of uptimeRows) {
+    const lista = uptimeRowsBySite.get(row.siteId) ?? []
+    lista.push(row)
+    uptimeRowsBySite.set(row.siteId, lista)
+  }
   const uptimeBySite = new Map(
-    uptimeRows.map((row) => [row.siteId, row.total > 0 ? (row.up / row.total) * 100 : null]),
+    [...uptimeRowsBySite].map(([siteId, rows]) => {
+      const melhor = bestRegionCount(rows)
+      return [siteId, melhor ? (melhor.up / melhor.total) * 100 : null] as const
+    }),
   )
 
   const severitiesBySite = new Map<string, Severity[]>()
@@ -589,8 +601,10 @@ export async function getUptime(siteId: string, days: number): Promise<UptimeWin
         gte(schema.uptimeSamples.observedAt, new Date(Date.now() - days * 24 * 3600_000)),
       ),
     )
+    // Por região: ver `bestRegionCount`.
+    .groupBy(schema.uptimeSamples.region)
 
-  const row = rows[0]
+  const row = bestRegionCount(rows)
   const total = row?.total ?? 0
   const up = row?.up ?? 0
 

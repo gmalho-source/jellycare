@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCheckLiveness, getSchedulerHealth } from '@/lib/scheduler-health'
+import { getCheckLiveness, getSchedulerHealth, livenessStatus } from '@/lib/scheduler-health'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,12 +24,11 @@ export const dynamic = 'force-dynamic'
 export async function GET(): Promise<NextResponse> {
   const [agendador, checks] = await Promise.all([getSchedulerHealth(), getCheckLiveness()])
 
-  const atrasados = checks.filter((check) => check.late > 0)
-
   // O estado do agendador tem precedência: se o ciclo parou, os checks
-  // atrasados são consequência disso e não uma avaria à parte.
-  const status =
-    agendador.status !== 'ok' ? agendador.status : atrasados.length > 0 ? 'checks_late' : 'ok'
+  // atrasados são consequência disso e não uma avaria à parte. Depois, só um
+  // tipo de verificação parado em todos os sites é avaria da plataforma; ver
+  // `livenessStatus`.
+  const status = agendador.status !== 'ok' ? agendador.status : livenessStatus(checks)
 
   return NextResponse.json(
     {
@@ -49,7 +48,9 @@ export async function GET(): Promise<NextResponse> {
     {
       // O código HTTP é a parte que interessa ao vigia: falha com um 503 e não
       // precisa de saber ler JSON para dar o alarme.
-      status: status === 'ok' ? 200 : 503,
+      // `sites_late` é 200: o detalhe vai no corpo, mas um site a barrar a
+      // probe não é a plataforma em baixo.
+      status: status === 'ok' || status === 'sites_late' ? 200 : 503,
       // Nada disto pode ser guardado por ninguém. Sem `Cache-Control`, um
       // intermediário — a CDN de amanhã, o proxy da empresa de quem vigia —
       // pode servir um 200 de há dez minutos e o alarme fica a olhar para uma

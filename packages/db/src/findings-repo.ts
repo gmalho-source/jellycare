@@ -103,6 +103,7 @@ export async function recordCheckRun(
       // Um run inconclusivo correu bem mas não viu o site: não pode resolver
       // um `site_down` aberto só porque desta vez não o observou.
       runSucceeded: outcome.status === 'ok' && !outcome.inconclusive,
+      ...(input.region !== undefined ? { region: input.region } : {}),
       now,
     })
 

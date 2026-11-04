@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monthPeriod } from './period.js'
-import { latestIncidents, summariseUptime, type UptimeSample } from './uptime.js'
+import { latestIncidents, mergeRegionSamples, summariseUptime, type UptimeSample } from './uptime.js'
 
 const PERIOD = monthPeriod(2026, 6, 'Europe/Lisbon')
 const INTERVAL = 5 * 60_000
@@ -193,5 +193,52 @@ describe('latestIncidents', () => {
     latestIncidents(chronological, 8)
 
     expect(chronological[0]?.start).toEqual(day(1))
+  })
+})
+
+describe('mergeRegionSamples', () => {
+  const at = (minutes: number) => new Date(PERIOD.start.getTime() + minutes * 60_000)
+
+  it('com uma região só, devolve as amostras tal como estão, por ordem', () => {
+    const samples = series([true, { up: false, reason: 'connect_timeout' }, true])
+    expect(mergeRegionSamples([...samples].reverse())).toEqual(samples)
+  })
+
+  it('uma região barrada e outra que vê o site não dão interrupções', () => {
+    const samples: UptimeSample[] = []
+    for (let i = 0; i < 24; i++) {
+      samples.push({ observedAt: at(i * 5), up: false, region: 'eu-central', failureReason: 'connect_timeout' })
+      samples.push({ observedAt: at(i * 5 + 2), up: true, region: 'eu-south', responseTimeMs: 300 })
+    }
+
+    const summary = summarise(samples)
+
+    // A primeira amostra de todas é a da região barrada, antes de a outra ter
+    // observado alguma coisa: essa é a única que fica em baixo.
+    expect(summary.incidents.length).toBeLessThanOrEqual(1)
+    expect(summary.uptimePercent).toBeGreaterThan(97)
+    expect(summary.averageResponseTimeMs).toBe(300)
+  })
+
+  it('uma queda vista pelas duas regiões continua a ser uma queda', () => {
+    const samples: UptimeSample[] = []
+    for (let i = 0; i < 12; i++) {
+      const down = i >= 4 && i < 8
+      samples.push({ observedAt: at(i * 5), up: !down, region: 'eu-central', ...(down ? { failureReason: 'http_503' } : {}) })
+      samples.push({ observedAt: at(i * 5 + 2), up: !down, region: 'eu-south', ...(down ? { failureReason: 'http_503' } : {}) })
+    }
+
+    const summary = summarise(samples)
+
+    expect(summary.incidents).toHaveLength(1)
+    expect(summary.incidents[0]?.reason).toBe('http_503')
+  })
+
+  it('uma observação antiga de outra região deixa de valer fora da janela', () => {
+    const merged = mergeRegionSamples([
+      { observedAt: at(0), up: true, region: 'eu-south' },
+      { observedAt: at(30), up: false, region: 'eu-central', failureReason: 'http_503' },
+    ])
+    expect(merged.map((sample) => sample.up)).toEqual([true, false])
   })
 })

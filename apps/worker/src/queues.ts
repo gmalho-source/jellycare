@@ -18,8 +18,21 @@ export function checkJobId(data: CheckJobData, scheduledFor: Date): string {
   return `${data.siteId}-${data.checkType}-${slot}`
 }
 
-export function createCheckQueue(connection: ConnectionOptions): Queue<CheckJobData> {
-  return new Queue<CheckJobData>(CHECK_QUEUE_NAME, {
+/**
+ * A fila de disponibilidade de uma região, quando há mais do que uma.
+ *
+ * Cada região lê só a sua: é assim que cada verificação de uptime corre em
+ * todas as regiões, e não numa delas ao acaso. Ver `regions.ts`.
+ */
+export function uptimeQueueName(region: string): string {
+  return `uptime-${region}`
+}
+
+export function createCheckQueue(
+  connection: ConnectionOptions,
+  name: string = CHECK_QUEUE_NAME,
+): Queue<CheckJobData> {
+  return new Queue<CheckJobData>(name, {
     connection,
     prefix: QUEUE_PREFIX,
     defaultJobOptions: {
@@ -61,6 +74,8 @@ const STALLED_INTERVAL_MS = 300_000
 
 export interface CheckWorkerOptions {
   connection: ConnectionOptions
+  /** A fila de onde lê. Por omissão, a fila principal das verificações. */
+  queueName?: string
   /**
    * Jobs em paralelo. Baixo por omissão: cada job faz pedidos ao site de um
    * cliente, e a plataforma não deve ser a causa do problema que monitoriza.
@@ -88,7 +103,7 @@ export function checkWorkerSettings(options: CheckWorkerOptions): {
 
 export function createCheckWorker(options: CheckWorkerOptions): Worker<CheckJobData> {
   return new Worker<CheckJobData>(
-    CHECK_QUEUE_NAME,
+    options.queueName ?? CHECK_QUEUE_NAME,
     async (job) => options.process(job.data, job),
     {
       connection: options.connection,

@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net'
 import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { RecordingNotifier } from './channels.js'
-import { createCheckQueue, checkJobId } from './queues.js'
+import { createCheckQueue, checkJobId, uptimeQueueName } from './queues.js'
 import { executeCheckJob } from './runner.js'
 import type { CheckJobData } from './runner.js'
 import { tick } from './scheduler.js'
@@ -479,6 +479,44 @@ describe('disponibilidade multi-região', () => {
     expect(notifier.sent).toHaveLength(0)
   })
 
+  it('com duas regiões intercaladas, o bloqueio de uma confirma-se e não oscila', async () => {
+    // eu-west barrada pela firewall do servidor, eu-central a ver o site. Com
+    // a reconciliação partilhada, cada run de eu-central resolvia o problema
+    // de eu-west e ele nunca passava de pendente.
+    await addCheck('uptime')
+
+    for (let i = 0; i < 3; i++) {
+      siteResponds = false
+      await run(new RecordingNotifier(), 'uptime', 'eu-west')
+      siteResponds = true
+      await run(new RecordingNotifier(), 'uptime', 'eu-central')
+    }
+
+    const findings = (await openFindings()).filter((f) => f.state !== 'resolved')
+    expect(findings.map((f) => f.code)).toEqual(['site_unreachable_from_region'])
+    expect(findings[0]?.discriminator).toBe('eu-west')
+    expect(findings[0]?.state).toBe('open')
+    // Duas e não três: na primeira passagem de eu-west ainda não havia
+    // observação de eu-central, e sem segunda opinião vale o `site_down` —
+    // pendente, e resolvido pelo run de eu-central logo a seguir.
+    expect(findings[0]?.occurrences).toBe(2)
+  })
+
+  it('o bloqueio de uma região resolve-se quando essa região volta a ver o site', async () => {
+    await addCheck('uptime')
+    for (let i = 0; i < 2; i++) {
+      siteResponds = false
+      await run(new RecordingNotifier(), 'uptime', 'eu-west')
+      siteResponds = true
+      await run(new RecordingNotifier(), 'uptime', 'eu-central')
+    }
+
+    await run(new RecordingNotifier(), 'uptime', 'eu-west')
+
+    const abertos = (await openFindings()).filter((f) => f.state !== 'resolved')
+    expect(abertos).toHaveLength(0)
+  })
+
   it('ignora amostras antigas de outra região', async () => {
     await addCheck('uptime')
     await sampleFromRegion('eu-central', true, 60 * 60_000)
@@ -639,6 +677,32 @@ describe('agendador', () => {
     const jobs = await queuedForSite()
     const delayed = await Promise.all(jobs.map((job) => job.getState()))
     expect(delayed.filter((state) => state === 'delayed').length).toBeGreaterThan(0)
+  })
+  it('com várias regiões, o uptime entra na fila de cada região e só lá', async () => {
+    // Antes, duas instâncias partilhavam a fila e cada job ia parar a uma
+    // delas ao acaso: a segunda opinião só existia quando calhava.
+    const filas = [
+      createCheckQueue(redisConnection, uptimeQueueName('teste-a')),
+      createCheckQueue(redisConnection, uptimeQueueName('teste-b')),
+    ]
+    try {
+      await Promise.all(filas.map((fila) => fila.obliterate({ force: true })))
+      const vencido = new Date(Date.now() - 60_000)
+      await addCheck('uptime', 5, vencido)
+      await addCheck('tls', 1440, vencido)
+
+      await tick({ db, queue, uptimeQueues: filas, id: BATIDA_DE_TESTE, spreadMs: 0, batchSize: LOTE })
+
+      for (const fila of filas) {
+        const jobs = (await fila.getJobs(['wait', 'delayed'])).filter((job) => job.data.siteId === siteId)
+        expect(jobs.map((job) => job.data.checkType)).toEqual(['uptime'])
+      }
+      // As outras verificações continuam na fila principal, e o uptime já
+      // não passa por ela.
+      expect((await queuedForSite()).map((job) => job.data.checkType)).toEqual(['tls'])
+    } finally {
+      await Promise.all(filas.map((fila) => fila.obliterate({ force: true }).then(() => fila.close())))
+    }
   })
 })
 

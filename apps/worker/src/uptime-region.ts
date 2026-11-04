@@ -75,7 +75,21 @@ export function applyRegionCorroboration(
     return { findings: [...findings], verdict: 'no_data', reachableFrom: [] }
   }
 
-  const reachableFrom = [...new Set(recent.filter((sample) => sample.up).map((s) => s.region))]
+  // Só a observação mais recente de cada região. Uma região que viu o site em
+  // cima há oito minutos e em baixo há um minuto não o alcança: contar a
+  // amostra antiga era transformar o início de uma queda verdadeira num
+  // problema de encaminhamento.
+  const latestByRegion = new Map<string, RegionSample>()
+  for (const sample of recent) {
+    const current = latestByRegion.get(sample.region)
+    if (!current || sample.observedAt.getTime() > current.observedAt.getTime()) {
+      latestByRegion.set(sample.region, sample)
+    }
+  }
+  const reachableFrom = [...latestByRegion.values()]
+    .filter((sample) => sample.up)
+    .map((sample) => sample.region)
+    .sort()
 
   if (reachableFrom.length === 0) {
     return { findings: [...findings], verdict: 'corroborated', reachableFrom: [] }

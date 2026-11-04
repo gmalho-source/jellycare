@@ -1,9 +1,11 @@
 # Worker. Deploy: fly deploy -c fly/worker.toml
 #
-# Segunda região de monitorização:
-#   fly scale count 2 --region fra,mad -c fly/worker.toml
-# e definir JELLYCARE_REGION por máquina. A corroboração entre regiões já está
-# implementada — ver docs/arquitetura.md.
+# Segunda região de monitorização (ver docs/arquitetura.md):
+#   1. descomentar JELLYCARE_REGIONS abaixo e fazer deploy;
+#   2. fly machine clone <id-da-máquina-de-fra> --region mad -a jellycare-worker
+# A região de cada máquina vem do FLY_REGION (fra → eu-central, mad → eu-south),
+# por isso não há nada a definir por máquina. A primeira região da lista é a
+# principal; as outras são só probes de disponibilidade.
 app = "jellycare-worker"
 primary_region = "fra"
 
@@ -11,8 +13,8 @@ primary_region = "fra"
   dockerfile = "../apps/worker/Dockerfile"
 
 [env]
-  JELLYCARE_REGION = "eu-central"
   JELLYCARE_CONCURRENCY = "5"
+  # JELLYCARE_REGIONS = "eu-central,eu-south"
 
 # Sem [http_service]: o worker não serve pedidos. Nunca pode adormecer — tem um
 # ciclo de agendamento e uma passagem horária de relatórios.
@@ -20,5 +22,9 @@ primary_region = "fra"
   size = "shared-cpu-2x"
   memory = "2048mb"
 
+# As migrações só na região principal: duas máquinas a migrar a mesma base de
+# dados ao mesmo tempo, num deploy, é problema à espera de acontecer. O Fly
+# põe PRIMARY_REGION e FLY_REGION no ambiente de cada máquina; sem eles (fora
+# do Fly), migra sempre, como antes.
 [processes]
-  app = "sh -c 'node /app/migrations-pkg/dist/migrate.js && node dist/index.js'"
+  app = "sh -c 'if [ -z \"$PRIMARY_REGION\" ] || [ \"$FLY_REGION\" = \"$PRIMARY_REGION\" ]; then node /app/migrations-pkg/dist/migrate.js || exit 1; fi; exec node dist/index.js'"

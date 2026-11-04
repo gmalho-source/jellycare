@@ -87,19 +87,52 @@ partilhados (`packages/checks`, `packages/db`, `packages/report`).
 
 ### Correr uma segunda região
 
-A corroboração entre regiões está implementada e não exige código novo: basta
-uma segunda instância do worker, contra a mesma base de dados, com
-`JELLYCARE_REGION` diferente.
+Uma segunda instância do worker, contra a mesma base de dados e o mesmo Redis,
+noutra região do Fly:
 
-Cada execução do check de disponibilidade grava uma amostra em
-`uptime_samples` com a sua região. Quando uma região não alcança o site, o
-worker consulta as amostras das outras regiões dos últimos dez minutos:
+1. em `fly/worker.toml`, `JELLYCARE_REGIONS = "eu-central,eu-south"`, e deploy;
+2. `fly machine clone <id-da-máquina-de-fra> --region mad -a jellycare-worker`.
+
+A região de cada máquina vem do `FLY_REGION` (`fra` → `eu-central`, `mad` →
+`eu-south`; `JELLYCARE_REGION` sobrepõe-se, se for preciso). A primeira região
+da lista é a **principal**: corre o agendador, todas as outras verificações, os
+relatórios, a retenção e as migrações. As restantes são **só probes de
+disponibilidade** — de propósito: uma probe secundária que corresse também as
+verificações de segurança ia pedir os mesmos ficheiros sensíveis, acabar na
+mesma lista negra da firewall do alojador, e passava a haver dois IPs a pôr em
+lista branca. A probe pode ser uma máquina pequena (512 MB chegam).
+
+Com várias regiões, o agendador enfileira cada verificação de disponibilidade
+**uma vez por região**, na fila dessa região (`uptime-<região>`), e cada worker
+lê só a sua. Antes, as instâncias partilhavam a fila e cada job ia parar a uma
+delas ao acaso: a segunda opinião só existia quando calhava. Com uma região só
+não há filas de uptime — tudo corre na fila principal, como sempre.
+
+Cada execução grava uma amostra em `uptime_samples` com a sua região. Quando
+uma região não alcança o site, o worker olha para a observação **mais recente**
+de cada outra região, dos últimos dez minutos:
 
 - outra região também não alcança → mantém-se `site_down`, crítico
 - outra região alcança → o finding passa a `site_unreachable_from_region`,
   severidade média, com a região em falha no discriminator
 - não há amostras recentes de mais nenhuma região → mantém-se `site_down`,
   que é o comportamento correto para quem corre uma região só
+
+Três regras impedem as duas probes de se contradizerem uma à outra:
+
+- **Os findings de uma região são dessa região.** `site_unreachable_from_region`
+  e o `monitor_blocked` de uma firewall de CDN só são resolvidos pela região
+  que os viu (`findingRegion` em `@jellycare/core`). Sem isto, cada run da
+  região saudável resolvia o bloqueio da outra, e ele abria e fechava de cinco
+  em cinco minutos sem nunca confirmar. Se uma região for desligada, os
+  findings que deixar abertos têm de ser fechados à mão.
+- **O SLA junta as regiões no tempo** (`mergeRegionSamples` em
+  `@jellycare/reports`): o site está em cima se alguma região o viu em cima na
+  observação mais recente. Contadas uma a uma, uma região barrada e outra que
+  vê o site davam uma interrupção de dois minutos e meio a cada cinco. Uma
+  queda verdadeira começa a contar quando a segunda região a confirma.
+- **As percentagens rápidas do painel** contam por região e ficam com a melhor
+  (`bestRegionCount`), pela mesma razão.
 
 A segunda opção é a que evita o falso positivo mais caro destas plataformas:
 avisar o cliente de que o site caiu quando o que se partiu foi o caminho de

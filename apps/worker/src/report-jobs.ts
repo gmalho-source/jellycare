@@ -444,6 +444,7 @@ export async function generateReport(
     uptimeSamples: uptimeRows.map((row) => ({
       observedAt: row.observedAt,
       up: row.up,
+      region: row.region,
       failureReason: row.failureReason,
       responseTimeMs: row.responseTimeMs,
     })),
