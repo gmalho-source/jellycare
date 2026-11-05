@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { checkJobId, checkWorkerSettings, createCheckQueue, createCheckWorker } from './queues.js'
+import {
+  checkJobId,
+  checkWorkerSettings,
+  createCheckQueue,
+  createCheckWorker,
+  removeStaleUptimeQueues,
+  uptimeQueueName,
+} from './queues.js'
 import { redisConnection } from './redis-url.js'
 
 describe('checkJobId', () => {
@@ -87,4 +94,37 @@ describe('apanhar trabalho com a espera longa', () => {
       await queue.close()
     }
   }, 30_000)
+})
+
+describe('removeStaleUptimeQueues', () => {
+  it('apaga as filas de uptime de regiões fora da lista e deixa as outras', async () => {
+    const connection = redisConnection(process.env.TEST_REDIS_URL ?? 'redis://localhost:56379')
+    const nomes = ['teste-limpa-fica', 'teste-limpa-sai']
+    const filas = nomes.map((nome) => createCheckQueue(connection, uptimeQueueName(nome)))
+    const principal = createCheckQueue(connection)
+    try {
+      for (const fila of filas) {
+        await fila.add('uptime', { siteId: 's', checkType: 'uptime' }, { delay: 60_000 })
+      }
+      await principal.add('tls', { siteId: 'teste-limpa', checkType: 'tls' }, { jobId: 'teste-limpa-tls', delay: 60_000 })
+
+      const apagadas = await removeStaleUptimeQueues(connection, ['teste-limpa-fica'], {
+        regionPrefix: 'teste-limpa-',
+      })
+
+      expect(apagadas).toContain(uptimeQueueName('teste-limpa-sai'))
+      expect(apagadas).not.toContain(uptimeQueueName('teste-limpa-fica'))
+      expect(await filas[1]!.getJobCounts('delayed')).toEqual({ delayed: 0 })
+      expect(await filas[0]!.getJobCounts('delayed')).toEqual({ delayed: 1 })
+      // A fila principal nunca é tocada.
+      expect(await principal.getJob('teste-limpa-tls')).toBeTruthy()
+    } finally {
+      await principal.remove('teste-limpa-tls').catch(() => {})
+      await principal.close()
+      for (const fila of filas) {
+        await fila.obliterate({ force: true }).catch(() => {})
+        await fila.close()
+      }
+    }
+  })
 })

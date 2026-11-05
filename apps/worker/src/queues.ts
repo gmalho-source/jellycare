@@ -112,3 +112,63 @@ export function createCheckWorker(options: CheckWorkerOptions): Worker<CheckJobD
     },
   )
 }
+
+/**
+ * Apaga as filas de disponibilidade de regiões que deixaram de existir.
+ *
+ * Quando uma região sai de `JELLYCARE_REGIONS` — ou nunca chegou a ter
+ * máquina, como Madrid, que o Fly descontinuou entre o deploy da
+ * configuração e a criação da probe —, os jobs que já estavam na fila dela
+ * não têm quem os leia. Ficavam no Redis para sempre, a ocupar memória que o
+ * Upstash cobra. Corre no arranque da região principal; com uma região só
+ * apaga também as filas de uptime que tenham sobrado de quando havia várias.
+ *
+ * Encontra as filas pelas chaves (`jellycare:uptime-<região>:...`) com SCAN,
+ * que não bloqueia o Redis. Uma passagem por arranque, umas dezenas de
+ * comandos: nada ao lado do que o worker gasta num minuto.
+ *
+ * Devolve os nomes das filas apagadas.
+ */
+export async function removeStaleUptimeQueues(
+  connection: ConnectionOptions,
+  keep: readonly string[],
+  /** Restringe a procura a regiões com este prefixo. Existe para os testes. */
+  options: { regionPrefix?: string } = {},
+): Promise<string[]> {
+  const { Redis } = await import('ioredis')
+  const redis = new Redis({ ...(connection as Record<string, unknown>), lazyConnect: true })
+  redis.on('error', () => {})
+
+  const manter = new Set(keep.map(uptimeQueueName))
+  const encontradas = new Set<string>()
+  const prefixo = `${QUEUE_PREFIX}:${uptimeQueueName(options.regionPrefix ?? '')}`
+
+  try {
+    await redis.connect()
+    let cursor = '0'
+    do {
+      const [proximo, chaves] = await redis.scan(cursor, 'MATCH', `${prefixo}*`, 'COUNT', 500)
+      cursor = proximo
+      for (const chave of chaves) {
+        // `jellycare:uptime-eu-south:delayed` → `uptime-eu-south`. Os nomes
+        // das regiões não têm `:`, por isso o segundo segmento é o da fila.
+        const nome = chave.split(':')[1]
+        if (nome && !manter.has(nome)) encontradas.add(nome)
+      }
+    } while (cursor !== '0')
+  } finally {
+    redis.disconnect()
+  }
+
+  const apagadas: string[] = []
+  for (const nome of encontradas) {
+    const fila = new Queue(nome, { connection, prefix: QUEUE_PREFIX })
+    try {
+      await fila.obliterate({ force: true })
+      apagadas.push(nome)
+    } finally {
+      await fila.close()
+    }
+  }
+  return apagadas.sort()
+}

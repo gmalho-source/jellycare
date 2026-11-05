@@ -4,7 +4,7 @@
  * Uma região só (o caso de hoje): tudo como sempre — uma fila, um worker, o
  * agendador, os relatórios e a retenção na mesma máquina.
  *
- * Várias regiões (`JELLYCARE_REGIONS=eu-central,eu-south`): cada verificação de
+ * Várias regiões (`JELLYCARE_REGIONS=eu-central,eu-paris`): cada verificação de
  * disponibilidade é enfileirada uma vez por região, cada uma na fila da sua
  * região (`uptime-<região>`). Antes, duas instâncias partilhavam a mesma fila e
  * cada job ia parar a uma delas ao acaso — a segunda opinião em que a
@@ -33,12 +33,15 @@ export interface RegionTopology {
  * Os nomes por omissão das regiões do Fly que usamos.
  *
  * `fra` é `eu-central` porque é esse o nome que as amostras de Frankfurt já
- * têm gravado: mudá-lo partia a série de cada site em duas.
+ * têm gravado: mudá-lo partia a série de cada site em duas. Paris não é
+ * `eu-west` porque esse é o rótulo por omissão das execuções sem região, e as
+ * duas séries misturavam-se. Madrid ficou de fora: o Fly descontinuou-a e já
+ * não aceita máquinas novas lá.
  */
 const FLY_REGION_NAMES: Record<string, string> = {
   fra: 'eu-central',
-  mad: 'eu-south',
-  ams: 'eu-west',
+  cdg: 'eu-paris',
+  ams: 'eu-amsterdam',
 }
 
 /** O BullMQ recusa `:` nos nomes das filas; o resto fica curto e legível. */
