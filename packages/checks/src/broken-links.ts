@@ -114,9 +114,17 @@ export interface UrlStatus {
 /**
  * Verifica um URL com o menor custo possível.
  *
- * `HEAD` primeiro porque não transfere corpo, mas muitos servidores respondem
- * 405 ou 403 a `HEAD` e serviriam o `GET` sem problema — tratar isso como link
- * quebrado seria o falso positivo mais comum deste check.
+ * `HEAD` primeiro porque não transfere corpo. Mas um `HEAD` com erro nunca é a
+ * última palavra: confirma-se sempre com um `GET` antes de dar um link como
+ * partido. Muitos servidores respondem mal ao `HEAD` e servem o `GET` sem
+ * problema — 405 e 403 são os clássicos, mas há quem responda **404**. As
+ * rotas de API do Next.js que só exportam `GET` fazem isso, e foi assim que as
+ * 61 fotografias do blog e da homepage da Scallent apareceram como imagens em
+ * falta com o site perfeito; as páginas de ajuda da Google também o fazem.
+ *
+ * O `GET` só acontece quando o `HEAD` deu erro, que é a minoria dos URLs, e
+ * lê no máximo 4 KB: confirmar custa pouco, e um falso positivo custa a
+ * confiança do cliente no relatório inteiro.
  */
 export async function probeUrl(
   url: string,
@@ -126,7 +134,7 @@ export async function probeUrl(
 
   try {
     const head = await request(url, { ...base, method: 'HEAD' })
-    if (head.status !== 405 && head.status !== 403 && head.status !== 501) {
+    if (head.status < 400) {
       return { status: head.status, finalUrl: head.finalUrl, redirectHops: head.redirectChain.length }
     }
   } catch {

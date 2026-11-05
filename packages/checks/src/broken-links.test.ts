@@ -126,6 +126,31 @@ describe('probeUrl', () => {
     expect(status.status).toBe(200)
   })
 
+  it('confirma com GET um 404 do HEAD antes de dar o link como partido', async () => {
+    // O caso da Scallent: rotas de API do Next.js que só exportam GET
+    // respondem 404 a HEAD e servem a imagem a GET.
+    const fetch = (async (_input: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'HEAD'
+        ? new Response('', { status: 404 })
+        : new Response('imagem', { status: 200 })) as typeof globalThis.fetch
+
+    const status = await probeUrl('https://cliente.pt/api/media/file/foto.jpg', {
+      timeoutMs: 1000,
+      fetchImpl: fetch,
+    })
+
+    expect(status.status).toBe(200)
+  })
+
+  it('um 404 confirmado pelo GET continua a ser um link partido', async () => {
+    const fetch = mockFetch({ 'https://cliente.pt/nao-existe': { status: 404 } })
+    const status = await probeUrl('https://cliente.pt/nao-existe', { timeoutMs: 1000, fetchImpl: fetch })
+
+    expect(status.status).toBe(404)
+    // HEAD e depois o GET de confirmação.
+    expect(fetch.calls).toHaveLength(2)
+  })
+
   it('devolve o erro de rede classificado', async () => {
     const error = Object.assign(new Error('fetch failed'), { cause: { code: 'ENOTFOUND' } })
     const fetch = mockFetch({ 'https://naoexiste.pt/': { error } })
