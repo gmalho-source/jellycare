@@ -21,9 +21,14 @@ primary_region = "fra"
 
 # Sem [http_service]: o worker não serve pedidos. Nunca pode adormecer — tem um
 # ciclo de agendamento e uma passagem horária de relatórios.
-[[vm]]
-  size = "shared-cpu-2x"
-  memory = "2048mb"
+#
+# Sem [[vm]], de propósito: com ele, cada deploy punha todas as máquinas com o
+# mesmo tamanho, e a probe de Paris voltava aos 2 GB de Frankfurt a cada merge.
+# Sem ele, cada máquina mantém o tamanho que tem. Os tamanhos certos:
+#   Frankfurt (principal, Chromium para formulários e PDFs): shared, 2 vCPU, 2048 MB
+#     fly machine update <id> --vm-cpus 2 --vm-memory 2048 -a jellycare-worker
+#   Paris (só disponibilidade): shared, 1 vCPU, 512 MB
+#     fly machine update <id> --vm-cpus 1 --vm-memory 512 -a jellycare-worker
 
 # As migrações só na região principal: duas máquinas a migrar a mesma base de
 # dados ao mesmo tempo, num deploy, é problema à espera de acontecer. O Fly
